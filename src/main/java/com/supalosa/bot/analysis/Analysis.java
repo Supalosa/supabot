@@ -5,30 +5,9 @@ import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Analysis {
-    public static class AnalysisResults {
-        private Grid<Tile> grid;
-        private Set<Point2d> ramps;
-        private Set<Point2d> topOfRamps;
-        public AnalysisResults(Grid<Tile> grid, Set<Point2d> ramps, Set<Point2d> topOfRamps) {
-            this.grid = grid;
-            this.ramps = ramps;
-            this.topOfRamps = topOfRamps;
-        }
-
-        public Set<Point2d> getTopOfRamps() {
-            return topOfRamps;
-        }
-
-        public Grid<Tile> getGrid() {
-            return grid;
-        }
-
-        public Set<Point2d> getRamps() {
-            return ramps;
-        }
-    }
 
     public static AnalysisResults floodFill(Point2d startLocation, Grid<Integer> terrain, Grid<Integer> pathing, Grid<Integer> placement) {
         Grid<Tile> result = new InMemoryGrid(Tile.class, terrain.getWidth(), terrain.getHeight(), () -> new Tile());
@@ -151,8 +130,8 @@ public class Analysis {
             }
         }
 
-        // expand ramp neighbours
-        Set<Point2d> topOfRampLocations = new HashSet<Point2d>();
+        // expand ramp neighbours. Mapping of ramp location -> ramp ID
+        Map<Point2d, Integer> topOfRampLocations = new HashMap<Point2d, Integer>();
         rampLocations.forEach(rampLocation -> {
             int x = (int)rampLocation.getX(), y = (int)rampLocation.getY();
 
@@ -173,7 +152,7 @@ public class Analysis {
                     if (neighbourBuildable
                             && isTerrainHeightNearMaxHeight(rampHeight, rampMaxHeight)
                             && !rampLocations.contains(neighbourPoint)) {
-                        topOfRampLocations.add(neighbourPoint);
+                        topOfRampLocations.put(neighbourPoint, t.rampId);
                         nT.isTopOfRamp = true;
                         result.set(x + dx, y + dy, nT);
                     }
@@ -214,7 +193,25 @@ public class Analysis {
                 result.set(x, y, t);
             }
         });
-        return new Analysis.AnalysisResults(result, rampLocations, topOfRampLocations);
+
+        // Construct ramp data objects.
+        Map<Integer, Ramp> mapOfRamps = new HashMap<>();
+        rampMaxHeights.keySet().forEach(rampId -> {
+            // TODO optimise this
+            Set<Point2d> rampPoints = rampLocations
+                    .stream()
+                    .filter(ramp -> rampToRampId.get(ramp) == rampId)
+                    .collect(Collectors.toSet());
+            Set<Point2d> topOfRampPoints = topOfRampLocations.entrySet()
+                    .stream()
+                    .filter(ramp -> ramp.getValue() == rampId)
+                    .map(ramp -> ramp.getKey())
+                    .collect(Collectors.toSet());
+            Ramp ramp = new Ramp(rampId,  rampPoints, topOfRampPoints);
+            mapOfRamps.put(rampId, ramp);
+        });
+
+        return new AnalysisResults(result, mapOfRamps, topOfRampLocations.keySet());
     }
 
     private static boolean isTerrainHeightNearMaxHeight(int terrainHeight, int maxHeight) {

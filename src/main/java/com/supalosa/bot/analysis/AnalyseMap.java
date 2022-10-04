@@ -6,7 +6,6 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.utils.BitmapGrid;
 import com.supalosa.bot.analysis.utils.Grid;
-import com.supalosa.bot.analysis.utils.InMemoryGrid;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
 
 import javax.imageio.ImageIO;
@@ -28,7 +27,7 @@ public class AnalyseMap {
         Grid placement = new BitmapGrid(placementBmp);
         // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
         Point2d start = Point2d.of(37.5f, 53.5f);
-        Analysis.AnalysisResults data = Analysis.floodFill(start, terrain, pathing, placement);
+        AnalysisResults data = Analysis.floodFill(start, terrain, pathing, placement);
         StructurePlacementCalculator spc = new StructurePlacementCalculator(data);
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
 
@@ -45,7 +44,7 @@ public class AnalyseMap {
         Grid terrain = new BitmapGrid(terrainBmp);
         Grid pathing = new BitmapGrid(pathingBmp);
         Grid placement = new BitmapGrid(placementBmp);
-        Analysis.AnalysisResults data = Analysis.floodFill(playerStartLocation.toPoint2d(), terrain, pathing, placement);
+        AnalysisResults data = Analysis.floodFill(playerStartLocation.toPoint2d(), terrain, pathing, placement);
         System.out.println("Start location=" + playerStartLocation.toPoint2d());
         VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");
     }

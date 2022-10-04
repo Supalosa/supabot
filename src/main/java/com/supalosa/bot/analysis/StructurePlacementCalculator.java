@@ -2,7 +2,6 @@ package com.supalosa.bot.analysis;
 
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.utils.Grid;
-import com.supalosa.bot.analysis.utils.InMemoryGrid;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
 
 import java.util.Optional;
@@ -12,10 +11,10 @@ import java.util.Optional;
  */
 public class StructurePlacementCalculator {
 
-    private Analysis.AnalysisResults mapAnalysisResult;
+    private AnalysisResults mapAnalysisResult;
     private Optional<Optional<Point2d>> firstSupplyDepot;
 
-    public StructurePlacementCalculator(Analysis.AnalysisResults mapAnalysisResult) {
+    public StructurePlacementCalculator(AnalysisResults mapAnalysisResult) {
         this.mapAnalysisResult = mapAnalysisResult;
         this.firstSupplyDepot = Optional.empty();
     }
@@ -38,7 +37,10 @@ public class StructurePlacementCalculator {
             Point2d nearestRamp = maybeNearestRamp.get();
             Tile rampTile = mapGrid.get((int)nearestRamp.getX(), (int)nearestRamp.getY());
             System.out.println("We found ramp at " + maybeNearestRamp.get() + " with ID " + rampTile.rampId);
+            Ramp theRamp = mapAnalysisResult.getRamp(rampTile.rampId);
+            System.out.println("The ramp has " + theRamp.getRampTiles().size() + " tiles and " + theRamp.getTopOfRampTiles().size() + " top of ramp tiles");
 
+            // get all the
             return Optional.empty();
         }
     }

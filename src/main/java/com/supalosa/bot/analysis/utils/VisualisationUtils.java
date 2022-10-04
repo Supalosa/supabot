@@ -2,7 +2,7 @@ package com.supalosa.bot.analysis.utils;
 
 import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.supalosa.bot.analysis.Analysis;
+import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Tile;
 
 import javax.imageio.ImageIO;
@@ -22,7 +22,7 @@ public class VisualisationUtils {
 
     public static void writeCombinedData(Point2d playerStartLocation,
                                           Optional<StartRaw> startRaw,
-                                          Analysis.AnalysisResults data,
+                                          AnalysisResults data,
                                           String filename) {
         Grid<Tile> grid = data.getGrid();
         // NB: the game origin (0, 0) is bottom-left.
