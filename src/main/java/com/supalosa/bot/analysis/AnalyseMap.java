@@ -52,6 +52,7 @@ public class AnalyseMap {
 
     private static BufferedImage writeImageData(StartRaw startRaw, ImageData imageData, String filename) {
         BufferedImage img = convertImageDataToBufferedImage(imageData);
+        // NOTE: the data has bottom-left origin, but BufferedImage is top-left origin.
 
         File outputFile = new File(filename);
         try {
@@ -63,6 +64,8 @@ public class AnalyseMap {
     }
 
     private static BufferedImage convertImageDataToBufferedImage(ImageData imageData) {
+        return imageData.getImage();
+        /*
         // although we could use imageData.getImage(), we want to change it to a 3byte RGB.
         BufferedImage img = new BufferedImage(
                 imageData.getSize().getX(),
@@ -76,6 +79,6 @@ public class AnalyseMap {
                 img.setRGB(x, y, rgb);
             }
         }
-        return img;
+        return img;*/
     }
 }

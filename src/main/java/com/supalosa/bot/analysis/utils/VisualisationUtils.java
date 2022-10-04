@@ -16,11 +16,19 @@ public class VisualisationUtils {
     static final int TILE_SIZE = 32;
     static final int LETTER_WIDTH = 5;
 
+    private static int getInvertedY(int gameY, int gridHeight) {
+        return gridHeight - gameY - 1;
+    }
+
     public static void writeCombinedData(Point2d playerStartLocation,
                                           Optional<StartRaw> startRaw,
                                           Analysis.AnalysisResults data,
                                           String filename) {
         Grid<Tile> grid = data.getGrid();
+        // NB: the game origin (0, 0) is bottom-left.
+        // The buffered image origin is top-left.
+        // Therefore we need to invert all Y positions.
+        int gridHeight = grid.getHeight();
         BufferedImage img = new BufferedImage(
                 grid.getWidth()* TILE_SIZE,
                 grid.getHeight()* TILE_SIZE,
@@ -29,8 +37,10 @@ public class VisualisationUtils {
         final int blackColor = makeRgb(0, 0, 0);
         final int greenColor = makeRgb(0, 255, 0);
         for (int x = 0; x < grid.getWidth(); ++x) {
-            for (int y = 0; y < grid.getHeight(); ++y) {
-                Tile tile = grid.get(x, y);
+            for (int gameY = 0; gameY < grid.getHeight(); ++gameY) {
+                // See note above about why we're inverting.
+                int y = getInvertedY(gameY, gridHeight);
+                Tile tile = grid.get(x, gameY);
                 int bgColor = makeRgb(tile.terrain, tile.terrain, tile.terrain);
                 int dataColor = makeRgb(0, 0, 0);
                 if (tile.isTopOfRamp) {
@@ -39,37 +49,37 @@ public class VisualisationUtils {
                 if (tile.isRamp) {
                     dataColor = makeRgb(255, 0, 0);
                 }
-                VisualisationUtils.fillSquare(
+                fillSquare(
                         img,
                         x * TILE_SIZE,
                         y * TILE_SIZE,
                         x * TILE_SIZE + TILE_SIZE,
                         y * TILE_SIZE + TILE_SIZE,
                         bgColor);
-                VisualisationUtils.drawSquare(img, x * TILE_SIZE, y * TILE_SIZE,
+                drawSquare(img, x * TILE_SIZE, y * TILE_SIZE,
                         x * TILE_SIZE + TILE_SIZE,
                         y * TILE_SIZE + TILE_SIZE, dataColor);
                 if (!tile.pathable) {
                     int borderColor = tile.traversableCliff ? greenColor : blackColor;
-                    VisualisationUtils.drawSquare(img, x * TILE_SIZE + 1, y * TILE_SIZE + 1,
+                    drawSquare(img, x * TILE_SIZE + 1, y * TILE_SIZE + 1,
                             x * TILE_SIZE + TILE_SIZE - 1,
                             y * TILE_SIZE + TILE_SIZE - 1, borderColor);
                 }
 
-                VisualisationUtils.drawSquare(img, x * TILE_SIZE + 2, y * TILE_SIZE + 2,
+                drawSquare(img, x * TILE_SIZE + 2, y * TILE_SIZE + 2,
                         x * TILE_SIZE + TILE_SIZE - 2,
                         y * TILE_SIZE + TILE_SIZE - 2, dataColor);
-                VisualisationUtils.drawNumber(img, x * TILE_SIZE + 10,
+                drawNumber(img, x * TILE_SIZE + 10,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2)),
                         tile.terrain, 0);
-                VisualisationUtils.drawNumber(img, x * TILE_SIZE + 10,
+                drawNumber(img, x * TILE_SIZE + 10,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 6),
                         tile.pathable ? 1 : 0, 0);
-                VisualisationUtils.drawNumber(img, x * TILE_SIZE + 10,
+                drawNumber(img, x * TILE_SIZE + 10,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 12),
                         tile.placeable ? 1 : 0, 0);
-                if (tile.rampId > 0) {
-                    VisualisationUtils.drawNumber(img, x * TILE_SIZE + 10,
+                if (tile.rampId >= 0) {
+                    drawNumber(img, x * TILE_SIZE + 10,
                             (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 18),
                             tile.rampId, 0);
                 }
@@ -77,7 +87,12 @@ public class VisualisationUtils {
         }
 
         int green = makeRgb(0, 255, 0);
-        img.setRGB((int) playerStartLocation.getX()* TILE_SIZE +2, (int) playerStartLocation.getY()* TILE_SIZE +2, green);
+        drawSquare(img,
+                (int)(playerStartLocation.getX() * TILE_SIZE),
+                (getInvertedY((int)playerStartLocation.getY(), gridHeight) * TILE_SIZE),
+                (int)(playerStartLocation.getX() * TILE_SIZE) + TILE_SIZE,
+                (getInvertedY((int)playerStartLocation.getY(), gridHeight) * TILE_SIZE) + TILE_SIZE,
+                green);
         startRaw.ifPresent(r -> {
             r.getStartLocations().forEach(startLocation -> {
                 int red = makeRgb(255, 0, 0);
@@ -201,7 +216,7 @@ public class VisualisationUtils {
             //System.out.println(number + " = Pos " + position + ", test " + test + ", digit " + digit);
             characters.push(Character.forDigit(digit, 10));
             ++position;
-        } while (test < number);
+        } while (test <= number);
         int characterPos = 0;
         while (!characters.isEmpty()) {
             char c = characters.pop();

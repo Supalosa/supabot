@@ -36,15 +36,19 @@ public class SupaBot extends S2Agent {
     @Override
     public void onGameStart() {
         System.out.println("Hello world of Starcraft II bots!");
+
+        observation().getGameInfo().getStartRaw().ifPresent(startRaw -> AnalyseMap.analyse(
+                observation().getStartLocation(),
+                startRaw));
     }
 
     @Override
     public void onStep() {
-        if (observation().getGameLoop() == 1) {
+        /*if (observation().getGameLoop() == 0) {
             observation().getGameInfo().getStartRaw().ifPresent(startRaw -> AnalyseMap.analyse(
                     observation().getStartLocation(),
                     startRaw));
-        }
+        }*/
         if (observation().getGameLoop() > scoutResetLoopTime) {
             scoutedLocations.clear();
             scoutResetLoopTime = observation().getGameLoop() + 100;
@@ -58,14 +62,14 @@ public class SupaBot extends S2Agent {
         Map<Ability, AbilityData> abilities = observation().getAbilityData(true);
         observation().getUnits(Alliance.NEUTRAL).forEach(unitInPool -> {
             unitInPool.getUnit().ifPresent(unit -> {
-                if (unit.getDisplayType() == DisplayType.SNAPSHOT) {
+                /*if (unit.getDisplayType() == DisplayType.SNAPSHOT) {
                     System.out.println("Neutral snapshot " + unit.getType().toString() + " at " + unit.getPosition().toPoint2d());
                     unitTypes.get(unit.getType()).getAbility().ifPresent(ability -> {
                         abilities.get(ability).getFootprintRadius().ifPresent(footprint -> {
                             System.out.println("Footprint is " + footprint);
                         });
                     });
-                }
+                }*/
             });
         });
 
