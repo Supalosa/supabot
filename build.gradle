@@ -1,0 +1,47 @@
+plugins {
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'java'
+}
+
+group 'com.supalosa'
+version '0.1-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.supalosa.LadderMain'
+    }
+
+    from {
+        configurations.compileClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+        duplicatesStrategy DuplicatesStrategy.INHERIT
+    }
+}
+
+shadowJar {
+    archiveBaseName.set('supabot')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer) {
+        resource = 'reference.conf'
+    }
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
+    testImplementation("org.assertj:assertj-core:3.23.1")
+
+    implementation 'com.github.ocraft:ocraft-s2client-bot:0.4.9'
+    compileOnly 'com.github.ocraft:ocraft-s2client-api:0.4.9'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+}
+
+test {
+    useJUnitPlatform()
+}
