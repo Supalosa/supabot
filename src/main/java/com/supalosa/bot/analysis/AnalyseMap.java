@@ -7,6 +7,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.utils.BitmapGrid;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
+import com.supalosa.bot.placement.StructurePlacementCalculator;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -28,15 +29,11 @@ public class AnalyseMap {
         // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
         Point2d start = Point2d.of(37.5f, 53.5f);
         AnalysisResults data = Analysis.floodFill(start, terrain, pathing, placement);
-        StructurePlacementCalculator spc = new StructurePlacementCalculator(data);
+        StructurePlacementCalculator spc = new StructurePlacementCalculator(data, start);
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
-
-        spc.getFirstSupplyDepot(start).ifPresentOrElse(location -> {
-            System.out.println("First supply depot at " + location);
-        }, () -> System.out.println("No location found for first supply depot."));
     }
 
-    public static void analyse(Point playerStartLocation, StartRaw startRaw) {
+    public static AnalysisResults analyse(Point playerStartLocation, StartRaw startRaw) {
         BufferedImage terrainBmp = writeImageData(startRaw, startRaw.getTerrainHeight(), "terrainHeight.bmp");
         BufferedImage pathingBmp = writeImageData(startRaw, startRaw.getPathingGrid(), "pathingGrid.bmp");
         BufferedImage placementBmp = writeImageData(startRaw, startRaw.getPlacementGrid(), "placementGrid.bmp");
@@ -47,6 +44,8 @@ public class AnalyseMap {
         AnalysisResults data = Analysis.floodFill(playerStartLocation.toPoint2d(), terrain, pathing, placement);
         System.out.println("Start location=" + playerStartLocation.toPoint2d());
         VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");
+
+        return data;
     }
 
     private static BufferedImage writeImageData(StartRaw startRaw, ImageData imageData, String filename) {

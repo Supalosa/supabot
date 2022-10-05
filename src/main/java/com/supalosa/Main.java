@@ -11,8 +11,8 @@ import com.supalosa.bot.SupaBot;
 public class Main {
 
     public static void main(String[] args) {
-        SupaBot supaBot = new SupaBot();
-        PlayerSettings opponent = S2Coordinator.createComputer(Race.TERRAN, Difficulty.HARD);
+        SupaBot supaBot = new SupaBot(true);
+        PlayerSettings opponent = S2Coordinator.createComputer(Race.TERRAN, Difficulty.MEDIUM_HARD);
         LauncherUtils.startSC2(
                 args,
                 supaBot,

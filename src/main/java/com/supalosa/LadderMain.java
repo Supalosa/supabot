@@ -10,7 +10,7 @@ import com.supalosa.bot.SupaBot;
 public class LadderMain {
 
     public static void main(String[] args) {
-        SupaBot supaBot = new SupaBot();
+        SupaBot supaBot = new SupaBot(false);
         LauncherUtils.startLadder(args, supaBot);
     }
 }

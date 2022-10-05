@@ -23,14 +23,13 @@ public class LauncherUtils {
     }
 
     public static void startSC2(String[] pArgs, SupaBot pBot, BattlenetMap pMap, boolean pRealtime, PlayerSettings[] pAI) {
-        PlayerSettings[] participants = new PlayerSettings[1 + pAI.length];
-        participants[0] = S2Coordinator.createParticipant(Race.TERRAN, pBot);
-        for (int i = 0; i < pAI.length; ++i) {
-            participants[i + 1] = pAI[i];
-        }
+        PlayerSettings[] participants = new PlayerSettings[2];
+        participants[0] = S2Coordinator.createParticipant(Race.TERRAN, pBot, "supabot");
+        participants[1] = pAI[0];
         S2Coordinator vS2Coordinator = S2Coordinator.setup().setRealtime(pRealtime).setRawAffectsSelection(false)
                 .loadSettings(pArgs)
                 .setShowCloaked(true)
+                .setRealtime(true)
                 .setParticipants(participants)
                 .launchStarcraft()
                 .startGame(pMap);

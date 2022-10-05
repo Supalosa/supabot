@@ -5,25 +5,24 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
-import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
+import com.github.ocraft.s2client.protocol.observation.Alert;
 import com.github.ocraft.s2client.protocol.response.ResponseGameInfo;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
-import com.github.ocraft.s2client.protocol.unit.DisplayType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.AnalyseMap;
+import com.supalosa.bot.analysis.AnalysisResults;
+import com.supalosa.bot.placement.StructurePlacementCalculator;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 
 public class SupaBot extends S2Agent {
+
+    private final boolean isDebug;
 
     private Set<Tag> attackingArmy = new HashSet<>();
     private Set<Tag> reserveArmy = new HashSet<>();
@@ -33,13 +32,22 @@ public class SupaBot extends S2Agent {
     private Set<Point2d> scoutedLocations = new HashSet<>();
     private long scoutResetLoopTime = 0;
 
+    private Optional<AnalysisResults> mapAnalysis = Optional.empty();
+    private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
+
+    public SupaBot(boolean isDebug) {
+        this.isDebug = isDebug;
+    }
+
     @Override
     public void onGameStart() {
         System.out.println("Hello world of Starcraft II bots!");
 
-        observation().getGameInfo().getStartRaw().ifPresent(startRaw -> AnalyseMap.analyse(
+        mapAnalysis = observation().getGameInfo().getStartRaw().map(startRaw -> AnalyseMap.analyse(
                 observation().getStartLocation(),
                 startRaw));
+        structurePlacementCalculator = mapAnalysis
+                .map(analysisResults -> new StructurePlacementCalculator(analysisResults, observation().getStartLocation().toPoint2d()));
     }
 
     @Override
@@ -103,6 +111,35 @@ public class SupaBot extends S2Agent {
             regroupPosition = Optional.empty();
         }
         attackPosition = findEnemyPosition();
+
+        // update ramp
+        structurePlacementCalculator.ifPresent(spc -> {
+            spc.getFirstSupplyDepot(observation()).ifPresent(supplyDepot -> {
+                if (supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
+                    actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                }
+            });
+            spc.getSecondSupplyDepot(observation()).ifPresent(supplyDepot -> {
+                if (supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
+                    actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                }
+            });
+            spc.getFirstSupplyDepotLocation().ifPresent(
+                    spl -> drawDebugSquare(spl.getX(), spl.getY(), 1.0f, 1.0f, Color.GREEN));
+            spc.getSecondSupplyDepotLocation().ifPresent(
+                    spl -> drawDebugSquare(spl.getX(), spl.getY(), 1.0f, 1.0f, Color.GREEN));
+        });
+        debug().sendDebug();
+    }
+
+    private void drawDebugSquare(float x, float y, float w, float h, Color color) {
+        // debug
+        Point2d point2d = Point2d.of(x, y);
+        float z = observation().terrainHeight(point2d);
+        debug().debugBoxOut(
+            Point.of(Math.max(0.0f, x), Math.max(0.0f, y), z + 0.1f),
+                    Point.of(x+w, y+h, z + 0.1f),
+                color);
     }
 
     private boolean needsSupplyDepot() {
@@ -118,7 +155,19 @@ public class SupaBot extends S2Agent {
             return false;
         }
         // Try and build a depot. Find a random TERRAN_SCV and give it the order.
-        return tryBuildStructure(Abilities.BUILD_SUPPLY_DEPOT, Units.TERRAN_SCV);
+        Optional<Point2d> position = Optional.empty();
+        int numSupplyDepots = countUnitType(Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT_LOWERED);
+        if (numSupplyDepots < 2 && structurePlacementCalculator.isPresent()) {
+            if (numSupplyDepots == 0) {
+                position = structurePlacementCalculator.get()
+                        .getFirstSupplyDepotLocation();
+            } else {
+                position = structurePlacementCalculator.get()
+                        .getSecondSupplyDepotLocation();
+            }
+            position.ifPresent(spl -> drawDebugSquare(spl.getX(), spl.getY(), 0.1f, 0.1f, Color.RED));
+        }
+        return tryBuildStructure(Abilities.BUILD_SUPPLY_DEPOT, Units.TERRAN_SCV, position);
     }
 
     private boolean tryBuildScvs() {
@@ -133,7 +182,7 @@ public class SupaBot extends S2Agent {
         return true;
     }
 
-    private boolean tryBuildStructure(Ability abilityTypeForStructure, UnitType unitType) {
+    private boolean tryBuildStructure(Ability abilityTypeForStructure, UnitType unitType, Optional<Point2d> specificPosition) {
         // If a unit already is building a supply structure of this type, do nothing.
         if (!observation().getUnits(Alliance.SELF, doesBuildWith(abilityTypeForStructure)).isEmpty()) {
             return false;
@@ -146,13 +195,23 @@ public class SupaBot extends S2Agent {
             actions().unitCommand(
                     unit,
                     abilityTypeForStructure,
-                    unit.getPosition().toPoint2d().add(Point2d.of(getRandomScalar(), getRandomScalar()).mul(15.0f)),
+                    specificPosition
+                            .map(point2d -> point2d.add(0.1f, 0.1f))
+                            .orElseGet(() ->
+                                    unit.getPosition()
+                                            .toPoint2d()
+                                            .add(Point2d.of(getRandomScalar(), getRandomScalar())
+                                            .mul(15.0f))),
                     false);
             return true;
         } else {
             return false;
         }
+    }
 
+    @Override
+    public void onAlert(Alert alert) {
+        System.out.println("Alert: " + alert.name());
     }
 
     private Predicate<UnitInPool> doesBuildWith(Ability abilityTypeForStructure) {
@@ -240,15 +299,27 @@ public class SupaBot extends S2Agent {
             return false;
         }
 
-        if (countUnitType(Units.TERRAN_BARRACKS) > 10) {
+        int numBarracks = countUnitType(Units.TERRAN_BARRACKS);
+        if (numBarracks > 10) {
             return false;
         }
+        Optional<Point2d> position = Optional.empty();
 
-        return tryBuildStructure(Abilities.BUILD_BARRACKS, Units.TERRAN_SCV);
+        if (numBarracks == 0 && structurePlacementCalculator.isPresent()) {
+            position = structurePlacementCalculator.get()
+                    .getFirstBarracksLocation(observation().getStartLocation().toPoint2d());
+        }
+
+        return tryBuildStructure(Abilities.BUILD_BARRACKS, Units.TERRAN_SCV, position);
     }
 
-    private int countUnitType(Units unitType) {
-        return observation().getUnits(Alliance.SELF, UnitInPool.isUnit(unitType)).size();
+    private int countUnitType(Units... unitType) {
+        if (unitType.length == 1) {
+            return observation().getUnits(Alliance.SELF, UnitInPool.isUnit(unitType[0])).size();
+        } else {
+            Set<Units> unitTypes = Set.of(unitType);
+            return observation().getUnits(Alliance.SELF, unitInPool -> unitTypes.contains(unitInPool.unit().getType())).size();
+        }
     }
 
     // Finds a worthwhile enemy position to move units towards.

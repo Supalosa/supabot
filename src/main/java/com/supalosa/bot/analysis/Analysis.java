@@ -207,7 +207,8 @@ public class Analysis {
                     .filter(ramp -> ramp.getValue() == rampId)
                     .map(ramp -> ramp.getKey())
                     .collect(Collectors.toSet());
-            Ramp ramp = new Ramp(rampId,  rampPoints, topOfRampPoints);
+            Ramp ramp = new Ramp(rampId, rampPoints, topOfRampPoints, Ramp.calculateDirection(rampPoints, topOfRampPoints));
+            System.out.println("Ramp " + rampId + " is facing " + ramp.getRampDirection().name());
             mapOfRamps.put(rampId, ramp);
         });
 
