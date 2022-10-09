@@ -393,7 +393,7 @@ public class SupaBot extends S2Agent {
         int numBases = countUnitType(Units.TERRAN_COMMAND_CENTER);
         observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_COMMAND_CENTER)).forEach(commandCentre -> {
             if (commandCentre.unit().getOrders().isEmpty()) {
-                if (countUnitType(Units.TERRAN_SCV) < numBases * 24) {
+                if (countUnitType(Units.TERRAN_SCV) < numBases * 22) {
                     actions().unitCommand(commandCentre.unit(), Abilities.TRAIN_SCV, false);
                 }
             }

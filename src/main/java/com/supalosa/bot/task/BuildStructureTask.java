@@ -81,14 +81,14 @@ public class BuildStructureTask implements Task {
 
         long gameLoop = agent.observation().getGameLoop();
         List<ActionError> actionErrors = agent.observation().getActionErrors();
-        if (actionErrors.stream().anyMatch(actionError -> {
+        if (buildAttempts > MAX_BUILD_ATTEMPTS || actionErrors.stream().anyMatch(actionError -> {
            if (actionError.getUnitTag().equals(assignedWorker)) {
                System.out.println("Relevant action error: " + actionError.getActionResult());
                return true;
            }
            return false;
         })) {
-            agent.actions().sendChat("Failed: " + targetUnitType, ActionChat.Channel.BROADCAST);
+            agent.actions().sendChat("Failed: " + targetUnitType, ActionChat.Channel.TEAM);
             System.out.println("Task " + targetUnitType + " failed");
             isComplete = true;
         }
@@ -107,7 +107,7 @@ public class BuildStructureTask implements Task {
                 isComplete = true;
             }
             if (isComplete) {
-                agent.actions().sendChat("Finished: " + targetUnitType, ActionChat.Channel.BROADCAST);
+                agent.actions().sendChat("Finished: " + targetUnitType, ActionChat.Channel.TEAM);
                 System.out.println(targetUnitType + ": " + actualUnit.getUnit().get().getBuildProgress());
             }
         }
@@ -122,7 +122,7 @@ public class BuildStructureTask implements Task {
     }
 
     private Point2d resolveLocation(UnitInPool worker) {
-        System.out.println("Worker: " + worker);
+        //System.out.println("Worker: " + worker);
         return location.orElseGet(() -> worker.unit().getPosition()
                     .toPoint2d()
                     .add(Point2d.of(getRandomScalar(), getRandomScalar())

@@ -3,6 +3,7 @@ package com.supalosa.bot.task;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 
 import java.util.*;
@@ -62,6 +63,10 @@ public class TaskManagerImpl implements TaskManager {
         tasksFinishedThisStep.forEach(task -> {
             taskSet.remove(task.getKey());
         });
+        if (agent.observation().getGameLoop() % 1000 == 0) {
+            agent.actions().sendChat("TasksActive: " + taskSet.size(), ActionChat.Channel.TEAM);
+        }
+
     }
 
     @Override
