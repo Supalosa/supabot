@@ -29,6 +29,7 @@ public class BuildStructureTask implements Task {
     private final Ability ability;
     private final UnitType targetUnitType;
     private final Optional<Point2d> location;
+    private final Optional<Unit> specificTarget;
     private final Optional<PlacementRules> placementRules;
 
     private Optional<Tag> matchingUnitAtLocation = Optional.empty();
@@ -39,11 +40,12 @@ public class BuildStructureTask implements Task {
     private long buildAttempts = 0;
     private boolean isComplete = false;
 
-    public BuildStructureTask(Ability ability, UnitType targetUnitType, Optional<Point2d> location,
+    public BuildStructureTask(Ability ability, UnitType targetUnitType, Optional<Point2d> location, Optional<Unit> specificTarget,
                               Optional<PlacementRules> placementRules) {
         this.ability = ability;
         this.targetUnitType = targetUnitType;
         this.location = location;
+        this.specificTarget = specificTarget;
         this.placementRules = placementRules;
         this.taskKey = targetUnitType.toString() + "." + UUID.randomUUID();
     }
@@ -82,20 +84,26 @@ public class BuildStructureTask implements Task {
         long gameLoop = agent.observation().getGameLoop();
         List<ActionError> actionErrors = agent.observation().getActionErrors();
         if (buildAttempts > MAX_BUILD_ATTEMPTS || actionErrors.stream().anyMatch(actionError -> {
-           if (actionError.getUnitTag().equals(assignedWorker)) {
+           if (actionError.getUnitTag().equals(assignedWorker) &&
+                   actionError.getActionResult() != ActionResult.NOT_ENOUGH_MINERALS &&
+                   actionError.getActionResult() != ActionResult.NOT_ENOUGH_VESPENE) {
                System.out.println("Relevant action error: " + actionError.getActionResult());
                return true;
            }
            return false;
         })) {
-            agent.actions().sendChat("Failed: " + targetUnitType, ActionChat.Channel.TEAM);
+            agent.actions().sendChat("Failed: " + targetUnitType + "@" + location, ActionChat.Channel.TEAM);
             System.out.println("Task " + targetUnitType + " failed");
             isComplete = true;
         }
 
         if (worker.isPresent() && !matchingUnitAtLocation.isPresent() && !isWorkerOrderQueued(worker.get())) {
             if (gameLoop > lastBuildAttempt + BUILD_ATTEMPT_INTERVAL) {
-                agent.actions().unitCommand(assignedWorker.get(), ability, resolveLocation(worker.get()), false);
+                if (specificTarget.isPresent()) {
+                    agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
+                } else {
+                    agent.actions().unitCommand(assignedWorker.get(), ability, resolveLocation(worker.get()), false);
+                }
                 lastBuildAttempt = gameLoop;
                 ++buildAttempts;
             }

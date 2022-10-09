@@ -42,6 +42,8 @@ public class SupaBot extends S2Agent {
     private TaskManager taskManager;
     private FightManager fightManager;
 
+    private static final long GAS_CHECK_INTERVAL = 22L;
+    private final long lastGasCheck = 0L;
 
     private Map<UnitType, UnitTypeData> unitTypeData = null;
 
@@ -146,45 +148,12 @@ public class SupaBot extends S2Agent {
         tryBuildCommandCentre();
         tryBuildScvs();
         tryBuildMarines();
+        tryBuildRefinery();
         rebalanceWorkers();
+        mineGas();
         Map<Ability, AbilityData> abilities = observation().getAbilityData(true);
 
         taskManager.onStep(this);
-        observation().getUnits(Alliance.NEUTRAL).forEach(unitInPool -> {
-            unitInPool.getUnit().ifPresent(unit -> {
-                /*if (unit.getDisplayType() == DisplayType.SNAPSHOT) {
-                    System.out.println("Neutral snapshot " + unit.getType().toString() + " at " + unit.getPosition().toPoint2d());
-                    unitTypes.get(unit.getType()).getAbility().ifPresent(ability -> {
-                        abilities.get(ability).getFootprintRadius().ifPresent(footprint -> {
-                            System.out.println("Footprint is " + footprint);
-                        });
-                    });
-                }*/
-            });
-        });
-
-        /*if (observation().getGameInfo().getStartRaw().isPresent()) {
-            StartRaw startRaw = observation().getGameInfo().getStartRaw().get();
-            for (int x = 0; x < startRaw.getTerrainHeight().getSize().getX(); ++x) {
-                for (int y = 0; y < startRaw.getTerrainHeight().getSize().getY(); ++y) {
-                    Point2d point2d = Point2d.of(x, y);
-                    int height = startRaw.getTerrainHeight().sample(point2d, ImageData.Origin.BOTTOM_LEFT);
-                    if (height == 0) {
-                        continue;
-                    }
-                    float z = -16f + 32f * (height / 255f);
-                    float fx = (float)x, fy = (float)y;
-                    //debug().debugBoxOut(
-                            Point.of(Math.max(0.0f, fx - .45f), Math.max(0.0f, fy - .45f), z + 0.1f),
-                            Point.of(fx + .45f, fy + .45f, z + 0.1f),
-                            Color.WHITE);
-                    String text = "" + height;
-                    Point point = Point.of(x, y, z);
-                    //debug().debugTextOut(text, point, Color.WHITE, 10);
-                }
-            }
-            //debug().sendDebug();
-        }*/
 
         fightManager.setAttackPosition(findEnemyPosition());
         fightManager.onStep();
@@ -412,13 +381,127 @@ public class SupaBot extends S2Agent {
         return true;
     }
 
+    private boolean needsRefinery() {
+        return observation().getFoodWorkers() > 24 &&
+                countUnitType(Units.TERRAN_REFINERY) < countUnitType(Units.TERRAN_COMMAND_CENTER, Units.TERRAN_ORBITAL_COMMAND) * 2;
+    }
+
+    private static final Set<Units> VESPENE_GEYSERS = Set.of(Units.NEUTRAL_VESPENE_GEYSER, Units.NEUTRAL_PROTOSS_VESPENE_GEYSER,
+            Units.NEUTRAL_SPACE_PLATFORM_GEYSER, Units.NEUTRAL_PURIFIER_VESPENE_GEYSER,
+            Units.NEUTRAL_SHAKURAS_VESPENE_GEYSER, Units.NEUTRAL_RICH_VESPENE_GEYSER);
+
+    private boolean tryBuildRefinery() {
+        if (!needsRefinery()) {
+            return false;
+        }
+        List<Unit> commandCentres = observation().getUnits(unitInPool ->
+                unitInPool.unit().getAlliance() == Alliance.SELF &&
+                (unitInPool.unit().getType().equals(Units.TERRAN_COMMAND_CENTER) ||
+                        unitInPool.unit().getType().equals(Units.TERRAN_ORBITAL_COMMAND))).stream()
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList());
+        List<Unit> refineries = observation().getUnits(unitInPool ->
+                        unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                        unitInPool.unit().getType().equals(Units.TERRAN_REFINERY) &&
+                                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
+                ).stream()
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList());
+        List<Unit> neutralGeysers = observation().getUnits(unitInPool ->
+                unitInPool.unit().getAlliance().equals(Alliance.NEUTRAL) &&
+                VESPENE_GEYSERS.contains(unitInPool.unit().getType()) &&
+                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
+            ).stream()
+            .map(UnitInPool::unit)
+            .collect(Collectors.toList());
+        for (Unit commandCentre : commandCentres) {
+            List<Unit> refineriesNear = refineries.stream()
+                    .filter(refinery -> refinery.getPosition().distance(commandCentre.getPosition()) < 10.0f)
+                    .collect(Collectors.toList());
+            Set<Point2d> refineriesNearPositions = unitsToPointSet(refineriesNear);
+            List<Unit> geysersNear = neutralGeysers.stream()
+                    .filter(neutralGeyser -> neutralGeyser.getPosition().distance(commandCentre.getPosition()) < 10.0f)
+                    .collect(Collectors.toList());
+            if (refineriesNear.size() < geysersNear.size()) {
+                for (Unit geyser : geysersNear) {
+                    Point2d geyserPosition = geyser.getPosition().toPoint2d();
+                    if (!refineriesNearPositions.contains(geyserPosition)) {
+                        tryBuildStructureAtTarget(Abilities.BUILD_REFINERY, Units.TERRAN_REFINERY, Units.TERRAN_SCV, 1, Optional.of(geyser));
+                        return true;
+                    }
+                }
+                break;
+            }
+        }
+        return true;
+    }
+
+    void mineGas() {
+        long gameLoop = observation().getGameLoop();
+
+        if (gameLoop < lastGasCheck + GAS_CHECK_INTERVAL) {
+            return;
+        }
+        List<Unit> commandCentres = observation().getUnits(unitInPool ->
+                        unitInPool.unit().getAlliance() == Alliance.SELF &&
+                                (unitInPool.unit().getType().equals(Units.TERRAN_COMMAND_CENTER) ||
+                                        unitInPool.unit().getType().equals(Units.TERRAN_ORBITAL_COMMAND))).stream()
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList());
+        List<Unit> refineries = observation().getUnits(unitInPool ->
+                        unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                                unitInPool.unit().getType().equals(Units.TERRAN_REFINERY) &&
+                                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
+                ).stream()
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList());
+        refineries.forEach(refinery -> {
+            if (refinery.getAssignedHarvesters().isPresent() &&
+                    refinery.getIdealHarvesters().isPresent() &&
+                    refinery.getAssignedHarvesters().get() < refinery.getIdealHarvesters().get()) {
+                int delta = refinery.getIdealHarvesters().get() - refinery.getAssignedHarvesters().get();
+                List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
+                        unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                        UnitInPool.isCarryingMinerals().test(unitInPool) &&
+                        unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
+                        .stream().map(UnitInPool::unit).collect(Collectors.toList());
+                for (int i = 0; i < Math.min(nearbyScvs.size(), delta); ++i) {
+                    actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, refinery, false);
+                }
+            }
+        });
+    }
+
+    /**
+     * Checks if a certain unit has other units within a certain radius.
+     * @param unit The unit to check
+     * @param units The list of other units to check are near the {@code unit}.
+     * @param radius The radius to check
+     * @return
+     */
+    private boolean hasUnitNearby(Unit unit, List<Unit> units, float radius) {
+        return units.stream().anyMatch(otherUnit -> unit.getPosition().distance(otherUnit.getPosition()) < radius);
+    }
+
+    private Set<Point2d> unitsToPointSet(List<Unit> units) {
+        return units.stream().map(unit -> unit.getPosition().toPoint2d()).collect(Collectors.toSet());
+    }
+
     private int getNumBuildingStructure(Ability abilityTypeForStructure) {
         // If a unit already is building a supply structure of this type, do nothing.
         return observation().getUnits(Alliance.SELF, doesBuildWith(abilityTypeForStructure)).size();
     }
 
     private boolean tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Point2d> specificPosition) {
-        BuildStructureTask maybeTask = new BuildStructureTask(abilityTypeForStructure, unitTypeForStructure, specificPosition, Optional.empty());
+        return _tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel, specificPosition, Optional.empty());
+    }
+
+    private boolean tryBuildStructureAtTarget(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Unit> specificTarget) {
+        return _tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel, Optional.empty(), specificTarget);
+    }
+
+    private boolean _tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Point2d> specificPosition, Optional<Unit> specificTarget) {
+        BuildStructureTask maybeTask = new BuildStructureTask(abilityTypeForStructure, unitTypeForStructure, specificPosition, specificTarget, Optional.empty());
         int similarCount = taskManager.countSimilarTasks(maybeTask);
         //System.out.println(unitTypeForStructure + ": " + similarCount);
         if (similarCount >= maxParallel) {
