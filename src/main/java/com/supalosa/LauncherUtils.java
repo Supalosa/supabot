@@ -3,9 +3,11 @@ package com.supalosa;
 import com.github.ocraft.s2client.bot.S2Coordinator;
 import com.github.ocraft.s2client.bot.setting.PlayerSettings;
 import com.github.ocraft.s2client.protocol.game.BattlenetMap;
+import com.github.ocraft.s2client.protocol.game.LocalMap;
 import com.github.ocraft.s2client.protocol.game.Race;
 import com.supalosa.bot.SupaBot;
 
+import java.nio.file.Paths;
 import java.util.Arrays;
 
 public class LauncherUtils {
@@ -29,7 +31,21 @@ public class LauncherUtils {
         S2Coordinator vS2Coordinator = S2Coordinator.setup().setRealtime(pRealtime).setRawAffectsSelection(false)
                 .loadSettings(pArgs)
                 .setShowCloaked(true)
-                .setRealtime(true)
+                .setStepSize(2)
+                .setParticipants(participants)
+                .launchStarcraft()
+                .startGame(LocalMap.of(Paths.get("BerlingradAIE.SC2Map")));
+        executeCoordinator(vS2Coordinator);
+    }
+
+    public static void startSC2(String[] pArgs, SupaBot pBot, LocalMap pMap, boolean pRealtime, PlayerSettings[] pAI) {
+        PlayerSettings[] participants = new PlayerSettings[2];
+        participants[0] = S2Coordinator.createParticipant(Race.TERRAN, pBot, "supabot");
+        participants[1] = pAI[0];
+        S2Coordinator vS2Coordinator = S2Coordinator.setup().setRealtime(pRealtime).setRawAffectsSelection(false)
+                .loadSettings(pArgs)
+                .setShowCloaked(true)
+                .setStepSize(2)
                 .setParticipants(participants)
                 .launchStarcraft()
                 .startGame(pMap);

@@ -1,5 +1,6 @@
 package com.supalosa.bot.analysis;
 
+import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
 import com.github.ocraft.s2client.protocol.spatial.Point;
@@ -18,6 +19,11 @@ import java.util.*;
 public class AnalyseMap {
     private static final int MAX_BYTE = 255;
 
+    /**
+     * Running this method allows for offline analysis.
+     * @param args
+     * @throws IOException
+     */
     public static void main(String[] args) throws IOException {
         File inputFile = new File("image.bmp");
         BufferedImage terrainBmp = ImageIO.read(new File("terrainHeight.bmp"));
@@ -28,12 +34,18 @@ public class AnalyseMap {
         Grid placement = new BitmapGrid(placementBmp);
         // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
         Point2d start = Point2d.of(37.5f, 53.5f);
-        AnalysisResults data = Analysis.floodFill(start, terrain, pathing, placement);
+        AnalysisResults data = Analysis.run(start, terrain, pathing, placement);
         StructurePlacementCalculator spc = new StructurePlacementCalculator(data, start);
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
     }
 
-    public static AnalysisResults analyse(Point playerStartLocation, StartRaw startRaw) {
+    /**
+     * This is the entry point for online analysis.
+     * @param observationInterface
+     * @param startRaw
+     * @return
+     */
+    public static AnalysisResults analyse(ObservationInterface observationInterface, StartRaw startRaw) {
         BufferedImage terrainBmp = writeImageData(startRaw, startRaw.getTerrainHeight(), "terrainHeight.bmp");
         BufferedImage pathingBmp = writeImageData(startRaw, startRaw.getPathingGrid(), "pathingGrid.bmp");
         BufferedImage placementBmp = writeImageData(startRaw, startRaw.getPlacementGrid(), "placementGrid.bmp");
@@ -41,7 +53,9 @@ public class AnalyseMap {
         Grid terrain = new BitmapGrid(terrainBmp);
         Grid pathing = new BitmapGrid(pathingBmp);
         Grid placement = new BitmapGrid(placementBmp);
-        AnalysisResults data = Analysis.floodFill(playerStartLocation.toPoint2d(), terrain, pathing, placement);
+
+        Point playerStartLocation = observationInterface.getStartLocation();
+        AnalysisResults data = Analysis.run(playerStartLocation.toPoint2d(), terrain, pathing, placement);
         System.out.println("Start location=" + playerStartLocation.toPoint2d());
         VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");
 

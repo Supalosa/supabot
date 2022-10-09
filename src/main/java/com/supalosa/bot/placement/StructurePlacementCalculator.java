@@ -47,7 +47,7 @@ public class StructurePlacementCalculator {
     public Optional<UnitInPool> getFirstSupplyDepot(ObservationInterface observation) {
         if (firstSupplyDepotTag.isPresent()) {
             UnitInPool unit = observation.getUnit(firstSupplyDepotTag.get());
-            if (unit.isAlive()) {
+            if (unit != null && unit.isAlive()) {
                 return Optional.of(unit);
             } else {
                 firstSupplyDepotTag = Optional.empty();
@@ -65,7 +65,7 @@ public class StructurePlacementCalculator {
     public Optional<UnitInPool> getSecondSupplyDepot(ObservationInterface observation) {
         if (secondSupplyDepotTag.isPresent()) {
             UnitInPool unit = observation.getUnit(secondSupplyDepotTag.get());
-            if (unit.isAlive()) {
+            if (unit != null && unit.isAlive()) {
                 return Optional.of(unit);
             } else {
                 secondSupplyDepotTag = Optional.empty();

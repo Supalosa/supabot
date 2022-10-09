@@ -9,6 +9,12 @@ import java.util.stream.Collectors;
 
 public class Analysis {
 
+    public static AnalysisResults run(Point2d startLocation, Grid<Integer> terrain, Grid<Integer> pathing, Grid<Integer> placement) {
+        AnalysisResults results = floodFill(startLocation, terrain, pathing, placement);
+
+        return results;
+    }
+
     public static AnalysisResults floodFill(Point2d startLocation, Grid<Integer> terrain, Grid<Integer> pathing, Grid<Integer> placement) {
         Grid<Tile> result = new InMemoryGrid(Tile.class, terrain.getWidth(), terrain.getHeight(), () -> new Tile());
         Queue<Point2d> points = new LinkedList<>();
@@ -76,7 +82,7 @@ public class Analysis {
         }
 
         if (!points.isEmpty()) {
-            System.out.println("Map analysis early with " + points.size() + " points remaining");
+            System.out.println("Map analysis ended early with " + points.size() + " points remaining");
         }
 
         // group contiguous ramps
