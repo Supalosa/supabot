@@ -14,6 +14,13 @@ public class Constants {
             Units.TERRAN_BARRACKS
     );
 
+    public static final Set<UnitType> TERRAN_CC_TYPES = Set.of(
+            Units.TERRAN_ORBITAL_COMMAND,
+            Units.TERRAN_COMMAND_CENTER,
+            Units.TERRAN_PLANETARY_FORTRESS
+    );
+    public static final UnitType[] TERRAN_CC_TYPES_ARRAY = TERRAN_CC_TYPES.toArray(new UnitType[]{});
+
     public static final Set<UnitType> MINERAL_TYPES = Set.of(
             Units.NEUTRAL_MINERAL_FIELD, Units.NEUTRAL_MINERAL_FIELD750,
             Units.NEUTRAL_RICH_MINERAL_FIELD, Units.NEUTRAL_RICH_MINERAL_FIELD750,

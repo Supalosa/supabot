@@ -2,6 +2,7 @@ package com.supalosa.bot;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.action.Actions;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point;
@@ -28,6 +29,11 @@ public class FightManager {
     private Map<Tag, Long> unitsRetreatingUntil = new HashMap<>();
     private Map<Tag, Long> unitCannotRetreatUntil = new HashMap<>();
     private Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
+
+    private long lastCloakOrBurrowedUpdate = 0L;
+    private static final long CLOAK_OR_BURROW_UPDATE_INTERVAL = 44L;
+    private HashSet<Tag> cloakedOrBurrowedUnits;
+    private boolean hasSeenCloakedOrBurrowedUnits = false;
 
     public FightManager(S2Agent agent) {
         this.agent = agent;
@@ -66,21 +72,9 @@ public class FightManager {
             rememberedUnitHealth.put(tag, health);
         });
 
-        List<UnitInPool> enemyUnits = agent.observation().getUnits(Alliance.ENEMY);
-        boolean hasCloakedOrBurrowed = false;
-        for (UnitInPool enemyUnit : enemyUnits) {
-            if (enemyUnit.unit().getCloakState().isPresent() &&
-                    enemyUnit.unit().getCloakState().get() == CloakState.CLOAKED) {
-                hasCloakedOrBurrowed = true;
-                break;
-            }
-            if (enemyUnit.unit().getBurrowed().orElse(false)) {
-                hasCloakedOrBurrowed = true;
-                break;
-            }
-        }
-        if (hasCloakedOrBurrowed) {
-            System.out.println("CLOAKED UNITS DETECTED");
+        if (gameLoop > lastCloakOrBurrowedUpdate + CLOAK_OR_BURROW_UPDATE_INTERVAL) {
+            updateCloakOrBurrowed();
+            lastCloakOrBurrowedUpdate = gameLoop;
         }
 
         Set<Tag> unitsToRemoveFromRetreat = new HashSet<>();
@@ -106,6 +100,44 @@ public class FightManager {
         }
         if (unitsRetreatingThisTick.size() > 0 && regroupPosition.isPresent()) {
             agent.actions().unitCommand(unitsRetreatingThisTick, Abilities.MOVE, regroupPosition.get(), false);
+        }
+    }
+
+    private void updateCloakOrBurrowed() {
+        List<UnitInPool> enemyUnits = agent.observation().getUnits(Alliance.ENEMY);
+        this.cloakedOrBurrowedUnits = new HashSet<>();
+        List<UnitInPool> changelings = new ArrayList<>();
+        for (UnitInPool enemyUnit : enemyUnits) {
+            if (enemyUnit.unit().getCloakState().isPresent() &&
+                    enemyUnit.unit().getCloakState().get() == CloakState.CLOAKED) {
+                this.hasSeenCloakedOrBurrowedUnits = true;
+                cloakedOrBurrowedUnits.add(enemyUnit.getTag());
+            }
+            if (enemyUnit.unit().getBurrowed().orElse(false)) {
+                this.hasSeenCloakedOrBurrowedUnits = true;
+                cloakedOrBurrowedUnits.add(enemyUnit.getTag());
+            }
+            if (enemyUnit.unit().getType() == Units.ZERG_CHANGELING ||
+                    enemyUnit.unit().getType() == Units.ZERG_CHANGELING_MARINE ||
+                    enemyUnit.unit().getType() == Units.ZERG_CHANGELING_ZEALOT ||
+                    enemyUnit.unit().getType() == Units.ZERG_CHANGELING_MARINE_SHIELD ||
+                    enemyUnit.unit().getType() == Units.ZERG_CHANGELING_ZERGLING ||
+                    enemyUnit.unit().getType() == Units.ZERG_CHANGELING_ZERGLING_WINGS) {
+                changelings.add(enemyUnit);
+            }
+        }
+        if (changelings.size() > 0) {
+            // hack for now
+            for (UnitInPool unit : agent.observation().getUnits(Alliance.SELF)) {
+                if (unit.unit().getType() == Units.TERRAN_MARINE) {
+                    for (UnitInPool changeling : changelings) {
+                        double distance = changeling.unit().getPosition().distance(unit.unit().getPosition());
+                        if (distance < 5) {
+                            agent.actions().unitCommand(unit.unit(), Abilities.ATTACK, changeling.unit(), false);
+                        }
+                    }
+                }
+            }
         }
     }
 
