@@ -16,7 +16,7 @@ public class Main {
         LauncherUtils.startSC2(
                 args,
                 supaBot,
-                LocalMap.of(Paths.get("StargazersAIE.SC2Map")),
+                LocalMap.of(Paths.get("HardwireAIE.SC2Map")),
                 //BattlenetMap.of("BerlingradAIE"),
                 false,
                 new PlayerSettings[]{opponent});

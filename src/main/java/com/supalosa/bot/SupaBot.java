@@ -146,10 +146,68 @@ public class SupaBot extends S2Agent {
         tryBuildSupplyDepot();
         tryBuildBarracks();
         tryBuildCommandCentre();
+        tryBuildRefinery();
+        int supply = observation().getFoodUsed();
+        if (supply > 60) {
+            tryBuildMax(Abilities.BUILD_FACTORY, Units.TERRAN_FACTORY, Units.TERRAN_SCV, 1, 1);
+        }
+        if (supply > 70) {
+            tryBuildMax(Abilities.BUILD_ENGINEERING_BAY, Units.TERRAN_ENGINEERING_BAY, Units.TERRAN_SCV, 1, 2);
+        }
+        if (supply > 80) {
+            tryBuildMax(Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1);
+        }
+        if (supply > 50) {
+            //Map<Upgrade, UpgradeData> upgradeData = observation().getUpgradeData(false);
+            Set<Upgrade> upgrades = new HashSet<>(observation().getUpgrades());
+            observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                    unitInPool.unit().getAddOnTag().isEmpty() &&
+                    UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
+                Ability ability = Abilities.BUILD_REACTOR;
+                if (ThreadLocalRandom.current().nextBoolean()) {
+                    ability = Abilities.BUILD_TECHLAB;
+                }
+                actions().unitCommand(unit.unit(), ability, unit.unit().getPosition().toPoint2d(), false);
+            });
+            if (!upgrades.contains(Upgrades.COMBAT_SHIELD) || !upgrades.contains(Upgrades.STIMPACK)) {
+                observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                        UnitInPool.isUnit(Units.TERRAN_BARRACKS_TECHLAB).test(unitInPool)).forEach(unit -> {
+                    if (unit.unit().getOrders().isEmpty()) {
+                        if (!upgrades.contains(Upgrades.COMBAT_SHIELD)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_COMBAT_SHIELD, false);
+                        }
+                        if (!upgrades.contains(Upgrades.STIMPACK)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_STIMPACK, false);
+                        }
+                    }
+                });
+                observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                        UnitInPool.isUnit(Units.TERRAN_ENGINEERING_BAY).test(unitInPool)).forEach(unit -> {
+                    if (unit.unit().getOrders().isEmpty()) {
+                        if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1, false);
+                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2, false);
+                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3, false);
+                        }
+                        if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL1, false);
+                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL2, false);
+                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3)) {
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL3, false);
+                        }
+                    }
+                });
+            }
+        }
         tryBuildScvs();
         tryBuildMarines();
-        tryBuildRefinery();
+
+
         rebalanceWorkers();
+
         mineGas();
         Map<Ability, AbilityData> abilities = observation().getAbilityData(true);
 
@@ -279,16 +337,16 @@ public class SupaBot extends S2Agent {
         int index = Math.min(expansionSupply.length - 1, Math.max(0, numCcs));
         int nextExpansionAt = expansionSupply[index];
         if (observation().getGameLoop() < lastExpansionTime + 22L) {
-            return false;
+            return true;
         }
         if (getNumBuildingStructure(Abilities.BUILD_COMMAND_CENTER) > 0) {
-            return false;
+            return true;
         }
-        return (currentSupply > nextExpansionAt);
+        return (currentSupply <= nextExpansionAt);
     }
 
     private boolean tryBuildCommandCentre() {
-        if (!needsCommandCentre()) {
+        if (needsCommandCentre()) {
             return false;
         }
         if (this.expansionLocations == null || this.expansionLocations.size() == 0) {
@@ -338,7 +396,6 @@ public class SupaBot extends S2Agent {
         }
         // Try and build a depot. Find a random TERRAN_SCV and give it the order.
         Optional<Point2d> position = Optional.empty();
-        int numSupplyDepots = countUnitType(Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT_LOWERED);
         if (structurePlacementCalculator.isPresent()) {
             position = structurePlacementCalculator.get()
                     .getFirstSupplyDepotLocation();
@@ -373,7 +430,7 @@ public class SupaBot extends S2Agent {
     private boolean tryBuildMarines() {
         observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_BARRACKS)).forEach(barracks -> {
             if (barracks.unit().getOrders().isEmpty()) {
-                if (!needsCommandCentre()) {
+                if (needsCommandCentre()) {
                     actions().unitCommand(barracks.unit(), Abilities.TRAIN_MARINE, false);
                 }
             }
@@ -490,6 +547,13 @@ public class SupaBot extends S2Agent {
     private int getNumBuildingStructure(Ability abilityTypeForStructure) {
         // If a unit already is building a supply structure of this type, do nothing.
         return observation().getUnits(Alliance.SELF, doesBuildWith(abilityTypeForStructure)).size();
+    }
+
+    private boolean tryBuildMax(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, int max) {
+        if (countUnitType(unitTypeForStructure) < max) {
+            return tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel, Optional.empty());
+        }
+        return false;
     }
 
     private boolean tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Point2d> specificPosition) {
@@ -611,11 +675,11 @@ public class SupaBot extends S2Agent {
         return tryBuildStructure(Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, Units.TERRAN_SCV, maxParallel, position);
     }
 
-    private int countUnitType(Units... unitType) {
+    private int countUnitType(UnitType... unitType) {
         if (unitType.length == 1) {
             return observation().getUnits(Alliance.SELF, UnitInPool.isUnit(unitType[0])).size();
         } else {
-            Set<Units> unitTypes = Set.of(unitType);
+            Set<UnitType> unitTypes = Set.of(unitType);
             return observation().getUnits(Alliance.SELF,
                     unitInPool -> unitTypes.contains(unitInPool.unit().getType()) &&
                             unitInPool.unit().getBuildProgress() > 0.99f

@@ -179,8 +179,8 @@ public class Expansions {
 
         // Find a buildable location on the circumference of the sphere
         int x = (int)center.getX(), y = (int)center.getY();
-        for (int dx = -8; dx <= 8; ++dx) {
-            for (int dy = -8; dy <= 8; ++dy) {
+        for (int dx = -6; dx <= 6; ++dx) {
+            for (int dy = -6; dy <= 6; ++dy) {
                 Point2d point = center.add(dx, dy);
                 QueryBuildingPlacement query = QueryBuildingPlacement
                         .placeBuilding()
