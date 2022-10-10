@@ -3,6 +3,7 @@ package com.supalosa.bot;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ExpansionParameters;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
@@ -56,6 +57,9 @@ public class SupaBot extends S2Agent {
     private final long lastGasCheck = 0L;
 
     private Map<UnitType, UnitTypeData> unitTypeData = null;
+
+    // HACK until threat built
+    private boolean crisisMode = false;
 
     private LoadingCache<UnitType, Integer> countOfUnits = CacheBuilder.newBuilder()
             .maximumSize(1000)
@@ -313,6 +317,21 @@ public class SupaBot extends S2Agent {
             fightManager.setRegroupPosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
         });
 
+        // HACK
+        if (observation().getFoodUsed() < 24) {
+            Point start = observation().getStartLocation();
+            long unitsNearBase = observation().getUnits(Alliance.ENEMY).stream().filter(unitInPool ->
+                    unitInPool.unit().getPosition().distance(start) < 30
+            ).count();
+            boolean wasCrisis = crisisMode;
+            crisisMode = unitsNearBase > 10;
+            if (!wasCrisis && crisisMode) {
+                actions().sendChat("Crisis mode", ActionChat.Channel.TEAM);
+            } else if (wasCrisis && !crisisMode) {
+                actions().sendChat("No longer in crisis mode", ActionChat.Channel.TEAM);
+            }
+        }
+
         if (isDebug) {
             if (this.expansionLocations != null) {
                 this.expansionLocations.forEach(expansion -> {
@@ -406,6 +425,10 @@ public class SupaBot extends S2Agent {
             return false;
         }
         if (getNumBuildingStructure(Abilities.BUILD_COMMAND_CENTER) > 0) {
+            return false;
+        }
+        // TEMP hack until threat system is built
+        if (crisisMode) {
             return false;
         }
         return (currentSupply >= nextExpansionAt);
