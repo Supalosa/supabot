@@ -223,6 +223,29 @@ public class SupaBot extends S2Agent {
                 });
             }
         }
+
+        // upgrade orbital/planetaries
+        int numCcs = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
+        observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                UnitInPool.isUnit(Units.TERRAN_COMMAND_CENTER).test(unitInPool)).forEach(unit -> {
+            Ability ability = Abilities.MORPH_ORBITAL_COMMAND;
+            if (numCcs > 3) {
+                ability = Abilities.MORPH_PLANETARY_FORTRESS;
+            }
+            actions().unitCommand(unit.unit(), ability,false);
+        });
+        // land mules
+        if (!fightManager.hasSeenCloakedOrBurrowedUnits()) {
+            observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                    UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
+                if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > 50.0f) {
+                    Optional<Unit> nearestMineral = findNearestMineralPatch(unit.unit().getPosition().toPoint2d());
+                    nearestMineral.ifPresent(mineral -> {
+                        actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
+                    });
+                }
+            });
+        }
         tryBuildScvs();
         tryBuildMarines();
 
@@ -276,13 +299,18 @@ public class SupaBot extends S2Agent {
             fightManager.setRegroupPosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
         });
 
-        if (1 < 0 && isDebug && this.expansionLocations != null) {
-            this.expansionLocations.forEach(expansion -> {
-                debug().debugBoxOut(
-                        expansion.position().add(Point.of(-2.5f, -2.5f, 0.1f)),
-                        expansion.position().add(Point.of(2.5f, 2.5f, 0.1f)),
-                        Color.WHITE);
-            });
+        if (isDebug) {
+            if (this.expansionLocations != null) {
+                this.expansionLocations.forEach(expansion -> {
+                    debug().debugBoxOut(
+                            expansion.position().add(Point.of(-2.5f, -2.5f, 0.1f)),
+                            expansion.position().add(Point.of(2.5f, 2.5f, 0.1f)),
+                            Color.WHITE);
+                });
+            }
+            if (this.taskManager != null) {
+                this.taskManager.debug(this);
+            }
             debug().sendDebug();
         }
     }
@@ -310,7 +338,7 @@ public class SupaBot extends S2Agent {
                     }
                     cc.getAssignedHarvesters().ifPresent(assigned -> {
                         ccToWorkerCount.put(cc.getTag(), assigned);
-                        if (assigned > averageWorkers + 4) {
+                        if (assigned > averageWorkers + 4 || (cc.getIdealHarvesters().isPresent() && assigned > cc.getIdealHarvesters().get() + 4)) {
                             givers.add(cc);
                         } else if (assigned < averageWorkers - 4) {
                             takers.add(cc);
@@ -393,7 +421,6 @@ public class SupaBot extends S2Agent {
                 validExpansionLocations.add(expansion);
             }
         }
-        System.out.println("Valid locations: " + validExpansionLocations.size());
 
         for (Expansion validExpansionLocation : validExpansionLocations) {
             if (tryBuildStructure(

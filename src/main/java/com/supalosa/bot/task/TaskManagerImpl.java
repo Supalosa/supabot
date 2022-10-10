@@ -82,4 +82,11 @@ public class TaskManagerImpl implements TaskManager {
     public int countSimilarTasks(Task task) {
         return (int)taskSet.values().stream().filter(otherTask -> task.isSimilarTo(otherTask)).count();
     }
+
+    @Override
+    public void debug(S2Agent agent) {
+        taskSet.forEach((key, task) -> {
+           task.debug(agent);
+        });
+    }
 }

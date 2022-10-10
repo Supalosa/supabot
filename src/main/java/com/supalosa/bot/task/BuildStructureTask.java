@@ -6,6 +6,8 @@ import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.action.ActionError;
 import com.github.ocraft.s2client.protocol.action.ActionResult;
 import com.github.ocraft.s2client.protocol.data.*;
+import com.github.ocraft.s2client.protocol.debug.Color;
+import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
@@ -74,13 +76,17 @@ public class BuildStructureTask implements Task {
             }
         }
         if (matchingUnitAtLocation.isEmpty()) {
+            final Optional<Point2d> locationToSearch = location.isPresent() ?
+                    location :
+                    worker.map(w -> w.unit().getPosition().toPoint2d());
             // Find any matching units within 1.0 range of target location
             List<UnitInPool> matchingUnits = agent.observation().getUnits(unitInPool ->
-                unitInPool.getUnit().filter(unit -> unit.getAlliance() == Alliance.SELF &&
-                        unit.getType().equals(targetUnitType) &&
-                        location.map(targetLocation -> unit.getPosition().toPoint2d().distance(targetLocation) < 1.5)
-                                .orElse(false)
-                ).isPresent()
+                    unitInPool.getUnit().filter(unit -> unit.getAlliance() == Alliance.SELF &&
+                            unit.getType().equals(targetUnitType) &&
+                            unit.getBuildProgress() < 0.99 &&
+                            locationToSearch.map(targetLocation -> unit.getPosition().toPoint2d().distance(targetLocation) < 1.5)
+                                    .orElse(false)
+                    ).isPresent()
             );
             matchingUnitAtLocation = matchingUnits.stream().findFirst().map(unitInPool -> unitInPool.getTag());
         } else {
@@ -177,6 +183,29 @@ public class BuildStructureTask implements Task {
             return (other.ability.equals(this.ability));
         } else {
             return false;
+        }
+    }
+
+    @Override
+    public void debug(S2Agent agent) {
+        if (this.location.isPresent()) {
+            Point2d actualLocation = this.location.get();
+            float height = agent.observation().terrainHeight(actualLocation);
+            Point point3d = Point.of(actualLocation.getX(), actualLocation.getY(), height);
+            agent.debug().debugSphereOut(point3d, 1.0f, Color.YELLOW);
+            agent.debug().debugTextOut(
+                    "Build " + targetUnitType.toString() +"\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
+                    point3d, Color.WHITE, 10);
+        } else if (this.assignedWorker.isPresent()) {
+            UnitInPool unitInPool = agent.observation().getUnit(this.assignedWorker.get());
+            if (unitInPool == null) {
+                return;
+            }
+            Point point3d = unitInPool.unit().getPosition();
+            agent.debug().debugSphereOut(point3d, 1.0f, Color.YELLOW);
+            agent.debug().debugTextOut(
+                    "Build " + targetUnitType.toString() +"\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
+                    point3d, Color.WHITE, 10);
         }
     }
 }

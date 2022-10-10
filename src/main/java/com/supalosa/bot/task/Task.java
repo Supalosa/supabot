@@ -22,4 +22,6 @@ public interface Task {
     String getKey();
 
     boolean isSimilarTo(Task otherTask);
+
+    void debug(S2Agent agent);
 }

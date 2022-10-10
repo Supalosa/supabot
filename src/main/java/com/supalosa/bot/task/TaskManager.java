@@ -57,4 +57,6 @@ public interface TaskManager {
     boolean addTask(Task task);
 
     int countSimilarTasks(Task task);
+
+    void debug(S2Agent agent);
 }

@@ -33,6 +33,7 @@ public class FightManager {
     private long lastCloakOrBurrowedUpdate = 0L;
     private static final long CLOAK_OR_BURROW_UPDATE_INTERVAL = 44L;
     private HashSet<Tag> cloakedOrBurrowedUnits;
+
     private boolean hasSeenCloakedOrBurrowedUnits = false;
 
     public FightManager(S2Agent agent) {
@@ -171,6 +172,10 @@ public class FightManager {
         int myFoodCap = agent.observation().getFoodCap() - attackingArmy.size();
         int result = Math.max(10, Math.min(20, (int)(myFoodCap * 0.75)));
         return result;
+    }
+
+    public boolean hasSeenCloakedOrBurrowedUnits() {
+        return hasSeenCloakedOrBurrowedUnits;
     }
 
     public void onUnitIdle(UnitInPool unit) {
