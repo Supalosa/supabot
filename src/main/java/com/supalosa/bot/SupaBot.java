@@ -11,6 +11,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.google.common.cache.AbstractLoadingCache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -178,6 +179,14 @@ public class SupaBot extends S2Agent {
         if (supply > 80) {
             tryBuildMax(Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1);
         }
+        if (supply > 100) {
+            tryBuildMax(Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 1, 1);
+            observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                    unitInPool.unit().getAddOnTag().isEmpty() &&
+                    UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
+                actions().unitCommand(unit.unit(), Abilities.BUILD_REACTOR, unit.unit().getPosition().toPoint2d(), false);
+            });
+        }
         if (supply > 50) {
             //Map<Upgrade, UpgradeData> upgradeData = observation().getUpgradeData(false);
             Set<Upgrade> upgrades = new HashSet<>(observation().getUpgrades());
@@ -247,8 +256,9 @@ public class SupaBot extends S2Agent {
             });
         }
         tryBuildScvs();
-        tryBuildMarines();
-
+        tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
+        int marineCount = countUnitType(Units.TERRAN_MARINE);
+        tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10, marineCount / 10)));
 
         rebalanceWorkers();
 
@@ -385,7 +395,7 @@ public class SupaBot extends S2Agent {
     private boolean needsCommandCentre() {
         final int[] expansionSupply = new int[]{0, 18, 36, 80, 128, 172, 196};
         int currentSupply = observation().getFoodUsed();
-        int numCcs = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
+        int numCcs = countMiningBases();
         int index = Math.min(expansionSupply.length - 1, Math.max(0, numCcs));
         int nextExpansionAt = expansionSupply[index];
         if (observation().getGameLoop() < lastExpansionTime + 22L) {
@@ -395,6 +405,15 @@ public class SupaBot extends S2Agent {
             return false;
         }
         return (currentSupply >= nextExpansionAt);
+    }
+
+    private int countMiningBases() {
+        return observation().getUnits(Alliance.SELF,
+                unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType()) &&
+                        unitInPool.unit().getBuildProgress() > 0.99f &&
+                        unitInPool.unit().getIdealHarvesters().isPresent() &&
+                        unitInPool.unit().getIdealHarvesters().get() > 0
+        ).size();
     }
 
     private boolean tryBuildCommandCentre() {
@@ -488,11 +507,29 @@ public class SupaBot extends S2Agent {
         return true;
     }
 
-    private boolean tryBuildMarines() {
-        observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_BARRACKS)).forEach(barracks -> {
-            if (barracks.unit().getOrders().isEmpty()) {
+    private boolean tryBuildUnit(Ability abilityToCast, UnitType unitType, UnitType buildFrom, Optional<Integer> maximum) {
+        if (maximum.isPresent()) {
+            int count = countUnitType(unitType);
+            if (count >= maximum.get()) {
+                return false;
+            }
+        }
+        observation().getUnits(Alliance.SELF, UnitInPool.isUnit(buildFrom)).forEach(structure -> {
+            boolean reactor = false;
+            if (structure.unit().getAddOnTag().isPresent()) {
+                Tag addOn = structure.unit().getAddOnTag().get();
+                UnitInPool addOnUnit = observation().getUnit(addOn);
+                if (addOnUnit != null &&
+                        (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_REACTOR ||
+                        addOnUnit.unit().getType() == Units.TERRAN_STARPORT_REACTOR ||
+                        addOnUnit.unit().getType() == Units.TERRAN_FACTORY_REACTOR)) {
+                    reactor = true;
+                }
+            }
+            List<UnitOrder> orders = structure.unit().getOrders();
+            if (orders.isEmpty() || (reactor && orders.size() < 2)) {
                 if (!needsCommandCentre()) {
-                    actions().unitCommand(barracks.unit(), Abilities.TRAIN_MARINE, false);
+                    actions().unitCommand(structure.unit(), abilityToCast, false);
                 }
             }
         });
@@ -672,6 +709,7 @@ public class SupaBot extends S2Agent {
     public void onUnitCreated(UnitInPool unitInPool) {
         switch ((Units) unitInPool.unit().getType()) {
             case TERRAN_MARINE:
+            case TERRAN_MEDIVAC:
                 fightManager.addUnit(unitInPool.unit());
                 break;
         }

@@ -97,17 +97,18 @@ public class BuildStructureTask implements Task {
         List<ActionError> actionErrors = agent.observation().getActionErrors();
         if (buildAttempts > MAX_BUILD_ATTEMPTS || actionErrors.stream().anyMatch(actionError -> {
             if (actionError.getUnitTag().equals(assignedWorker) &&
-                   actionError.getActionResult() != ActionResult.NOT_ENOUGH_MINERALS &&
-                   actionError.getActionResult() != ActionResult.NOT_ENOUGH_VESPENE) {
+                    actionError.getActionResult() != ActionResult.NOT_ENOUGH_MINERALS &&
+                    actionError.getActionResult() != ActionResult.NOT_ENOUGH_VESPENE) {
                 System.out.println("Relevant action error: " + actionError.getActionResult());
                 return true;
             }
             if (actionError.getUnitTag().equals(assignedWorker) || actionError.getAbility().equals(Optional.of(ability))) {
                 System.out.println("Action error: " + actionError.getActionResult());
             }
-           return false;
+            System.out.println("Action error " + actionError.getActionResult());
+            return false;
         })) {
-            agent.actions().sendChat("Failed: " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() +"," + p2d.getY()).orElse("anywhere"), ActionChat.Channel.TEAM);
+            agent.actions().sendChat("Failed: " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere"), ActionChat.Channel.TEAM);
             System.out.println("BuildTask " + targetUnitType + " failed");
             isComplete = true;
         }
@@ -139,7 +140,8 @@ public class BuildStructureTask implements Task {
                 //System.out.println(targetUnitType + ": " + actualUnit.getUnit().get().getBuildProgress());
             }
         }
-        //System.out.println("Onstep for task " + targetUnitType.toString() + " (Worker: " + worker + ", MatchingUnit: " + matchingUnitAtLocation + ")");
+        //System.out.println("Onstep for task " + targetUnitType.toString() + " (Worker: " + worker + ",
+        // MatchingUnit: " + matchingUnitAtLocation + ")");
     }
 
     private boolean isWorkerOrderQueued(UnitInPool worker) {
@@ -152,9 +154,9 @@ public class BuildStructureTask implements Task {
     private Point2d resolveLocation(UnitInPool worker) {
         //System.out.println("Worker: " + worker);
         return location.orElseGet(() -> worker.unit().getPosition()
-                    .toPoint2d()
-                    .add(Point2d.of(getRandomScalar(), getRandomScalar())
-                            .mul(15.0f)));
+                .toPoint2d()
+                .add(Point2d.of(getRandomScalar(), getRandomScalar())
+                        .mul(15.0f)));
     }
 
     private float getRandomScalar() {
@@ -179,7 +181,7 @@ public class BuildStructureTask implements Task {
     @Override
     public boolean isSimilarTo(Task otherTask) {
         if (otherTask instanceof BuildStructureTask) {
-            BuildStructureTask other = (BuildStructureTask)otherTask;
+            BuildStructureTask other = (BuildStructureTask) otherTask;
             return (other.ability.equals(this.ability));
         } else {
             return false;
@@ -194,7 +196,7 @@ public class BuildStructureTask implements Task {
             Point point3d = Point.of(actualLocation.getX(), actualLocation.getY(), height);
             agent.debug().debugSphereOut(point3d, 1.0f, Color.YELLOW);
             agent.debug().debugTextOut(
-                    "Build " + targetUnitType.toString() +"\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
+                    "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);
         } else if (this.assignedWorker.isPresent()) {
             UnitInPool unitInPool = agent.observation().getUnit(this.assignedWorker.get());
@@ -204,7 +206,7 @@ public class BuildStructureTask implements Task {
             Point point3d = unitInPool.unit().getPosition();
             agent.debug().debugSphereOut(point3d, 1.0f, Color.YELLOW);
             agent.debug().debugTextOut(
-                    "Build " + targetUnitType.toString() +"\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
+                    "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);
         }
     }
