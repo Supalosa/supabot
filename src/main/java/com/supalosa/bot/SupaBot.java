@@ -20,6 +20,7 @@ import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.BuildStructureTask;
+import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.TaskManagerImpl;
 
@@ -259,6 +260,9 @@ public class SupaBot extends S2Agent {
         tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
         int marineCount = countUnitType(Units.TERRAN_MARINE);
         tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10, marineCount / 10)));
+        if (marineCount > 10) {
+            tryBuildUnit(Abilities.TRAIN_MARAUDER, Units.TERRAN_MARAUDER, Units.TERRAN_BARRACKS, Optional.of(Math.min(25, marineCount / 2)));
+        }
 
         rebalanceWorkers();
 
@@ -436,8 +440,10 @@ public class SupaBot extends S2Agent {
             if (!observation().isPlacable(expansion.position().toPoint2d())) {
                 continue;
             }
-            if (expansionLastAttempted.getOrDefault(expansion, 0L) < gameLoop - (15 * 22L)) {
-                validExpansionLocations.add(expansion);
+            if (query().placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
+                if (expansionLastAttempted.getOrDefault(expansion, 0L) < gameLoop - (15 * 22L)) {
+                    validExpansionLocations.add(expansion);
+                }
             }
         }
 
@@ -709,6 +715,7 @@ public class SupaBot extends S2Agent {
     public void onUnitCreated(UnitInPool unitInPool) {
         switch ((Units) unitInPool.unit().getType()) {
             case TERRAN_MARINE:
+            case TERRAN_MARAUDER:
             case TERRAN_MEDIVAC:
                 fightManager.addUnit(unitInPool.unit());
                 break;
@@ -724,6 +731,8 @@ public class SupaBot extends S2Agent {
                         actions().unitCommand(unit, Abilities.SMART, mineralPath, false));
                 break;
             case TERRAN_MARINE:
+            case TERRAN_MARAUDER:
+            case TERRAN_MEDIVAC:
                 fightManager.onUnitIdle(unitInPool);
                 break;
             default:

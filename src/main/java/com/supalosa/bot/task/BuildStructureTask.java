@@ -105,7 +105,6 @@ public class BuildStructureTask implements Task {
             if (actionError.getUnitTag().equals(assignedWorker) || actionError.getAbility().equals(Optional.of(ability))) {
                 System.out.println("Action error: " + actionError.getActionResult());
             }
-            System.out.println("Action error " + actionError.getActionResult());
             return false;
         })) {
             agent.actions().sendChat("Failed: " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere"), ActionChat.Channel.TEAM);
@@ -194,7 +193,11 @@ public class BuildStructureTask implements Task {
             Point2d actualLocation = this.location.get();
             float height = agent.observation().terrainHeight(actualLocation);
             Point point3d = Point.of(actualLocation.getX(), actualLocation.getY(), height);
-            agent.debug().debugSphereOut(point3d, 1.0f, Color.YELLOW);
+            Color color = Color.YELLOW;
+            if (this.matchingUnitAtLocation.isPresent()) {
+                color = Color.GREEN;
+            }
+            agent.debug().debugSphereOut(point3d, 1.0f, color);
             agent.debug().debugTextOut(
                     "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);

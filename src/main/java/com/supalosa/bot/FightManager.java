@@ -162,7 +162,7 @@ public class FightManager {
             if (regroupPosition.isPresent()) {
                 if (unit.getPosition().toPoint2d().distance(regroupPosition.get()) > 2.5) {
                     agent.actions().unitCommand(unit,
-                            Abilities.ATTACK_ATTACK, regroupPosition.get(), false);
+                            Abilities.SMART, regroupPosition.get(), false);
                 }
             }
         }
