@@ -7,6 +7,7 @@ import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.CloakState;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 
@@ -64,6 +65,23 @@ public class FightManager {
             }
             rememberedUnitHealth.put(tag, health);
         });
+
+        List<UnitInPool> enemyUnits = agent.observation().getUnits(Alliance.ENEMY);
+        boolean hasCloakedOrBurrowed = false;
+        for (UnitInPool enemyUnit : enemyUnits) {
+            if (enemyUnit.unit().getCloakState().isPresent() &&
+                    enemyUnit.unit().getCloakState().get() == CloakState.CLOAKED) {
+                hasCloakedOrBurrowed = true;
+                break;
+            }
+            if (enemyUnit.unit().getBurrowed().orElse(false)) {
+                hasCloakedOrBurrowed = true;
+                break;
+            }
+        }
+        if (hasCloakedOrBurrowed) {
+            System.out.println("CLOAKED UNITS DETECTED");
+        }
 
         Set<Tag> unitsToRemoveFromRetreat = new HashSet<>();
         AtomicBoolean doAttack = new AtomicBoolean(false);
