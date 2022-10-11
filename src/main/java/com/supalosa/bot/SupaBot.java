@@ -14,7 +14,6 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
-import com.google.common.cache.AbstractLoadingCache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -22,11 +21,9 @@ import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.BuildStructureTask;
-import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.TaskManagerImpl;
 
-import javax.annotation.CheckForNull;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -156,6 +153,9 @@ public class SupaBot extends S2Agent implements AgentData {
             observation().getGameInfo().getStartRaw().ifPresent(startRaw -> {
                 unscoutedLocations = new HashSet<>(startRaw.getStartLocations());
             });
+            if (expansionLocations != null) {
+                expansionLocations.forEach(expansion -> unscoutedLocations.add(expansion.position().toPoint2d()));
+            }
             scoutResetLoopTime = observation().getGameLoop() + 22 * 300;
         }
         if (unscoutedLocations.size() > 0) {
@@ -279,14 +279,14 @@ public class SupaBot extends S2Agent implements AgentData {
 
         taskManager.onStep(this, this);
 
-        fightManager.setAttackPosition(findEnemyPosition());
+        fightManager.setAttackPosition(findEnemyPosition(true));
         fightManager.onStep();
 
         Optional<UnitInPool> randomCc = getRandomUnit(Units.TERRAN_COMMAND_CENTER);
         if (randomCc.isPresent()) {
-            fightManager.setRegroupPosition(randomCc.map(unitInPool -> unitInPool.unit().getPosition().toPoint2d()));
+            fightManager.setDefencePosition(randomCc.map(unitInPool -> unitInPool.unit().getPosition().toPoint2d()));
         } else {
-            fightManager.setRegroupPosition(Optional.empty());
+            fightManager.setDefencePosition(Optional.empty());
         }
 
         // update ramp
@@ -318,8 +318,15 @@ public class SupaBot extends S2Agent implements AgentData {
             spc.getSecondSupplyDepotLocation().ifPresent(
                     spl -> drawDebugSquare(spl.getX()-1.0f, spl.getY()-1.0f, 2.0f, 2.0f, Color.GREEN));
 
-            fightManager.setRegroupPosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
+            fightManager.setDefencePosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
         });
+
+        Optional<Point2d> nearestEnemy = findEnemyPosition(false);
+        if (nearestEnemy.isPresent()) {
+            if (observation().getStartLocation().toPoint2d().distance(nearestEnemy.get()) < 30) {
+                fightManager.setDefencePosition(nearestEnemy);
+            }
+        }
 
         // HACK
         if (observation().getFoodUsed() < 24) {
@@ -867,18 +874,18 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     // Finds a worthwhile enemy position to move units towards.
-    private Optional<Point2d> findEnemyPosition() {
+    private Optional<Point2d> findEnemyPosition(boolean nearEnemyBase) {
+        Point startLocation = observation().getStartLocation();
+        Comparator<UnitInPool> comparator = Comparator.comparing(unit -> unit.unit().getPosition().distance(startLocation));
+        if (nearEnemyBase && knownEnemyStartLocation.isPresent()) {
+            comparator = Comparator.comparing(unit -> unit.unit().getPosition().toPoint2d().distance(knownEnemyStartLocation.get()));
+        }
         List<UnitInPool> enemyUnits = observation().getUnits(Alliance.ENEMY);
         if (enemyUnits.size() > 0) {
             // Move towards the closest to our base (for now)
-            Point startLocation = observation().getStartLocation();
             return enemyUnits.stream()
-                    .min(Comparator.comparing(unit -> unit.unit().getPosition().distance(startLocation)))
-                    .map(minUnit -> {
-                        //double dist = minUnit.unit().getPosition().distance(startLocation);
-                        //System.out.println("Min unit " + minUnit.unit().getTag() + " (" + dist + ")");
-                        return minUnit;
-                    }).map(minUnit -> minUnit.unit().getPosition().toPoint2d())
+                    .min(comparator)
+                    .map(minUnit -> minUnit.unit().getPosition().toPoint2d())
                     .or(() -> findRandomEnemyPosition());
         } else {
             return findRandomEnemyPosition();

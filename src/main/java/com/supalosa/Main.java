@@ -18,7 +18,7 @@ public class Main {
                 supaBot,
                 LocalMap.of(Paths.get("2000AtmospheresAIE.SC2Map")),
                 //BattlenetMap.of("BerlingradAIE"),
-                true,
+                false,
                 new PlayerSettings[]{opponent});
     }
 }
