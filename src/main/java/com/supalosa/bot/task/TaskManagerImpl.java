@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.supalosa.bot.AgentData;
 
 import java.util.*;
 import java.util.function.Predicate;
@@ -44,11 +45,11 @@ public class TaskManagerImpl implements TaskManager {
     }
 
     @Override
-    public void onStep(S2Agent agent) {
+    public void onStep(AgentData data, S2Agent agent) {
         List<Task> tasksFinishedThisStep = new ArrayList<>();
         taskSet.forEach((key, task) -> {
             if (!task.isComplete()) {
-                task.onStep(this, agent);
+                task.onStep(this, data, agent);
             } else {
                 tasksFinishedThisStep.add(task);
                 Set<Tag> toUnset = new HashSet<>();

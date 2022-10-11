@@ -9,6 +9,7 @@ import com.github.ocraft.s2client.protocol.query.QueryBuildingPlacement;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import org.immutables.value.Value;
+import org.mvel2.Unit;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,17 +18,28 @@ import static java.util.Arrays.asList;
 
 public class Expansions {
     public static List<Expansion> processExpansions(
+            ObservationInterface observationInterface,
             QueryInterface queryInterface,
             Point2d startLocation,
             Point2d opponentLocation,
             List<Point> calculatedExpansions) {
+        List<UnitInPool> resources = observationInterface.getUnits(unitInPool ->
+                Constants.FIELD_TYPES.contains(unitInPool.unit().getType())
+        );
         List<Expansion> orderedExpansionLocations = calculatedExpansions
                 .stream()
                 .map(point -> {
+                    List<Point2d> nearbyResourceLocations = new ArrayList<Point2d>();
+                    resources.forEach(resource -> {
+                        if (resource.unit().getPosition().distance(point) < 10.0) {
+                            nearbyResourceLocations.add(resource.unit().getPosition().toPoint2d());
+                        }
+                    });
                     return ImmutableExpansion.builder()
                             .position(point)
                             .distanceToStart(queryInterface.pathingDistance(startLocation, point.toPoint2d()))
                             .distanceToOpponent(queryInterface.pathingDistance(opponentLocation, point.toPoint2d()))
+                            .resourcePositions(nearbyResourceLocations)
                             .build();
                 }).collect(Collectors.toList());
 
@@ -53,26 +65,14 @@ public class Expansions {
      * Modified implementation of built-in calculateExpansionLocations;
      * @param observation
      * @param query
-     * @param debug
      * @param parameters
      * @return
      */
     public static List<Point> calculateExpansionLocations(
-            ObservationInterface observation, QueryInterface query, DebugInterface debug, ExpansionParameters parameters) {
-        List<UnitInPool> resources = observation.getUnits(unitInPool -> {
-            Set<UnitType> fields = new HashSet<>(asList(
-                    Units.NEUTRAL_MINERAL_FIELD, Units.NEUTRAL_MINERAL_FIELD750,
-                    Units.NEUTRAL_RICH_MINERAL_FIELD, Units.NEUTRAL_RICH_MINERAL_FIELD750,
-                    Units.NEUTRAL_PURIFIER_MINERAL_FIELD, Units.NEUTRAL_PURIFIER_MINERAL_FIELD750,
-                    Units.NEUTRAL_PURIFIER_RICH_MINERAL_FIELD, Units.NEUTRAL_PURIFIER_RICH_MINERAL_FIELD750,
-                    Units.NEUTRAL_LAB_MINERAL_FIELD, Units.NEUTRAL_LAB_MINERAL_FIELD750,
-                    Units.NEUTRAL_BATTLE_STATION_MINERAL_FIELD, Units.NEUTRAL_BATTLE_STATION_MINERAL_FIELD750,
-                    Units.NEUTRAL_VESPENE_GEYSER, Units.NEUTRAL_PROTOSS_VESPENE_GEYSER,
-                    Units.NEUTRAL_SPACE_PLATFORM_GEYSER, Units.NEUTRAL_PURIFIER_VESPENE_GEYSER,
-                    Units.NEUTRAL_SHAKURAS_VESPENE_GEYSER, Units.NEUTRAL_RICH_VESPENE_GEYSER
-            ));
-            return fields.contains(unitInPool.unit().getType());
-        });
+            ObservationInterface observation, QueryInterface query, ExpansionParameters parameters) {
+        List<UnitInPool> resources = observation.getUnits(unitInPool ->
+                Constants.FIELD_TYPES.contains(unitInPool.unit().getType())
+        );
 
         List<Point> expansionLocations = new ArrayList<>();
         Map<Point, List<UnitInPool>> clusters = cluster(resources, parameters.getClusterDistance());
@@ -80,12 +80,6 @@ public class Expansions {
         Map<Point, Integer> querySize = new LinkedHashMap<>();
         List<QueryBuildingPlacement> queries = new ArrayList<>();
         for (Map.Entry<Point, List<UnitInPool>> cluster : clusters.entrySet()) {
-            if (debug != null) {
-                for (double r : parameters.getRadiuses()) {
-                    debug.debugSphereOut(cluster.getKey(), (float) r, Color.GREEN);
-                }
-            }
-
             // Get the required queries for this cluster.
             int queryCount = 0;
             for (double r : parameters.getRadiuses()) {
@@ -99,6 +93,7 @@ public class Expansions {
         }
 
         List<Boolean> results = query.placement(queries);
+        int countTrue = 0;
         int startIndex = 0;
         for (Map.Entry<Point, List<UnitInPool>> cluster : clusters.entrySet()) {
             double distance = Double.MAX_VALUE;
@@ -109,6 +104,7 @@ public class Expansions {
                 if (!results.get(j)) {
                     continue;
                 }
+                countTrue++;
 
                 Point2d p = queries.get(j).getTarget();
 
@@ -124,16 +120,12 @@ public class Expansions {
                         closest.getX(),
                         closest.getY(),
                         cluster.getValue().get(0).unit().getPosition().getZ());
-                if (debug != null) {
-                    debug.debugSphereOut(expansion, 0.35f, Color.RED);
-                }
-
                 expansionLocations.add(expansion);
             }
 
             startIndex += querySize.get(cluster.getKey());
         }
-
+        System.out.println("ExpansionLocations = " + expansionLocations.size() + ", from " + queries.size() + " queries: " + countTrue + " were true");
         return expansionLocations;
     }
 

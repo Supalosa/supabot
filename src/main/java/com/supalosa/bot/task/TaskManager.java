@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.AgentData;
 
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -46,7 +47,7 @@ public interface TaskManager {
      */
     Optional<UnitInPool> findFreeUnit(ObservationInterface observationInterface, Predicate<UnitInPool> predicate);
 
-    void onStep(S2Agent agent);
+    void onStep(AgentData data, S2Agent agent);
 
     /**
      * Adds a task to be tracked and executed by the task manager.

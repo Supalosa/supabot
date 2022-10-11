@@ -12,6 +12,9 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.AgentData;
+import com.supalosa.bot.GameData;
+import com.supalosa.bot.placement.StructurePlacementCalculator;
 
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +62,7 @@ public class BuildStructureTask implements Task {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, S2Agent agent) {
+    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         Optional<UnitInPool> worker = Optional.empty();
         if (assignedWorker.isEmpty()) {
             assignedWorker = taskManager.findFreeUnit(
@@ -121,7 +124,10 @@ public class BuildStructureTask implements Task {
                 if (specificTarget.isPresent()) {
                     agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
                 } else {
-                    agent.actions().unitCommand(assignedWorker.get(), ability, resolveLocation(worker.get()), false);
+                    Optional<Point2d> randomTarget = resolveLocation(worker.get(), data.structurePlacementCalculator());
+                    randomTarget.ifPresent(target ->
+                        agent.actions().unitCommand(assignedWorker.get(), ability, target, false)
+                    );
                 }
                 System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
                 lastBuildAttempt = gameLoop;
@@ -150,12 +156,12 @@ public class BuildStructureTask implements Task {
                 .anyMatch(unitOrder -> ability.equals(unitOrder.getAbility()));
     }
 
-    private Point2d resolveLocation(UnitInPool worker) {
+    private Optional<Point2d> resolveLocation(UnitInPool worker, Optional<StructurePlacementCalculator> structurePlacementCalculator) {
         //System.out.println("Worker: " + worker);
-        return location.orElseGet(() -> worker.unit().getPosition()
-                .toPoint2d()
-                .add(Point2d.of(getRandomScalar(), getRandomScalar())
-                        .mul(15.0f)));
+        return location.or(() -> structurePlacementCalculator.flatMap(spc -> spc.suggestLocationForFreePlacement(
+                worker.unit().getPosition().toPoint2d(),
+                20,
+                ability)));
     }
 
     private float getRandomScalar() {

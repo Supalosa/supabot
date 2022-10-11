@@ -2,13 +2,15 @@ package com.supalosa.bot.task;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
+import com.supalosa.bot.AgentData;
+import com.supalosa.bot.placement.StructurePlacementCalculator;
 
 import java.util.Optional;
 import java.util.concurrent.Future;
 
 public interface Task {
 
-    void onStep(TaskManager taskManager, S2Agent agent);
+    void onStep(TaskManager taskManager, AgentData data, S2Agent agent);
 
     Optional<TaskResult> getResult();
 

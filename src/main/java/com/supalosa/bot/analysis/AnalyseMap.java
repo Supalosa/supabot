@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.supalosa.bot.GameData;
 import com.supalosa.bot.analysis.utils.BitmapGrid;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
@@ -35,7 +36,8 @@ public class AnalyseMap {
         // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
         Point2d start = Point2d.of(37.5f, 53.5f);
         AnalysisResults data = Analysis.run(start, terrain, pathing, placement);
-        StructurePlacementCalculator spc = new StructurePlacementCalculator(data, start);
+        GameData gameData = new GameData(null);
+        StructurePlacementCalculator spc = new StructurePlacementCalculator(data, gameData, start);
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
     }
 

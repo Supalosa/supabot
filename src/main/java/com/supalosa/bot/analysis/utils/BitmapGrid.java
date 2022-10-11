@@ -34,4 +34,9 @@ public class BitmapGrid implements Grid<Integer> {
     public boolean isInBounds(int x, int y) {
         return x >= 0 && x < image.getWidth() && y >= 0 && y < image.getHeight();
     }
+
+    @Override
+    public boolean isSet(int x, int y) {
+        return this.isInBounds(x, y);
+    }
 }

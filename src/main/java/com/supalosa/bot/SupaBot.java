@@ -6,6 +6,7 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
+import com.github.ocraft.s2client.protocol.observation.ChatReceived;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -34,9 +35,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public class SupaBot extends S2Agent {
+public class SupaBot extends S2Agent implements AgentData {
 
-    private final boolean isDebug;
+    private boolean isDebug;
 
     private List<Expansion> expansionLocations = null;
 
@@ -51,7 +52,7 @@ public class SupaBot extends S2Agent {
 
     private TaskManager taskManager;
     private FightManager fightManager;
-    private GameData gameData;
+    private final GameData gameData;
 
     private static final long GAS_CHECK_INTERVAL = 22L;
     private final long lastGasCheck = 0L;
@@ -88,7 +89,7 @@ public class SupaBot extends S2Agent {
                 observation(),
                 startRaw));
         structurePlacementCalculator = mapAnalysis
-                .map(analysisResults -> new StructurePlacementCalculator(analysisResults, observation().getStartLocation().toPoint2d()));
+                .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData, observation().getStartLocation().toPoint2d()));
     }
 
     private void manageScouting() {
@@ -137,16 +138,19 @@ public class SupaBot extends S2Agent {
         //debug().debugIgnoreMineral();
 
         // Score expansions based on known enemy start location.
-        if (expansionLocations == null && knownEnemyStartLocation.isPresent() && observation().getGameLoop() > 10) {
+        if (expansionLocations == null && knownEnemyStartLocation.isPresent() && observation().getGameLoop() > 200) {
             ExpansionParameters parameters = ExpansionParameters.from(
                     List.of(6.4, 5.3, 5.1),
                     0.25,
                     15.0);
             expansionLocations = Expansions.processExpansions(
+                    observation(),
                     query(),
                     observation().getStartLocation().toPoint2d(),
                     knownEnemyStartLocation.get(),
-                    Expansions.calculateExpansionLocations(observation(), query(), debug(), parameters));
+                    Expansions.calculateExpansionLocations(observation(), query(), parameters));
+            structurePlacementCalculator.ifPresent(spc -> spc.handleExpansions(expansionLocations));
+            sendTeamChat("Calculated expansions (" + expansionLocations.size() + ")");
         }
         if (observation().getGameLoop() > scoutResetLoopTime) {
             observation().getGameInfo().getStartRaw().ifPresent(startRaw -> {
@@ -273,7 +277,7 @@ public class SupaBot extends S2Agent {
         mineGas();
         Map<Ability, AbilityData> abilities = observation().getAbilityData(true);
 
-        taskManager.onStep(this);
+        taskManager.onStep(this, this);
 
         fightManager.setAttackPosition(findEnemyPosition());
         fightManager.onStep();
@@ -310,9 +314,9 @@ public class SupaBot extends S2Agent {
                 }
             });
             spc.getFirstSupplyDepotLocation().ifPresent(
-                    spl -> drawDebugSquare(spl.getX(), spl.getY(), 1.0f, 1.0f, Color.GREEN));
+                    spl -> drawDebugSquare(spl.getX()-1.0f, spl.getY()-1.0f, 2.0f, 2.0f, Color.GREEN));
             spc.getSecondSupplyDepotLocation().ifPresent(
-                    spl -> drawDebugSquare(spl.getX(), spl.getY(), 1.0f, 1.0f, Color.GREEN));
+                    spl -> drawDebugSquare(spl.getX()-1.0f, spl.getY()-1.0f, 2.0f, 2.0f, Color.GREEN));
 
             fightManager.setRegroupPosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
         });
@@ -332,6 +336,14 @@ public class SupaBot extends S2Agent {
             }
         }
 
+        List<ChatReceived> chat = observation().getChatMessages();
+        for (ChatReceived chatReceived : chat) {
+            if (chatReceived.getMessage().contains("debug")) {
+                this.isDebug = !isDebug;
+                actions().sendChat("Debug: " + isDebug, ActionChat.Channel.TEAM);
+            }
+        }
+
         if (isDebug) {
             if (this.expansionLocations != null) {
                 this.expansionLocations.forEach(expansion -> {
@@ -344,8 +356,13 @@ public class SupaBot extends S2Agent {
             if (this.taskManager != null) {
                 this.taskManager.debug(this);
             }
+            this.structurePlacementCalculator.ifPresent(spc -> spc.debug(this));
             debug().sendDebug();
         }
+    }
+
+    private void sendTeamChat(String message) {
+        actions().sendChat(message, ActionChat.Channel.TEAM);
     }
 
     private long lastRebalanceAt = 0L;
@@ -431,7 +448,11 @@ public class SupaBot extends S2Agent {
         if (crisisMode) {
             return false;
         }
-        return (currentSupply >= nextExpansionAt);
+        if (currentSupply >= nextExpansionAt) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     private int countMiningBases() {
@@ -448,6 +469,7 @@ public class SupaBot extends S2Agent {
             return false;
         }
         if (this.expansionLocations == null || this.expansionLocations.size() == 0) {
+            actions().sendChat("ExpansionLocations missing", ActionChat.Channel.TEAM);
             return false;
         }
         if (observation().getMinerals() < 400) {
@@ -469,6 +491,7 @@ public class SupaBot extends S2Agent {
                 }
             }
         }
+        actions().sendChat("ExpansionLocations: " + validExpansionLocations.size(), ActionChat.Channel.TEAM);
 
         for (Expansion validExpansionLocation : validExpansionLocations) {
             if (tryBuildStructure(
@@ -871,5 +894,15 @@ public class SupaBot extends S2Agent {
         } else {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public Optional<StructurePlacementCalculator> structurePlacementCalculator() {
+        return structurePlacementCalculator;
+    }
+
+    @Override
+    public GameData gameData() {
+        return gameData;
     }
 }

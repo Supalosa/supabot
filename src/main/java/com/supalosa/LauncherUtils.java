@@ -17,6 +17,7 @@ public class LauncherUtils {
                 .setTimeoutMS(300000)
                 .setRawAffectsSelection(false)
                 .setShowCloaked(true)
+                .setRealtime(false)
                 .loadLadderSettings(pArgs)
                 .setParticipants(S2Coordinator.createParticipant(Race.TERRAN, pBot))
                 .connectToLadder()
