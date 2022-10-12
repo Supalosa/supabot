@@ -1,5 +1,7 @@
 package com.supalosa.bot.analysis.utils;
 
+import org.apache.commons.lang3.NotImplementedException;
+
 import java.awt.image.BufferedImage;
 
 public class BitmapGrid implements Grid<Integer> {
@@ -38,5 +40,10 @@ public class BitmapGrid implements Grid<Integer> {
     @Override
     public boolean isSet(int x, int y) {
         return this.isInBounds(x, y);
+    }
+
+    @Override
+    public void clear() {
+        throw new NotImplementedException("Clear is not implemented for bitmap grid.");
     }
 }

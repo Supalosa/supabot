@@ -218,7 +218,7 @@ public class MapAwarenessImpl implements MapAwareness {
                     knownEnemyStartLocation.get(),
                     Expansions.calculateExpansionLocations(observationInterface, queryInterface, parameters)));
             if (expansionLocations.isPresent()) {
-                data.structurePlacementCalculator().ifPresent(spc -> spc.handleExpansions(expansionLocations.get()));
+                data.structurePlacementCalculator().ifPresent(spc -> spc.onExpansionsCalculated(expansionLocations.get()));
             }
         }
         if (observationInterface.getGameLoop() > scoutResetLoopTime) {

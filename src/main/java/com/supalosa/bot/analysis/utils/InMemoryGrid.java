@@ -6,20 +6,27 @@ import java.util.function.Supplier;
 
 public class InMemoryGrid<T> implements Grid<T> {
 
-    private final T[][] data;
+    private final Class<?> type;
     private final int width;
     private final int height;
     private final Supplier<T> defaultSupplier;
+    private T[][] data;
 
     public InMemoryGrid(Class<?> type, int width, int height, Supplier<T> defaultValue) {
-        Class<?> typeOneDimArray = Array.newInstance(type, 0).getClass();
-        this.data = (T[][])Array.newInstance(typeOneDimArray, width);
-        for (int i = 0; i < width; ++i) {
-            this.data[i] = (T[])Array.newInstance(type, height);
-        }
+        this.type = type;
+        this.data = createNewDataGrid(type, width, height);
         this.width = width;
         this.height = height;
         this.defaultSupplier = defaultValue;
+    }
+
+    private T[][] createNewDataGrid(Class<?> type, int width, int height) {
+        Class<?> typeOneDimArray = Array.newInstance(type, 0).getClass();
+        T[][] result = (T[][])Array.newInstance(typeOneDimArray, width);
+        for (int i = 0; i < width; ++i) {
+            result[i] = (T[])Array.newInstance(type, height);
+        }
+        return result;
     }
 
     public static <T> InMemoryGrid copyOf(Class<?> type, Grid<T> input, Supplier<T> defaultValue) {
@@ -84,5 +91,10 @@ public class InMemoryGrid<T> implements Grid<T> {
     @Override
     public boolean isSet(int x, int y) {
         return this.data[x][y] != null;
+    }
+
+    @Override
+    public void clear() {
+        this.data = createNewDataGrid(type, width, height);
     }
 }

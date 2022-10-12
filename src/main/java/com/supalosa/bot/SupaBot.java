@@ -90,6 +90,9 @@ public class SupaBot extends S2Agent implements AgentData {
 
         countOfUnits.invalidateAll();
         mapAwareness.onStep(this, this);
+        if (structurePlacementCalculator.isPresent()) {
+            structurePlacementCalculator.get().onStep(this, this);
+        }
         tryBuildSupplyDepot();
         tryBuildBarracks();
         tryBuildCommandCentre();
@@ -280,6 +283,8 @@ public class SupaBot extends S2Agent implements AgentData {
         for (ChatReceived chatReceived : chat) {
             if (chatReceived.getMessage().contains("debug")) {
                 this.isDebug = !isDebug;
+                // send one more debug command to flush the buffer.
+                debug().sendDebug();
                 actions().sendChat("Debug: " + isDebug, ActionChat.Channel.TEAM);
             }
         }
@@ -460,7 +465,6 @@ public class SupaBot extends S2Agent implements AgentData {
                     !query().placement(Abilities.BUILD_SUPPLY_DEPOT, position.get())) {
                 position = Optional.empty();
             }
-            position.ifPresent(spl -> drawDebugSquare(spl.getX(), spl.getY(), 0.1f, 0.1f, Color.RED));
         }
         long numCc = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
         return tryBuildStructure(Abilities.BUILD_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SCV,

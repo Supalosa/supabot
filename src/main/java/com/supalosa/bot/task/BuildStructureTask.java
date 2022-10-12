@@ -156,7 +156,8 @@ public class BuildStructureTask implements Task {
         return location.or(() -> structurePlacementCalculator.flatMap(spc -> spc.suggestLocationForFreePlacement(
                 worker.unit().getPosition().toPoint2d(),
                 20,
-                ability)));
+                ability,
+                targetUnitType)));
     }
 
     private float getRandomScalar() {

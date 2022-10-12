@@ -7,4 +7,5 @@ public interface Grid<T> {
     void set(int x, int y, T value);
     boolean isInBounds(int x, int y);
     boolean isSet(int x, int y);
+    void clear();
 }

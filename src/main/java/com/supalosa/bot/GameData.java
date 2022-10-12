@@ -1,14 +1,16 @@
 package com.supalosa.bot;
 
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
-import com.github.ocraft.s2client.protocol.data.Ability;
-import com.github.ocraft.s2client.protocol.data.AbilityData;
-import com.github.ocraft.s2client.protocol.data.UnitType;
-import com.github.ocraft.s2client.protocol.data.UnitTypeData;
+import com.github.ocraft.s2client.protocol.data.*;
+import com.github.ocraft.s2client.protocol.spatial.Point2d;
 
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * This class allows us to cache game data while also allowing us to
+ * apply manual fixes to the (bugged) API.
+ */
 public class GameData {
 
     private final ObservationInterface observationInterface;
@@ -50,6 +52,28 @@ public class GameData {
             return unitTypeData.getVespeneCost();
         }
     }
+
+    /**
+     * Returns the structure footprint of the unit. This is derived from the ability that created the unit.
+     *
+     * @param unitType The Unit (typically a Structure) to be queried.
+     * @return A point2d representing the width and height of the unit.
+     */
+    public Optional<Point2d> getUnitFootprint(UnitType unitType) {
+        UnitTypeData unitTypeData = getOrInitUnitTypeData().get(unitType);
+        if (unitTypeData == null) {
+            return Optional.empty();
+        } else {
+            Optional<Ability> maybeAbility = unitTypeData.getAbility();
+            if (maybeAbility.isEmpty()) {
+                return Optional.empty();
+            } else {
+                Optional<Float> maybeRadius = getAbilityRadius(maybeAbility.get());
+                return maybeRadius.map(radius -> Point2d.of((int)(radius * 2f), (int)(radius * 2f)));
+            }
+        }
+    }
+
     public Optional<UnitTypeData> getUnitTypeData(UnitType unitType) {
         UnitTypeData unitTypeData = getOrInitUnitTypeData().get(unitType);
         if (unitTypeData == null) {
@@ -64,6 +88,14 @@ public class GameData {
         if (abilityData == null) {
             return Optional.empty();
         } else {
+            if (ability == Abilities.BUILD_TECHLAB_BARRACKS ||
+                    ability == Abilities.BUILD_TECHLAB_FACTORY ||
+                    ability == Abilities.BUILD_TECHLAB_STARPORT ||
+                    ability == Abilities.BUILD_REACTOR_BARRACKS ||
+                    ability == Abilities.BUILD_REACTOR_FACTORY ||
+                    ability == Abilities.BUILD_REACTOR_STARPORT) {
+                return Optional.of(1f);
+            }
             return abilityData.getFootprintRadius();
         }
     }

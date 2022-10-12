@@ -37,7 +37,7 @@ public class LauncherUtils {
                 .setStepSize(2)
                 .setParticipants(participants)
                 .launchStarcraft()
-                .startGame(LocalMap.of(Paths.get("BerlingradAIE.SC2Map")));
+                .startGame(pMap);
         executeCoordinator(vS2Coordinator);
     }
 
