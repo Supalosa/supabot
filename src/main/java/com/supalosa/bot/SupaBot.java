@@ -1,5 +1,6 @@
 package com.supalosa.bot;
 
+import SC2APIProtocol.Spatial;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ExpansionParameters;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
@@ -23,6 +24,8 @@ import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.BuildStructureTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.TaskManagerImpl;
+import org.danilopianini.util.FlexibleQuadTree;
+import org.danilopianini.util.SpatialIndex;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -59,6 +62,8 @@ public class SupaBot extends S2Agent implements AgentData {
     // HACK until threat built
     private boolean crisisMode = false;
 
+    private long expansionsValidatedAt = 0L;
+
     private LoadingCache<UnitType, Integer> countOfUnits = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.SECONDS)
@@ -94,7 +99,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (knownEnemyStartLocation.isEmpty()) {
             Optional<Point2d> randomEnemyPosition = findRandomEnemyPosition();
             if (observation().getFoodUsed() > 20 && scoutingWith.size() == 0 && randomEnemyPosition.isPresent()) {
-                Optional<Unit> randomScv = getRandomUnit(Units.TERRAN_SCV).flatMap(unitInPool -> unitInPool.getUnit());
+                Optional<Unit> randomScv = getRandomUnit(Units.TERRAN_SCV).flatMap(UnitInPool::getUnit);
                 randomScv.ifPresent(scv -> {
                     scoutingWith.add(scv.getTag());
                     actions().unitCommand(scv, Abilities.MOVE, randomEnemyPosition.get(), false);
@@ -172,7 +177,15 @@ public class SupaBot extends S2Agent implements AgentData {
                     observation().getStartLocation(),
                     startRaw));
         }*/
+        // TESTING
+        /*SpatialIndex<Unit> unitMap = new FlexibleQuadTree<>();
+        observation().getUnits().forEach(unitInPool -> {
+            Point2d point2d = unitInPool.unit().getPosition().toPoint2d();
+            unitMap.insert(unitInPool.unit(), point2d.getX(), point2d.getY());
+        });*/
+
         countOfUnits.invalidateAll();
+        updateValidExpansions();
         manageScouting();
         tryBuildSupplyDepot();
         tryBuildBarracks();
@@ -253,23 +266,31 @@ public class SupaBot extends S2Agent implements AgentData {
             actions().unitCommand(unit.unit(), ability,false);
         });
         // land mules
-        if (!fightManager.hasSeenCloakedOrBurrowedUnits()) {
-            observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                    UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
-                if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > 50.0f) {
-                    Optional<Unit> nearestMineral = findNearestMineralPatch(unit.unit().getPosition().toPoint2d());
-                    nearestMineral.ifPresent(mineral -> {
-                        actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
-                    });
-                }
-            });
-        }
+        float reserveCcEnergy = (fightManager.hasSeenCloakedOrBurrowedUnits() ? 85f : 50f);
+        Set<Point2d> scanClusters = new HashSet<>(fightManager.getCloakedOrBurrowedUnitClusters());
+        observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
+            if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > reserveCcEnergy) {
+                Optional<Unit> nearestMineral = findNearestMineralPatch(unit.unit().getPosition().toPoint2d());
+                nearestMineral.ifPresent(mineral -> {
+                    actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
+                });
+            }
+            if (scanClusters.size() > 0) {
+                scanClusters.stream().findFirst().ifPresent(scanPoint -> {
+                    actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
+                    scanClusters.remove(scanPoint);
+                });
+            }
+        });
         tryBuildScvs();
-        tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
         int marineCount = countUnitType(Units.TERRAN_MARINE);
         tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10, marineCount / 10)));
         if (marineCount > 10) {
             tryBuildUnit(Abilities.TRAIN_MARAUDER, Units.TERRAN_MARAUDER, Units.TERRAN_BARRACKS, Optional.of(Math.min(25, marineCount / 2)));
+        }
+        if (observation().getMinerals() > 100) {
+            tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
         }
 
         rebalanceWorkers();
@@ -455,6 +476,9 @@ public class SupaBot extends S2Agent implements AgentData {
         if (crisisMode) {
             return false;
         }
+        if (this.validExpansionLocations.size() == 0) {
+            return false;
+        }
         if (currentSupply >= nextExpansionAt) {
             return true;
         } else {
@@ -471,6 +495,8 @@ public class SupaBot extends S2Agent implements AgentData {
         ).size();
     }
 
+    LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
+
     private boolean tryBuildCommandCentre() {
         if (!needsCommandCentre()) {
             return false;
@@ -482,25 +508,11 @@ public class SupaBot extends S2Agent implements AgentData {
         if (observation().getMinerals() < 400) {
             return false;
         }
-        // ExpansionLocations is ordered by distance to start point.
-        LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
         long gameLoop = observation().getGameLoop();
-        if (gameLoop % 100 == 0) {
-            System.out.println("Expansion needed");
-        }
-        for (Expansion expansion : this.expansionLocations) {
-            if (!observation().isPlacable(expansion.position().toPoint2d())) {
-                continue;
-            }
-            if (query().placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
-                if (expansionLastAttempted.getOrDefault(expansion, 0L) < gameLoop - (15 * 22L)) {
-                    validExpansionLocations.add(expansion);
-                }
-            }
-        }
-        actions().sendChat("ExpansionLocations: " + validExpansionLocations.size(), ActionChat.Channel.TEAM);
+        updateValidExpansions();
+        //actions().sendChat("ExpansionLocations: " + this.validExpansionLocations.size(), ActionChat.Channel.TEAM);
 
-        for (Expansion validExpansionLocation : validExpansionLocations) {
+        for (Expansion validExpansionLocation : this.validExpansionLocations) {
             if (tryBuildStructure(
                     Abilities.BUILD_COMMAND_CENTER,
                     Units.TERRAN_COMMAND_CENTER,
@@ -514,6 +526,24 @@ public class SupaBot extends S2Agent implements AgentData {
             }
         }
         return false;
+    }
+
+    private void updateValidExpansions() {
+        long gameLoop = observation().getGameLoop();
+        if (this.expansionLocations != null && gameLoop > expansionsValidatedAt * 44L) {
+            // ExpansionLocations is ordered by distance to start point.
+            this.validExpansionLocations = new LinkedHashSet<>();
+            for (Expansion expansion : this.expansionLocations) {
+                if (!observation().isPlacable(expansion.position().toPoint2d())) {
+                    continue;
+                }
+                if (query().placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
+                    if (expansionLastAttempted.getOrDefault(expansion, 0L) < gameLoop - (15 * 22L)) {
+                        this.validExpansionLocations.add(expansion);
+                    }
+                }
+            }
+        }
     }
 
     private boolean needsSupplyDepot() {
@@ -766,6 +796,9 @@ public class SupaBot extends S2Agent implements AgentData {
 
     @Override
     public void onUnitCreated(UnitInPool unitInPool) {
+        if (!(unitInPool.unit().getType() instanceof Units)) {
+            return;
+        }
         switch ((Units) unitInPool.unit().getType()) {
             case TERRAN_MARINE:
             case TERRAN_MARAUDER:

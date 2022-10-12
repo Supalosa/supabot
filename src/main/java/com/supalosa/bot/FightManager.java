@@ -4,11 +4,9 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.github.ocraft.s2client.protocol.unit.Alliance;
-import com.github.ocraft.s2client.protocol.unit.CloakState;
-import com.github.ocraft.s2client.protocol.unit.Tag;
-import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.github.ocraft.s2client.protocol.unit.*;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,7 +28,8 @@ public class FightManager {
 
     private long lastCloakOrBurrowedUpdate = 0L;
     private static final long CLOAK_OR_BURROW_UPDATE_INTERVAL = 44L;
-    private HashSet<Tag> cloakedOrBurrowedUnits;
+    private HashSet<Tag> cloakedOrBurrowedUnits = new HashSet<>();
+    private List<Point2d> cloakedOrBurrowedUnitClusters = new ArrayList<>();
 
     private boolean hasSeenCloakedOrBurrowedUnits = false;
     private long lastDefenceCommand = 0L;
@@ -112,16 +111,19 @@ public class FightManager {
     private void updateCloakOrBurrowed() {
         List<UnitInPool> enemyUnits = agent.observation().getUnits(Alliance.ENEMY);
         this.cloakedOrBurrowedUnits = new HashSet<>();
+        List<UnitInPool> cloakedOrBurrowedUips = new ArrayList<>();
         List<UnitInPool> changelings = new ArrayList<>();
         for (UnitInPool enemyUnit : enemyUnits) {
             if (enemyUnit.unit().getCloakState().isPresent() &&
                     enemyUnit.unit().getCloakState().get() == CloakState.CLOAKED) {
                 this.hasSeenCloakedOrBurrowedUnits = true;
                 cloakedOrBurrowedUnits.add(enemyUnit.getTag());
+                cloakedOrBurrowedUips.add(enemyUnit);
             }
             if (enemyUnit.unit().getBurrowed().orElse(false)) {
                 this.hasSeenCloakedOrBurrowedUnits = true;
                 cloakedOrBurrowedUnits.add(enemyUnit.getTag());
+                cloakedOrBurrowedUips.add(enemyUnit);
             }
             if (enemyUnit.unit().getType() == Units.ZERG_CHANGELING ||
                     enemyUnit.unit().getType() == Units.ZERG_CHANGELING_MARINE ||
@@ -145,6 +147,13 @@ public class FightManager {
                 }
             }
         }
+        this.cloakedOrBurrowedUnitClusters = new ArrayList<>();
+        Map<Point, List<UnitInPool>> clusters = Expansions.cluster(cloakedOrBurrowedUips, 8f);
+        this.cloakedOrBurrowedUnitClusters = clusters.keySet().stream().map(Point::toPoint2d).collect(Collectors.toList());
+    }
+
+    public List<Point2d> getCloakedOrBurrowedUnitClusters() {
+        return this.cloakedOrBurrowedUnitClusters;
     }
 
     private void attackCommand() {

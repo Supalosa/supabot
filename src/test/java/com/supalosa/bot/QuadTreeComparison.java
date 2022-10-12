@@ -15,10 +15,14 @@ import java.util.Random;
 public class QuadTreeComparison {
 
     public static final int NUM_POINTS = 1000;
-    public static final int NUM_SEARCHES = 10000;
+    public static final int NUM_SEARCHES = 100000;
 
     public static void main(String[] args) {
         List<Point2d> points = new ArrayList<>(NUM_POINTS);
+        for (int i = 0; i < NUM_POINTS; ++i) {
+            points.add(i, Point2d.of(200f, 200f));
+        }
+        points.clear();
         Random random = new Random(1234);
         long insertionTimeStart = System.currentTimeMillis();
         for (int i = 0; i < NUM_POINTS; ++i) {
