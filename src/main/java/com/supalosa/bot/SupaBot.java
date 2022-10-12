@@ -344,7 +344,12 @@ public class SupaBot extends S2Agent implements AgentData {
             spc.getSecondSupplyDepotLocation().ifPresent(
                     spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
 
-            fightManager.setDefencePosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
+            // Defend from behind the barracks, or else the position of the barracks.
+            Optional<Point2d> defencePosition = spc
+                    .getMainRamp()
+                    .map(ramp -> ramp.projection(5.0f))
+                    .orElse(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
+            fightManager.setDefencePosition(defencePosition);
         });
 
         Optional<Point2d> nearestEnemy = findEnemyPosition(false);

@@ -2,6 +2,7 @@ package com.supalosa.bot.analysis;
 
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 
+import java.util.Optional;
 import java.util.Set;
 
 public class Ramp {
@@ -39,6 +40,34 @@ public class Ramp {
 
     public RampDirection getRampDirection() {
         return rampDirection;
+    }
+
+    /**
+     * Project a point along the direction of the ramp from the centre.
+     * A higher number will be towards the high ground, a lower number will be towards the low ground.
+     *
+     * @param distance Distance in tiles to project along the direction.
+     * @return A point along the ramp's direction, or absent if the direction is unknown.
+     */
+    public Optional<Point2d> projection(float distance) {
+        double averageRampX = rampTiles.stream()
+                .mapToDouble(point -> point.getX()).average().orElse(Double.NaN);
+        double averageRampY = rampTiles.stream()
+                .mapToDouble(point -> point.getY()).average().orElse(Double.NaN);
+        Point2d averagePosition = Point2d.of((float)averageRampX, (float)averageRampY);
+        switch (rampDirection) {
+            case NORTH_EAST:
+                return Optional.of(averagePosition.add(distance, distance));
+            case NORTH_WEST:
+                return Optional.of(averagePosition.add(-distance, distance));
+            case SOUTH_EAST:
+                return Optional.of(averagePosition.add(distance, -distance));
+            case SOUTH_WEST:
+                return Optional.of(averagePosition.add(-distance, -distance));
+            case UNKNOWN:
+            default:
+                return Optional.empty();
+        }
     }
 
     public static RampDirection calculateDirection(Set<Point2d> rampPoints, Set<Point2d> topOfRampPoints) {

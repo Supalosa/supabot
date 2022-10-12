@@ -39,7 +39,7 @@ public class StructurePlacementCalculator {
     private final Point2d start;
     private final GameData gameData;
 
-    private final Optional<Optional<Ramp>> mainRamp = Optional.empty();
+    private Optional<Optional<Ramp>> mainRamp = Optional.empty();
 
     private Optional<Tag> firstSupplyDepotTag = Optional.empty();
     private Optional<Tag> secondSupplyDepotTag = Optional.empty();
@@ -231,13 +231,35 @@ public class StructurePlacementCalculator {
         return Optional.empty();
     }
 
+    /**
+     * Returns the main ramp. Calculates it if it hasn't been calculated before.
+     * @param start The start position of the bot.
+     * @return A main ramp reference, or empty if not found.
+     */
+    public Optional<Ramp> getMainRamp(Point2d start) {
+        if (this.mainRamp.isEmpty()) {
+            Optional<Ramp> maybeRamp = getRamp(start);
+            if (maybeRamp.isEmpty()) {
+                return Optional.empty();
+            }
+            this.mainRamp = Optional.of(maybeRamp);
+        }
+        return this.mainRamp.get();
+    }
+
+    /**
+     * Returns the pre-calculated main ramp.
+     * @return The main ramp reference. Empty if not or if it has not been calculated.
+     */
+    public Optional<Ramp> getMainRamp() {
+        return this.mainRamp.flatMap(ramp -> ramp);
+    }
+
     Optional<Point2d> calculateNthSupplyDepotLocation(Point2d start, int n) {
         if (n < 0 || n > 1) {
             throw new NotImplementedException("Only support getting first and second supply depot location");
         }
-        Optional<Ramp> maybeRamp = getRamp(start);
-        //System.out.println("The ramp has " + theRamp.getRampTiles().size() + " tiles and " + theRamp.getTopOfRampTiles().size() + " top of ramp tiles");
-        //System.out.println("The ramp is pointing " + theRamp.getRampDirection().name());
+        Optional<Ramp> maybeRamp = getMainRamp(start);
         if (maybeRamp.isEmpty()) {
             return Optional.empty();
         }
