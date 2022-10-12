@@ -5,10 +5,10 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import java.util.Set;
 
 public class Ramp {
-    private int rampId;
-    private Set<Point2d> rampTiles;
-    private Set<Point2d> topOfRampTiles;
-    private RampDirection rampDirection;
+    private final int rampId;
+    private final Set<Point2d> rampTiles;
+    private final Set<Point2d> topOfRampTiles;
+    private final RampDirection rampDirection;
 
     public enum RampDirection {
         NORTH_EAST,

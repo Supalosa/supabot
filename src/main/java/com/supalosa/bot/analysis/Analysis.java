@@ -153,7 +153,7 @@ public class Analysis {
                     Tile nT = result.get(x + dx, y + dy);
                     int neighbourHeight = nT.terrain;
                     boolean neighbourBuildable = nT.placeable;
-                    Point2d neighbourPoint = Point2d.of((int)(x + dx), (int)(y + dy));
+                    Point2d neighbourPoint = Point2d.of(x + dx, y + dy);
                     //if (neighbourBuildable > 0 && neighbourHeight >= rampHeight && !rampLocations.contains(neighbourPoint)) {
                     if (neighbourBuildable
                             && isTerrainHeightNearMaxHeight(rampHeight, rampMaxHeight)

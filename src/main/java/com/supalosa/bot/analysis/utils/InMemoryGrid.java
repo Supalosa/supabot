@@ -6,10 +6,10 @@ import java.util.function.Supplier;
 
 public class InMemoryGrid<T> implements Grid<T> {
 
-    private T[][] data;
-    private int width;
-    private int height;
-    private Supplier<T> defaultSupplier;
+    private final T[][] data;
+    private final int width;
+    private final int height;
+    private final Supplier<T> defaultSupplier;
 
     public InMemoryGrid(Class<?> type, int width, int height, Supplier<T> defaultValue) {
         Class<?> typeOneDimArray = Array.newInstance(type, 0).getClass();

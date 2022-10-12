@@ -7,7 +7,7 @@ import java.util.List;
 
 public class SimpleBuildOrder implements BuildOrder {
 
-    private List<SimpleBuildOrderStage> stages;
+    private final List<SimpleBuildOrderStage> stages;
 
     SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
         this.stages = stages;

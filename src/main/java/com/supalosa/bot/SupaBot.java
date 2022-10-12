@@ -8,6 +8,9 @@ import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.ChatReceived;
+import com.github.ocraft.s2client.protocol.observation.Observation;
+import com.github.ocraft.s2client.protocol.observation.raw.MapState;
+import com.github.ocraft.s2client.protocol.observation.raw.ObservationRaw;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -37,34 +40,13 @@ import java.util.stream.Collectors;
 
 public class SupaBot extends S2Agent implements AgentData {
 
-    private boolean isDebug;
-
-    private List<Expansion> expansionLocations = null;
-
-    private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
-
-    private Set<Point2d> unscoutedLocations = new HashSet<>();
-    private Set<Tag> scoutingWith = new HashSet<>();
-    private long scoutResetLoopTime = 0;
-
-    private Optional<AnalysisResults> mapAnalysis = Optional.empty();
-    private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
-
-    private TaskManager taskManager;
-    private FightManager fightManager;
-    private final GameData gameData;
-
     private static final long GAS_CHECK_INTERVAL = 22L;
+    private final TaskManager taskManager;
+    private final FightManager fightManager;
+    private final GameData gameData;
     private final long lastGasCheck = 0L;
-
-    private Map<UnitType, UnitTypeData> unitTypeData = null;
-
-    // HACK until threat built
-    private boolean crisisMode = false;
-
-    private long expansionsValidatedAt = 0L;
-
-    private LoadingCache<UnitType, Integer> countOfUnits = CacheBuilder.newBuilder()
+    private final long expansionsValidatedAt = 0L;
+    private final LoadingCache<UnitType, Integer> countOfUnits = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.SECONDS)
             .build(new CacheLoader<>() {
@@ -74,6 +56,21 @@ public class SupaBot extends S2Agent implements AgentData {
                     return count;
                 }
             });
+    private final Map<Expansion, Long> expansionLastAttempted = new HashMap<>();
+    LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
+    private boolean isDebug;
+    private List<Expansion> expansionLocations = null;
+    private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
+    private Set<Point2d> unscoutedLocations = new HashSet<>();
+    private Set<Tag> scoutingWith = new HashSet<>();
+    private long scoutResetLoopTime = 0;
+    private Optional<AnalysisResults> mapAnalysis = Optional.empty();
+    private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
+    private Map<UnitType, UnitTypeData> unitTypeData = null;
+    // HACK until threat built
+    private boolean crisisMode = false;
+    private long lastRebalanceAt = 0L;
+    private Long lastExpansionTime = 0L;
 
     public SupaBot(boolean isDebug) {
         this.isDebug = isDebug;
@@ -91,7 +88,8 @@ public class SupaBot extends S2Agent implements AgentData {
                 observation(),
                 startRaw));
         structurePlacementCalculator = mapAnalysis
-                .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData, observation().getStartLocation().toPoint2d()));
+                .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData,
+                        observation().getStartLocation().toPoint2d()));
     }
 
     private void manageScouting() {
@@ -105,7 +103,8 @@ public class SupaBot extends S2Agent implements AgentData {
                     actions().unitCommand(scv, Abilities.MOVE, randomEnemyPosition.get(), false);
                 });
             }
-            scoutingWith = scoutingWith.stream().filter(tag -> observation().getUnit(tag).isAlive()).collect(Collectors.toSet());
+            scoutingWith =
+                    scoutingWith.stream().filter(tag -> observation().getUnit(tag).isAlive()).collect(Collectors.toSet());
             observation().getGameInfo().getStartRaw().ifPresent(startRaw -> {
                 // Note: startRaw.getStartLocations() is actually potential `enemy` locations.
                 // If there's only one enemy location, the opponent is there.
@@ -115,10 +114,10 @@ public class SupaBot extends S2Agent implements AgentData {
                     System.out.println("Pre-determined enemy location at " + knownEnemyStartLocation.get());
                 } else if (unitTypeData != null) {
                     List<Unit> enemyStructures = observation().getUnits(
-                            unitInPool -> unitInPool.getUnit().filter(
-                                    unit -> unit.getAlliance() == Alliance.ENEMY &&
-                                            unitTypeData.get(unit.getType()).getAttributes().contains(UnitAttribute.STRUCTURE)
-                            ).isPresent())
+                                    unitInPool -> unitInPool.getUnit().filter(
+                                            unit -> unit.getAlliance() == Alliance.ENEMY &&
+                                                    unitTypeData.get(unit.getType()).getAttributes().contains(UnitAttribute.STRUCTURE)
+                                    ).isPresent())
                             .stream()
                             .filter(unitInPool -> unitInPool.getUnit().isPresent())
                             .map(unitInPool -> unitInPool.getUnit().get())
@@ -206,7 +205,8 @@ public class SupaBot extends S2Agent implements AgentData {
             observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
-                actions().unitCommand(unit.unit(), Abilities.BUILD_REACTOR, unit.unit().getPosition().toPoint2d(), false);
+                actions().unitCommand(unit.unit(), Abilities.BUILD_REACTOR, unit.unit().getPosition().toPoint2d(),
+                        false);
             });
         }
         if (supply > 50) {
@@ -237,11 +237,14 @@ public class SupaBot extends S2Agent implements AgentData {
                         UnitInPool.isUnit(Units.TERRAN_ENGINEERING_BAY).test(unitInPool)).forEach(unit -> {
                     if (unit.unit().getOrders().isEmpty()) {
                         if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1, false);
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
+                                    false);
                         } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2, false);
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2,
+                                    false);
                         } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3, false);
+                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3,
+                                    false);
                         }
                         if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1)) {
                             actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL1, false);
@@ -263,7 +266,7 @@ public class SupaBot extends S2Agent implements AgentData {
             if (numCcs > 3) {
                 ability = Abilities.MORPH_PLANETARY_FORTRESS;
             }
-            actions().unitCommand(unit.unit(), ability,false);
+            actions().unitCommand(unit.unit(), ability, false);
         });
         // land mules
         float reserveCcEnergy = (fightManager.hasSeenCloakedOrBurrowedUnits() ? 85f : 50f);
@@ -285,14 +288,16 @@ public class SupaBot extends S2Agent implements AgentData {
         });
         tryBuildScvs();
         int marineCount = countUnitType(Units.TERRAN_MARINE);
-        tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10, marineCount / 10)));
+        tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10,
+                marineCount / 10)));
         if (marineCount > 10) {
-            tryBuildUnit(Abilities.TRAIN_MARAUDER, Units.TERRAN_MARAUDER, Units.TERRAN_BARRACKS, Optional.of(Math.min(25, marineCount / 2)));
+            tryBuildUnit(Abilities.TRAIN_MARAUDER, Units.TERRAN_MARAUDER, Units.TERRAN_BARRACKS,
+                    Optional.of(Math.min(25, marineCount / 2)));
         }
         if (observation().getMinerals() > 100) {
             tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
         }
-
+        //observation().getRawObservation().getRaw().get().getMapState().getCreep();
         rebalanceWorkers();
 
         mineGas();
@@ -335,9 +340,9 @@ public class SupaBot extends S2Agent implements AgentData {
                 }
             });
             spc.getFirstSupplyDepotLocation().ifPresent(
-                    spl -> drawDebugSquare(spl.getX()-1.0f, spl.getY()-1.0f, 2.0f, 2.0f, Color.GREEN));
+                    spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
             spc.getSecondSupplyDepotLocation().ifPresent(
-                    spl -> drawDebugSquare(spl.getX()-1.0f, spl.getY()-1.0f, 2.0f, 2.0f, Color.GREEN));
+                    spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
 
             fightManager.setDefencePosition(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
         });
@@ -393,8 +398,6 @@ public class SupaBot extends S2Agent implements AgentData {
         actions().sendChat(message, ActionChat.Channel.TEAM);
     }
 
-    private long lastRebalanceAt = 0L;
-
     private void rebalanceWorkers() {
         long gameLoop = observation().getGameLoop();
         if (gameLoop < lastRebalanceAt + 1000L) {
@@ -409,7 +412,8 @@ public class SupaBot extends S2Agent implements AgentData {
             int averageWorkers = totalWorkers / ccCount;
             Set<Unit> givers = new HashSet<>();
             Set<Unit> takers = new HashSet<>();
-            observation().getUnits(Alliance.SELF, unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(ccInPool -> {
+            observation().getUnits(Alliance.SELF,
+                    unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(ccInPool -> {
                 ccInPool.getUnit().ifPresent(cc -> {
                     if (cc.getBuildProgress() < 0.9) {
                         return;
@@ -425,7 +429,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 });
             });
             if (givers.size() > 0 && takers.size() > 0) {
-                Set<Tag> donatedWorkers =  new HashSet<>();
+                Set<Tag> donatedWorkers = new HashSet<>();
                 observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_SCV)).forEach(scvInPool -> {
                     scvInPool.getUnit().ifPresent(scv -> {
                         givers.forEach(giver -> {
@@ -452,13 +456,10 @@ public class SupaBot extends S2Agent implements AgentData {
         Point2d point2d = Point2d.of(x, y);
         float z = observation().terrainHeight(point2d);
         debug().debugBoxOut(
-            Point.of(Math.max(0.0f, x), Math.max(0.0f, y), z + 0.1f),
-                    Point.of(x+w, y+h, z + 0.1f),
+                Point.of(Math.max(0.0f, x), Math.max(0.0f, y), z + 0.1f),
+                Point.of(x + w, y + h, z + 0.1f),
                 color);
     }
-
-    private Long lastExpansionTime = 0L;
-    private final Map<Expansion, Long> expansionLastAttempted = new HashMap<>();
 
     private boolean needsCommandCentre() {
         final int[] expansionSupply = new int[]{0, 18, 36, 80, 128, 172, 196};
@@ -479,11 +480,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (this.validExpansionLocations.size() == 0) {
             return false;
         }
-        if (currentSupply >= nextExpansionAt) {
-            return true;
-        } else {
-            return false;
-        }
+        return currentSupply >= nextExpansionAt;
     }
 
     private int countMiningBases() {
@@ -494,8 +491,6 @@ public class SupaBot extends S2Agent implements AgentData {
                         unitInPool.unit().getIdealHarvesters().get() > 0
         ).size();
     }
-
-    LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
 
     private boolean tryBuildCommandCentre() {
         if (!needsCommandCentre()) {
@@ -551,10 +546,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (observation().getFoodUsed() <= observation().getFoodCap() - 2) {
             return false;
         }
-        if (observation().getFoodCap() >= 200) {
-            return false;
-        }
-        return true;
+        return observation().getFoodCap() < 200;
     }
 
     private boolean tryBuildSupplyDepot() {
@@ -580,13 +572,15 @@ public class SupaBot extends S2Agent implements AgentData {
             position.ifPresent(spl -> drawDebugSquare(spl.getX(), spl.getY(), 0.1f, 0.1f, Color.RED));
         }
         long numCc = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
-        return tryBuildStructure(Abilities.BUILD_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SCV, (int)Math.min(3, numCc), position);
+        return tryBuildStructure(Abilities.BUILD_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SCV,
+                (int) Math.min(3, numCc), position);
     }
 
     private boolean tryBuildScvs() {
         int numBases = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
         int numScvs = countUnitType(Units.TERRAN_SCV);
-        observation().getUnits(Alliance.SELF, unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
+        observation().getUnits(Alliance.SELF,
+                unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
             if (commandCentre.unit().getOrders().isEmpty()) {
                 if (numScvs < Math.min(80, numBases * 22)) {
                     actions().unitCommand(commandCentre.unit(), Abilities.TRAIN_SCV, false);
@@ -596,7 +590,8 @@ public class SupaBot extends S2Agent implements AgentData {
         return true;
     }
 
-    private boolean tryBuildUnit(Ability abilityToCast, UnitType unitType, UnitType buildFrom, Optional<Integer> maximum) {
+    private boolean tryBuildUnit(Ability abilityToCast, UnitType unitType, UnitType buildFrom,
+                                 Optional<Integer> maximum) {
         if (maximum.isPresent()) {
             int count = countUnitType(unitType);
             if (count >= maximum.get()) {
@@ -610,8 +605,8 @@ public class SupaBot extends S2Agent implements AgentData {
                 UnitInPool addOnUnit = observation().getUnit(addOn);
                 if (addOnUnit != null &&
                         (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_REACTOR ||
-                        addOnUnit.unit().getType() == Units.TERRAN_STARPORT_REACTOR ||
-                        addOnUnit.unit().getType() == Units.TERRAN_FACTORY_REACTOR)) {
+                                addOnUnit.unit().getType() == Units.TERRAN_STARPORT_REACTOR ||
+                                addOnUnit.unit().getType() == Units.TERRAN_FACTORY_REACTOR)) {
                     reactor = true;
                 }
             }
@@ -635,24 +630,24 @@ public class SupaBot extends S2Agent implements AgentData {
             return false;
         }
         List<Unit> commandCentres = observation().getUnits(unitInPool ->
-                unitInPool.unit().getAlliance() == Alliance.SELF &&
-                (Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType()))).stream()
+                        unitInPool.unit().getAlliance() == Alliance.SELF &&
+                                (Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType()))).stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
         List<Unit> refineries = observation().getUnits(unitInPool ->
                         unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                        unitInPool.unit().getType().equals(Units.TERRAN_REFINERY) &&
+                                unitInPool.unit().getType().equals(Units.TERRAN_REFINERY) &&
                                 hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
                 ).stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
         List<Unit> neutralGeysers = observation().getUnits(unitInPool ->
-                unitInPool.unit().getAlliance().equals(Alliance.NEUTRAL) &&
-                Constants.VESPENE_GEYSER_TYPES.contains(unitInPool.unit().getType()) &&
-                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
-            ).stream()
-            .map(UnitInPool::unit)
-            .collect(Collectors.toList());
+                        unitInPool.unit().getAlliance().equals(Alliance.NEUTRAL) &&
+                                Constants.VESPENE_GEYSER_TYPES.contains(unitInPool.unit().getType()) &&
+                                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
+                ).stream()
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList());
         for (Unit commandCentre : commandCentres) {
             List<Unit> refineriesNear = refineries.stream()
                     .filter(refinery -> refinery.getPosition().distance(commandCentre.getPosition()) < 10.0f)
@@ -665,7 +660,8 @@ public class SupaBot extends S2Agent implements AgentData {
                 for (Unit geyser : geysersNear) {
                     Point2d geyserPosition = geyser.getPosition().toPoint2d();
                     if (!refineriesNearPositions.contains(geyserPosition)) {
-                        tryBuildStructureAtTarget(Abilities.BUILD_REFINERY, Units.TERRAN_REFINERY, Units.TERRAN_SCV, 1, Optional.of(geyser));
+                        tryBuildStructureAtTarget(Abilities.BUILD_REFINERY, Units.TERRAN_REFINERY, Units.TERRAN_SCV,
+                                1, Optional.of(geyser));
                         return true;
                     }
                 }
@@ -699,9 +695,9 @@ public class SupaBot extends S2Agent implements AgentData {
                     refinery.getAssignedHarvesters().get() < refinery.getIdealHarvesters().get()) {
                 int delta = refinery.getIdealHarvesters().get() - refinery.getAssignedHarvesters().get();
                 List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
-                        unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                        UnitInPool.isCarryingMinerals().test(unitInPool) &&
-                        unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
+                                unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                                        UnitInPool.isCarryingMinerals().test(unitInPool) &&
+                                        unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
                         .stream().map(UnitInPool::unit).collect(Collectors.toList());
                 for (int i = 0; i < Math.min(nearbyScvs.size(), delta); ++i) {
                     actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, refinery, false);
@@ -712,8 +708,9 @@ public class SupaBot extends S2Agent implements AgentData {
 
     /**
      * Checks if a certain unit has other units within a certain radius.
-     * @param unit The unit to check
-     * @param units The list of other units to check are near the {@code unit}.
+     *
+     * @param unit   The unit to check
+     * @param units  The list of other units to check are near the {@code unit}.
      * @param radius The radius to check
      * @return
      */
@@ -730,22 +727,30 @@ public class SupaBot extends S2Agent implements AgentData {
         return observation().getUnits(Alliance.SELF, doesBuildWith(abilityTypeForStructure)).size();
     }
 
-    private boolean tryBuildMax(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, int max) {
+    private boolean tryBuildMax(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType,
+                                int maxParallel, int max) {
         if (countUnitType(unitTypeForStructure) < max) {
-            return tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel, Optional.empty());
+            return tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
+                    Optional.empty());
         }
         return false;
     }
 
-    private boolean tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Point2d> specificPosition) {
-        return _tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel, specificPosition, Optional.empty());
+    private boolean tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure,
+                                      UnitType unitType, int maxParallel, Optional<Point2d> specificPosition) {
+        return _tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
+                specificPosition, Optional.empty());
     }
 
-    private boolean tryBuildStructureAtTarget(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Unit> specificTarget) {
-        return _tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel, Optional.empty(), specificTarget);
+    private boolean tryBuildStructureAtTarget(Ability abilityTypeForStructure, UnitType unitTypeForStructure,
+                                              UnitType unitType, int maxParallel, Optional<Unit> specificTarget) {
+        return _tryBuildStructure(abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
+                Optional.empty(), specificTarget);
     }
 
-    private boolean _tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType, int maxParallel, Optional<Point2d> specificPosition, Optional<Unit> specificTarget) {
+    private boolean _tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure,
+                                       UnitType unitType, int maxParallel, Optional<Point2d> specificPosition,
+                                       Optional<Unit> specificTarget) {
         BuildStructureTask maybeTask = new BuildStructureTask(
                 abilityTypeForStructure,
                 unitTypeForStructure,
@@ -784,8 +789,8 @@ public class SupaBot extends S2Agent implements AgentData {
 
     private Optional<UnitInPool> getRandomUnit(UnitType unitType) {
         List<UnitInPool> units = observation().getUnits(
-                Alliance.SELF,
-                UnitInPool.isUnit(unitType))
+                        Alliance.SELF,
+                        UnitInPool.isUnit(unitType))
                 .stream()
                 .filter(isHarvesting())
                 .collect(Collectors.toList());
@@ -869,7 +874,8 @@ public class SupaBot extends S2Agent implements AgentData {
 
         int maxParallel = Math.max(1, observation().getMinerals() / 250);
 
-        return tryBuildStructure(Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, Units.TERRAN_SCV, maxParallel, position);
+        return tryBuildStructure(Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, Units.TERRAN_SCV, maxParallel,
+                position);
     }
 
     private int countUnitType(UnitType... unitType) {
@@ -909,9 +915,11 @@ public class SupaBot extends S2Agent implements AgentData {
     // Finds a worthwhile enemy position to move units towards.
     private Optional<Point2d> findEnemyPosition(boolean nearEnemyBase) {
         Point startLocation = observation().getStartLocation();
-        Comparator<UnitInPool> comparator = Comparator.comparing(unit -> unit.unit().getPosition().distance(startLocation));
+        Comparator<UnitInPool> comparator =
+                Comparator.comparing(unit -> unit.unit().getPosition().distance(startLocation));
         if (nearEnemyBase && knownEnemyStartLocation.isPresent()) {
-            comparator = Comparator.comparing(unit -> unit.unit().getPosition().toPoint2d().distance(knownEnemyStartLocation.get()));
+            comparator =
+                    Comparator.comparing(unit -> unit.unit().getPosition().toPoint2d().distance(knownEnemyStartLocation.get()));
         }
         List<UnitInPool> enemyUnits = observation().getUnits(Alliance.ENEMY);
         if (enemyUnits.size() > 0) {

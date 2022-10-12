@@ -39,7 +39,7 @@ public class StructurePlacementCalculator {
     private final Point2d start;
     private final GameData gameData;
 
-    private Optional<Optional<Ramp>> mainRamp = Optional.empty();
+    private final Optional<Optional<Ramp>> mainRamp = Optional.empty();
 
     private Optional<Tag> firstSupplyDepotTag = Optional.empty();
     private Optional<Tag> secondSupplyDepotTag = Optional.empty();

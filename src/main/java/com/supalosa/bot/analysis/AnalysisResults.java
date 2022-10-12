@@ -7,9 +7,9 @@ import java.util.Map;
 import java.util.Set;
 
 public class AnalysisResults {
-    private Grid<Tile> grid;
-    private Map<Integer, Ramp> ramps;
-    private Set<Point2d> topOfRamps;
+    private final Grid<Tile> grid;
+    private final Map<Integer, Ramp> ramps;
+    private final Set<Point2d> topOfRamps;
     public AnalysisResults(Grid<Tile> grid, Map<Integer,Ramp> ramps, Set<Point2d> topOfRamps) {
         this.grid = grid;
         this.ramps = ramps;

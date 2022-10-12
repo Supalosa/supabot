@@ -4,7 +4,7 @@ import java.awt.image.BufferedImage;
 
 public class BitmapGrid implements Grid<Integer> {
 
-    private BufferedImage image;
+    private final BufferedImage image;
 
     public BitmapGrid(BufferedImage image) {
         this.image = image;

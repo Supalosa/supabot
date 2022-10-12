@@ -14,17 +14,17 @@ import java.util.stream.Collectors;
 
 public class FightManager {
 
-    private S2Agent agent;
+    private final S2Agent agent;
 
     private Set<Tag> attackingArmy = new HashSet<>();
-    private Set<Tag> reserveArmy = new HashSet<>();
+    private final Set<Tag> reserveArmy = new HashSet<>();
 
     private Optional<Point2d> attackPosition = Optional.empty();
     private Optional<Point2d> defencePosition = Optional.empty();
 
-    private Map<Tag, Long> unitsRetreatingUntil = new HashMap<>();
-    private Map<Tag, Long> unitCannotRetreatUntil = new HashMap<>();
-    private Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
+    private final Map<Tag, Long> unitsRetreatingUntil = new HashMap<>();
+    private final Map<Tag, Long> unitCannotRetreatUntil = new HashMap<>();
+    private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
 
     private long lastCloakOrBurrowedUpdate = 0L;
     private static final long CLOAK_OR_BURROW_UPDATE_INTERVAL = 44L;
