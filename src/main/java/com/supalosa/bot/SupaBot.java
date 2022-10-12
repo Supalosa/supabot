@@ -289,6 +289,8 @@ public class SupaBot extends S2Agent implements AgentData {
                 this.taskManager.debug(this);
             }
             this.structurePlacementCalculator.ifPresent(spc -> spc.debug(this));
+            int miningBases = countMiningBases();
+            debug().debugTextOut("Bases: " + miningBases, Point2d.of(0.95f, 0.2f), Color.WHITE, 8);
             debug().sendDebug();
         }
     }
@@ -310,7 +312,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (ccCount > 0) {
             int averageWorkers = totalWorkers / ccCount;
             Set<Unit> givers = new HashSet<>();
-            Set<Unit> takers = new HashSet<>();
+            Map<Unit, Integer> takers = new HashMap<>();
             observation().getUnits(Alliance.SELF,
                     unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(ccInPool -> {
                 ccInPool.getUnit().ifPresent(cc -> {
@@ -321,14 +323,14 @@ public class SupaBot extends S2Agent implements AgentData {
                         ccToWorkerCount.put(cc.getTag(), assigned);
                         if (assigned > averageWorkers + 4 || (cc.getIdealHarvesters().isPresent() && assigned > cc.getIdealHarvesters().get() + 4)) {
                             givers.add(cc);
-                        } else if (assigned < averageWorkers - 4) {
-                            takers.add(cc);
+                        } else if (cc.getIdealHarvesters().isPresent() && assigned < cc.getIdealHarvesters().get()) {
+                            takers.put(cc, cc.getIdealHarvesters().get() - assigned);
                         }
                     });
                 });
             });
             if (givers.size() > 0 && takers.size() > 0) {
-                Set<Tag> donatedWorkers = new HashSet<>();
+                Queue<Tag> donatedWorkers = new LinkedList<>();
                 observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_SCV)).forEach(scvInPool -> {
                     scvInPool.getUnit().ifPresent(scv -> {
                         givers.forEach(giver -> {
@@ -340,10 +342,21 @@ public class SupaBot extends S2Agent implements AgentData {
                         });
                     });
                 });
-                // TODO weighted taking
-                Optional<Unit> taker = takers.stream().findFirst();
-                System.out.println("Rebalancing " + donatedWorkers.size() + " workers to " + taker.get());
-                actions().unitCommand(donatedWorkers, Abilities.MOVE, taker.get().getPosition().toPoint2d(), false);
+                takers.entrySet().forEach(taker -> {
+                    Unit takerCc = taker.getKey();
+                    int takerAmount = taker.getValue();
+                    Optional<Unit> nearestMineralPatch = findNearestMineralPatch(takerCc.getPosition().toPoint2d());
+                    if (donatedWorkers.size() > 0) {
+                        while (!donatedWorkers.isEmpty() && takerAmount > 0) {
+                            --takerAmount;
+                            Tag takenWorker = donatedWorkers.poll();
+                            // Move to the patch, or the CC itself if patch is missing.
+                            nearestMineralPatch.ifPresentOrElse(patch ->
+                                actions().unitCommand(takenWorker, Abilities.SMART, patch, false),
+                                () -> actions().unitCommand(takenWorker, Abilities.SMART, takerCc, false));
+                        }
+                    }
+                });
             }
         }
     }

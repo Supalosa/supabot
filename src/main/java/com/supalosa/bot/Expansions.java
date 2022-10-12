@@ -8,8 +8,9 @@ import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.query.QueryBuildingPlacement;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import org.immutables.value.Value;
-import org.mvel2.Unit;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -125,6 +126,15 @@ public class Expansions {
 
             startIndex += querySize.get(cluster.getKey());
         }
+        // Special case for the starting location. The query placements obviously won't work, so we just put the
+        // actual position of the town hall there.
+        Point startLocation = observation.getStartLocation();
+        observation.getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_COMMAND_CENTER)).forEach(unitInPool -> {
+            Unit unit = unitInPool.unit();
+            if (unit.getPosition().distance(startLocation) < 5f) {
+                expansionLocations.add(unit.getPosition());
+            }
+        });
         System.out.println("ExpansionLocations = " + expansionLocations.size() + ", from " + queries.size() + " queries: " + countTrue + " were true");
         return expansionLocations;
     }

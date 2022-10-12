@@ -374,7 +374,7 @@ public class StructurePlacementCalculator {
         });
     }
 
-    private static final int MAX_FREE_PLACEMENT_ITERATIONS = 20;
+    private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
 
     // does NOT query for placement but will never suggest something that overlaps with a reserved tile.
     public Optional<Point2d> suggestLocationForFreePlacement(Point2d origin, int searchRadius, int structureWidth, int structureHeight) {
@@ -388,10 +388,13 @@ public class StructurePlacementCalculator {
                 candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
                         .add((structureWidth + 1) * getRandomSign(), (structureHeight + 1) * getRandomSign());
             } else {
+                // Initially we will search closer to the querying worker. The longer we search, the more willing we
+                // are to place something far away.
+                int testedRadius = (int)Math.max(1, searchRadius * Math.min(1f, (float)(i+3) / (float)MAX_FREE_PLACEMENT_ITERATIONS));
                 candidate = origin.add(
                         Point2d.of(
-                                getRandomInteger(-searchRadius, searchRadius),
-                                getRandomInteger(-searchRadius, searchRadius)));
+                                getRandomInteger(-testedRadius, testedRadius),
+                                getRandomInteger(-testedRadius, testedRadius)));
             }
             if (canPlaceAt(candidate, structureWidth, structureWidth)) {
                 return Optional.of(candidate);
