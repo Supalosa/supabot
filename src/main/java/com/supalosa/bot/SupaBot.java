@@ -244,11 +244,12 @@ public class SupaBot extends S2Agent implements AgentData {
                     actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
                 }
             });
-            spc.getFirstSupplyDepotLocation().ifPresent(
-                    spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
-            spc.getSecondSupplyDepotLocation().ifPresent(
-                    spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
-
+            if (isDebug) {
+                spc.getFirstSupplyDepotLocation().ifPresent(
+                        spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
+                spc.getSecondSupplyDepotLocation().ifPresent(
+                        spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
+            }
             // Defend from behind the barracks, or else the position of the barracks.
             Optional<Point2d> defencePosition = spc
                     .getMainRamp()
@@ -258,10 +259,8 @@ public class SupaBot extends S2Agent implements AgentData {
         });
 
         Optional<Point2d> nearestEnemy = mapAwareness.getMaybeEnemyPositionNearBase();
-        if (nearestEnemy.isPresent()) {
-            if (observation().getStartLocation().toPoint2d().distance(nearestEnemy.get()) < 30) {
-                fightManager.setDefencePosition(nearestEnemy);
-            }
+        if (nearestEnemy.isPresent() && mapAwareness.shouldDefendLocation(nearestEnemy.get())) {
+            fightManager.setDefencePosition(nearestEnemy);
         }
 
         // HACK - crisis mode (which affects whether marines are built or not)
@@ -379,11 +378,12 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     private boolean needsCommandCentre() {
-        final int[] expansionSupply = new int[]{0, 18, 72, 128, 156, 172, 196};
-        int currentSupply = observation().getFoodUsed();
+        // Expand every 18 workers.
+        final int[] expansionNumWorkers = new int[]{0, 18, 36, 54, 72, 90};
+        int currentSupply = observation().getFoodWorkers();
         int numCcs = countMiningBases();
-        int index = Math.min(expansionSupply.length - 1, Math.max(0, numCcs));
-        int nextExpansionAt = expansionSupply[index];
+        int index = Math.min(expansionNumWorkers.length - 1, Math.max(0, numCcs));
+        int nextExpansionAt = expansionNumWorkers[index];
         if (observation().getGameLoop() < lastExpansionTime + 22L) {
             return false;
         }

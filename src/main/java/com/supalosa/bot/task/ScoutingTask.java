@@ -25,7 +25,9 @@ public class ScoutingTask implements Task {
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         Optional<UnitInPool> scoutUnit = assignedScout
                 .map(tag -> agent.observation().getUnit(tag))
-                .or(() -> taskManager.findFreeUnit(agent.observation(), unitInPool -> unitInPool.unit().getType() == Units.TERRAN_SCV));
+                .or(() -> taskManager.findFreeUnitForTask(this,
+                        agent.observation(),
+                        unitInPool -> unitInPool.unit().getType() == Units.TERRAN_SCV));
         assignedScout = scoutUnit.map(unitInPool -> unitInPool.getTag());
 
         if (assignedScout.isEmpty()) {

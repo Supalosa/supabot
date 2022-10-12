@@ -9,6 +9,8 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.GameData;
@@ -463,34 +465,62 @@ public class StructurePlacementCalculator {
 
     private static final long MY_STRUCTURE_UPDATE_INTERVAL = 22L * 2;
 
+    private void updateMutableGridForStructure(AgentData data, Point2d position, UnitType unitType) {
+        Optional<Point2d> maybeFootprint = data.gameData().getUnitFootprint(unitType);
+        maybeFootprint.ifPresent(footprint -> {
+            Pair<Point2d, Point2d> modifiedFootprint = modifyFootprint(
+                    position,
+                    footprint,
+                    unitType);
+            int x = (int)modifiedFootprint.getLeft().getX();
+            int y = (int)modifiedFootprint.getLeft().getY();
+            int width = (int)modifiedFootprint.getRight().getX();
+            int height = (int)modifiedFootprint.getRight().getY();
+            updatePlacementGridWithFootprint(mutableFreePlacementGrid, x, y, width, height);
+        });
+    }
+
     public void onStep(AgentData data, S2Agent agent) {
         long gameLoop = agent.observation().getGameLoop();
 
         if (gameLoop > myStructuresUpdatedAt + MY_STRUCTURE_UPDATE_INTERVAL) {
             myStructuresUpdatedAt = gameLoop;
             mutableFreePlacementGrid.clear();
+            // Look at all placed structures.
             myStructures = agent.observation().getUnits(unitInPool -> {
                 if (unitInPool.unit().getAlliance() != Alliance.SELF) {
                     return false;
                 }
-                Optional<Point2d> maybeFootprint = data.gameData().getUnitFootprint(unitInPool.unit().getType());
-                maybeFootprint.ifPresent(footprint -> {
-                    Pair<Point2d, Point2d> modifiedFootprint = modifyFootprint(
-                            unitInPool.unit().getPosition().toPoint2d(),
-                            footprint,
-                            unitInPool.unit().getType());
-                    int x = (int)modifiedFootprint.getLeft().getX();
-                    int y = (int)modifiedFootprint.getLeft().getY();
-                    int width = (int)modifiedFootprint.getRight().getX();
-                    int height = (int)modifiedFootprint.getRight().getY();
-                    updatePlacementGridWithFootprint(mutableFreePlacementGrid, x, y, width, height);
-                });
+
+                updateMutableGridForStructure(
+                        data,
+                        unitInPool.unit().getPosition().toPoint2d(),
+                        unitInPool.unit().getType());
 
                 Optional<UnitTypeData> maybeUnitTypeData = data.gameData().getUnitTypeData(unitInPool.unit().getType());
                 return maybeUnitTypeData.map(unitType ->
                     unitType.getAttributes().contains(UnitAttribute.STRUCTURE)
                 ).orElse(false);
             }).stream().map(unitInPool -> unitInPool.unit().getPosition().toPoint2d()).collect(Collectors.toList());
+
+            // Look at structures being placed but not existing yet.
+            agent.observation().getUnits(unitInPool -> unitInPool.unit().getOrders().size() > 0).forEach(unitWithOrder -> {
+                List<UnitOrder> orders = unitWithOrder.unit().getOrders();
+                orders.forEach(order -> {
+                    if (order.getTargetedWorldSpacePosition().isEmpty()) {
+                        return;
+                    }
+                    Optional<AbilityData> maybeAbilityData = data.gameData().getAbility(order.getAbility());
+                    maybeAbilityData.filter(abilityData -> abilityData.isBuilding()).ifPresent(buildingAbilityData -> {
+                        Optional<UnitType> maybeUnitType = data.gameData().getUnitBuiltByAbilility(buildingAbilityData.getAbility());
+
+                        maybeUnitType.ifPresent(unitType ->
+                                updateMutableGridForStructure(data,
+                                        order.getTargetedWorldSpacePosition().get().toPoint2d(),
+                                        unitType));
+                    });
+                });
+            });
         }
     }
 

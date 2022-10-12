@@ -4,6 +4,7 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.*;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.UnitAttribute;
+import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -13,6 +14,8 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
+import org.apache.commons.lang3.NotImplementedException;
+import org.checkerframework.checker.units.qual.A;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -36,6 +39,9 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<Point2d> maybeEnemyPositionNearEnemy = Optional.empty();
     private Optional<Point2d> maybeEnemyPositionNearBase = Optional.empty();
 
+    private final long myDefendableStructuresCalculatedAt = 0L;
+    private List<Unit> myDefendableStructures = new ArrayList<>();
+
     public MapAwarenessImpl() {
         this.startPosition = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
@@ -53,7 +59,7 @@ public class MapAwarenessImpl implements MapAwareness {
 
     @Override
     public List<Point2d> getKnownEnemyBases() {
-        return knownEnemyBases;
+        throw new NotImplementedException("Not ready yet");
     }
 
     /**
@@ -92,9 +98,21 @@ public class MapAwarenessImpl implements MapAwareness {
     public void onStep(AgentData data, S2Agent agent) {
         manageScouting(data, agent.observation(), agent.actions(), agent.query());
         updateValidExpansions(agent.observation(), agent.query());
+        updateMyDefendableStructures(data, agent.observation());
 
         this.maybeEnemyPositionNearEnemy = findEnemyPosition(agent.observation(), true);
         this.maybeEnemyPositionNearBase = findEnemyPosition(agent.observation(), false);
+    }
+
+    private void updateMyDefendableStructures(AgentData data, ObservationInterface observation) {
+        long gameLoop = observation.getGameLoop();
+        if (gameLoop > myDefendableStructuresCalculatedAt + 22L * 4) {
+            myDefendableStructures.clear();
+            List<Unit> structures = observation.getUnits(Alliance.SELF, unitInPool ->
+                data.gameData().isStructure(unitInPool.unit().getType())
+            ).stream().map(unitInPool -> unitInPool.unit()).collect(Collectors.toList());
+            myDefendableStructures.addAll(structures);
+        }
     }
 
     @Override
@@ -105,6 +123,16 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public Optional<Point2d> getMaybeEnemyPositionNearBase() {
         return maybeEnemyPositionNearBase;
+    }
+
+    @Override
+    public boolean shouldDefendLocation(Point2d location) {
+        for (Unit unit : myDefendableStructures) {
+            if (location.distance(unit.getPosition().toPoint2d()) < 10f) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void updateValidExpansions(ObservationInterface observationInterface, QueryInterface queryInterface) {

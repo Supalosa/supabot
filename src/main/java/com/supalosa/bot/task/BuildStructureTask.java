@@ -65,11 +65,11 @@ public class BuildStructureTask implements Task {
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         Optional<UnitInPool> worker = Optional.empty();
         if (assignedWorker.isEmpty()) {
-            assignedWorker = taskManager.findFreeUnit(
+            assignedWorker = taskManager.findFreeUnitForTask(
+                    this,
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             unitInPool.unit().getType().equals(Units.TERRAN_SCV)).map(unitInPool -> unitInPool.getTag());
-            taskManager.reserveUnit(assignedWorker, this);
             //assignedWorker.ifPresent(tag -> System.out.println("Reserved unit " + tag));
         } else {
             worker = assignedWorker
@@ -203,13 +203,18 @@ public class BuildStructureTask implements Task {
             agent.debug().debugTextOut(
                     "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);
-        } else if (this.assignedWorker.isPresent()) {
+        }
+        if (this.assignedWorker.isPresent()) {
             UnitInPool unitInPool = agent.observation().getUnit(this.assignedWorker.get());
             if (unitInPool == null) {
                 return;
             }
             Point point3d = unitInPool.unit().getPosition();
-            agent.debug().debugSphereOut(point3d, 1.0f, Color.YELLOW);
+            Color color = Color.YELLOW;
+            if (this.matchingUnitAtLocation.isPresent()) {
+                color = Color.GREEN;
+            }
+            agent.debug().debugSphereOut(point3d, 1.0f, color);
             agent.debug().debugTextOut(
                     "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);

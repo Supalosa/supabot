@@ -48,4 +48,10 @@ public interface MapAwareness {
      * Returns a proposed position of an enemy near our own 'base' (starting location), if applicable.
      */
     Optional<Point2d> getMaybeEnemyPositionNearBase();
+
+    /**
+     * Returns true if we should defend a given location.
+     * @TODO this should be moved to a 'decision maker' class rather than an 'awareness' class.
+     */
+    boolean shouldDefendLocation(Point2d location);
 }

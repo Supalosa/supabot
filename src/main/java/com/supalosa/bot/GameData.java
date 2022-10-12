@@ -4,8 +4,7 @@ import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * This class allows us to cache game data while also allowing us to
@@ -16,6 +15,8 @@ public class GameData {
     private final ObservationInterface observationInterface;
     private Map<UnitType, UnitTypeData> typeData = null;
     private Map<Ability, AbilityData> abilityData = null;
+    private final Map<Ability, UnitType> abilityToUnitType = new HashMap<>();
+    private Map<UnitType, Boolean> structureTypes = new HashMap<>();
 
     public GameData(ObservationInterface observationInterface) {
         this.observationInterface = observationInterface;
@@ -25,6 +26,9 @@ public class GameData {
     private Map<UnitType, UnitTypeData> getOrInitUnitTypeData() {
         if (this.typeData == null) {
             this.typeData = observationInterface.getUnitTypeData(true);
+            this.typeData.forEach((unitType, unitTypeData) -> {
+                unitTypeData.getAbility().ifPresent(ability -> this.abilityToUnitType.put(ability, unitType));
+            });
         }
         return this.typeData;
     }
@@ -97,6 +101,33 @@ public class GameData {
                 return Optional.of(1f);
             }
             return abilityData.getFootprintRadius();
+        }
+    }
+
+    public Optional<AbilityData> getAbility(Ability ability) {
+        AbilityData abilityData = getOrInitAbilityData().get(ability);
+        if (abilityData == null) {
+            return Optional.empty();
+        } else {
+            return Optional.of(abilityData);
+        }
+    }
+
+    public Optional<UnitType> getUnitBuiltByAbilility(Ability ability) {
+        getOrInitUnitTypeData();
+        return Optional.ofNullable(abilityToUnitType.get(ability));
+    }
+
+    public boolean isStructure(UnitType unitType) {
+        if (!structureTypes.containsKey(unitType)) {
+            Optional<UnitTypeData> maybeUnitTypeData = getUnitTypeData(unitType);
+            boolean isStructure = maybeUnitTypeData
+                    .map(unitTypeData -> unitTypeData.getAttributes().contains(UnitAttribute.STRUCTURE))
+                    .orElse(false);
+            structureTypes.put(unitType, isStructure);
+            return isStructure;
+        } else {
+            return structureTypes.get(unitType);
         }
     }
 }

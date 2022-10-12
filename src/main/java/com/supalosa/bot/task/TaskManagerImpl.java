@@ -11,6 +11,8 @@ import com.supalosa.bot.AgentData;
 
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class TaskManagerImpl implements TaskManager {
 
@@ -40,10 +42,29 @@ public class TaskManagerImpl implements TaskManager {
     }
 
     @Override
-    public Optional<UnitInPool> findFreeUnit(ObservationInterface observationInterface, Predicate<UnitInPool> predicate) {
-        return observationInterface.getUnits(unitInPool ->
+    public Optional<UnitInPool> findFreeUnitForTask(Task task, ObservationInterface observationInterface, Predicate<UnitInPool> predicate) {
+        return findFreeUnitForTask(task, observationInterface, predicate, null);
+    }
+
+    @Override
+    public Optional<UnitInPool> findFreeUnitForTask(Task task, ObservationInterface observationInterface,
+                                             Predicate<UnitInPool> predicate,
+                                             Comparator<UnitInPool> comparator) {
+        Stream<UnitInPool> freeUnits = observationInterface.getUnits(unitInPool ->
                 !unitToTaskMap.containsKey(unitInPool.getTag()) &&
-                predicate.test(unitInPool)).stream().findAny();
+                        predicate.test(unitInPool)).stream();
+
+        if (comparator == null) {
+            return freeUnits.findAny().map(unit -> {
+                this.reserveUnit(unit.getTag(), task);
+                return unit;
+            });
+        } else {
+            return freeUnits.sorted(comparator).findFirst().map(unit -> {
+                this.reserveUnit(unit.getTag(), task);
+                return unit;
+            });
+        }
     }
 
     @Override

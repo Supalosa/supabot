@@ -7,6 +7,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -39,13 +40,28 @@ public interface TaskManager {
     void reserveUnit(Optional<Tag> unit, Task task);
 
     /**
-     * Finds a free unit that is not reserved.
+     * Finds a free unit that is not reserved. It will be reserved for the task until that task is complete.
      *
      * @param observationInterface Interface to test with.
      * @param predicate Predicate that is used to find appropriate unit.
      * @return Optional unit if unreserved unit is found matching predicate, or empty.
      */
-    Optional<UnitInPool> findFreeUnit(ObservationInterface observationInterface, Predicate<UnitInPool> predicate);
+    Optional<UnitInPool> findFreeUnitForTask(Task task,
+                                             ObservationInterface observationInterface,
+                                             Predicate<UnitInPool> predicate);
+
+    /**
+     * Finds a free unit that is not reserved. It will be reserved for the task until that task is complete.
+     *
+     * @param observationInterface Interface to test with.
+     * @param predicate Predicate that is used to find appropriate unit.
+     * @param comparator Comparator used to order candidates.
+     * @return Optional unit if unreserved unit is found matching predicate, or empty.
+     */
+    Optional<UnitInPool> findFreeUnitForTask(Task task,
+                                             ObservationInterface observationInterface,
+                                             Predicate<UnitInPool> predicate,
+                                             Comparator<UnitInPool> comparator);
 
     void onStep(AgentData data, S2Agent agent);
 

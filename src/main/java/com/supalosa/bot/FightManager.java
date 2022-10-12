@@ -190,9 +190,11 @@ public class FightManager {
         }
     }
 
+    // Get size (in unit count) of the reserve army before it should add it to the attacking army.
     public int getTargetMarines() {
-        int myFoodCap = agent.observation().getFoodCap() - attackingArmy.size();
-        int result = Math.max(10, Math.min(20, (int)(myFoodCap * 0.75)));
+        int attackingArmySize = attackingArmy.size();
+        int myFoodCap = agent.observation().getFoodCap() - attackingArmySize;
+        int result = Math.max(10, Math.min(attackingArmySize / 2, (int)(myFoodCap * 0.75)));
         return result;
     }
 
