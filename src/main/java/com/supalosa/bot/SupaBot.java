@@ -106,11 +106,11 @@ public class SupaBot extends S2Agent implements AgentData {
         if (supply > 70) {
             tryBuildMax(Abilities.BUILD_ENGINEERING_BAY, Units.TERRAN_ENGINEERING_BAY, Units.TERRAN_SCV, 1, 2);
         }
-        if (supply > 80) {
+        if (supply > 100) {
             tryBuildMax(Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1);
         }
-        if (supply > 100) {
-            tryBuildMax(Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 1, 1);
+        if (supply > 80) {
+            tryBuildMax(Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 1, supply > 160 ? 2 : 1);
             observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
@@ -198,7 +198,7 @@ public class SupaBot extends S2Agent implements AgentData {
         tryBuildScvs();
         int marineCount = countUnitType(Units.TERRAN_MARINE);
         tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10,
-                marineCount / 10)));
+                marineCount / 6)));
         if (marineCount > 10) {
             tryBuildUnit(Abilities.TRAIN_MARAUDER, Units.TERRAN_MARAUDER, Units.TERRAN_BARRACKS,
                     Optional.of(Math.min(25, marineCount / 2)));
@@ -519,7 +519,7 @@ public class SupaBot extends S2Agent implements AgentData {
 
     private boolean needsRefinery() {
         return observation().getFoodWorkers() > 24 &&
-                countUnitType(Units.TERRAN_REFINERY) < countUnitType(Constants.TERRAN_CC_TYPES_ARRAY) * 1;
+                countUnitType(Units.TERRAN_REFINERY) < countUnitType(Constants.TERRAN_CC_TYPES_ARRAY) * (observation().getFoodCap() > 100 ? 2 : 1);
     }
 
     private boolean tryBuildRefinery() {

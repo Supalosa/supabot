@@ -192,6 +192,10 @@ public class FightManager {
         unitsToAttackWith.removeAll(unitsRetreatingUntil.keySet());
         boolean attackWithAll = false;
         if (unitsToAttackWith.size() > 0) {
+            // TODO better detection of 'move-only' units.
+            Set<Tag> unitsThatMustMove = observationInterface.getUnits(unitInPool ->
+                unitsToAttackWith.contains(unitInPool.getTag()) && unitInPool.unit().getType() == Units.TERRAN_MEDIVAC
+            ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
             if (centreOfMass.isPresent()) {
                 List<Unit> farUnits = new ArrayList<>();
                 List<Unit> nearUnits = observationInterface.getUnits(unitInPool ->
@@ -212,20 +216,29 @@ public class FightManager {
                     // For now all near and far units attack move to regroup
                     if (farUnits.size() > 0) {
                         centreOfMass.ifPresent(point2d ->
-                                agent.actions().unitCommand(farUnits, Abilities.ATTACK_ATTACK, point2d, false));
+                                agent.actions().unitCommand(farUnits, Abilities.MOVE, point2d, false));
                     }
                     if (nearUnits.size() > 0) {
-                        defencePosition.ifPresent(point2d ->
-                                agent.actions().unitCommand(nearUnits, Abilities.ATTACK_ATTACK, point2d, false));
+                        centreOfMass.ifPresent(point2d ->
+                                agent.actions().unitCommand(nearUnits, Abilities.ATTACK, point2d, false));
                     }
                 }
             } else {
                 attackWithAll = true;
             }
             if (attackWithAll) {
-                attackPosition.ifPresentOrElse(point2d ->
-                                agent.actions().unitCommand(unitsToAttackWith, Abilities.ATTACK_ATTACK, point2d, false),
-                        () -> defencePosition.ifPresent(point2d -> agent.actions().unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
+                unitsToAttackWith.removeAll(unitsThatMustMove);
+                if (unitsToAttackWith.size() > 0) {
+                    attackPosition.ifPresentOrElse(point2d ->
+                                    agent.actions().unitCommand(unitsToAttackWith, Abilities.ATTACK, point2d, false),
+                            () -> defencePosition.ifPresent(point2d -> agent.actions().unitCommand(unitsToAttackWith,
+                                    Abilities.MOVE, point2d, false)));
+                }
+                if (unitsThatMustMove.size() > 0) {
+                    centreOfMass.ifPresentOrElse(point2d ->
+                                    agent.actions().unitCommand(unitsThatMustMove, Abilities.ATTACK, point2d, false),
+                            () -> defencePosition.ifPresent(point2d -> agent.actions().unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
+                }
             }
         }
     }
