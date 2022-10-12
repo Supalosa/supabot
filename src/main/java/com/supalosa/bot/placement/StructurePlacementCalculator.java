@@ -434,8 +434,12 @@ public class StructurePlacementCalculator {
                 Point2d.of(0, 0),
                 Point2d.of(radius * 2f, radius * 2f),
                 unitType);
+        Point2d outputOffset = modifiedFootprint.getLeft();
         Point2d newFootprint = modifiedFootprint.getRight();
-        return suggestLocationForFreePlacement(position, searchRadius, width, height);
+        return suggestLocationForFreePlacement(position, searchRadius,
+                (int)newFootprint.getX(),
+                (int)newFootprint.getY()).map(outputPosition ->
+                outputPosition.add(outputOffset));
     }
 
     private boolean canPlaceAt(Point2d origin, int width, int height) {
