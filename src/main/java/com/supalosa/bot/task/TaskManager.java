@@ -69,9 +69,10 @@ public interface TaskManager {
      * Adds a task to be tracked and executed by the task manager.
      *
      * @param task Task to add.
+     * @param maxParallel Max parallel 'similar' tasks to run.
      * @return True if the task is accepted, false if not.
      */
-    boolean addTask(Task task);
+    boolean addTask(Task task, int maxParallel);
 
     int countSimilarTasks(Task task);
 

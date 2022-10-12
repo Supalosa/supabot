@@ -45,6 +45,7 @@ dependencies {
     implementation 'org.danilopianini:java-quadtree:0.2.0'
 
     annotationProcessor 'org.immutables:value:2.9.2'
+    annotationProcessor 'org.immutables:builder:2.9.2'
     compileOnly 'org.immutables:value:2.9.2'
 }
 

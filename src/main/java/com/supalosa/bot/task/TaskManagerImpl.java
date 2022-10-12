@@ -94,7 +94,12 @@ public class TaskManagerImpl implements TaskManager {
     }
 
     @Override
-    public boolean addTask(Task task) {
+    public boolean addTask(Task task, int maxParallel) {
+        int similarCount = this.countSimilarTasks(task);
+        //System.out.println(unitTypeForStructure + ": " + similarCount);
+        if (similarCount >= maxParallel) {
+            return false;
+        }
         if (taskSet.containsKey(task.getKey())) {
             return false;
         }
@@ -117,6 +122,12 @@ public class TaskManagerImpl implements TaskManager {
             task.debug(agent);
             agent.debug().debugTextOut(task.getDebugText(), Point2d.of(0.01f, yPosition), Color.WHITE, 8);
             yPosition += (spacing);
+        }
+        for (Map.Entry<Tag, Task> entry : unitToTaskMap.entrySet()) {
+            UnitInPool unitInPool = agent.observation().getUnit(entry.getKey());
+            if (unitInPool != null) {
+                agent.debug().debugSphereOut(unitInPool.unit().getPosition(), 0.5f, Color.YELLOW);
+            }
         }
     }
 }

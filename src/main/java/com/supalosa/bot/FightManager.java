@@ -7,6 +7,9 @@ import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.*;
+import com.supalosa.bot.task.BuildStructureTask;
+import com.supalosa.bot.task.RepairTask;
+import com.supalosa.bot.task.TaskManager;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,7 +49,7 @@ public class FightManager {
         this.defencePosition = defencePosition;
     }
 
-    public void onStep() {
+    public void onStep(TaskManager taskManager, AgentData data) {
         attackingArmy = attackingArmy.stream().filter(tag -> {
                     UnitInPool unit = agent.observation().getUnit(tag);
                     return (unit != null && unit.isAlive());
@@ -61,22 +64,27 @@ public class FightManager {
         }
 
         Set<Tag> unitsRetreatingThisTick = new HashSet<>();
-        attackingArmy.stream().forEach(tag -> {
-            UnitInPool unit = agent.observation().getUnit(tag);
+        agent.observation().getUnits(Alliance.SELF).stream().forEach(unit -> {
             float health = unit.unit().getHealth().orElse(0.0f);
+            Tag tag = unit.getTag();
 
             if (rememberedUnitHealth.containsKey(tag) &&
-                    unitCannotRetreatUntil.getOrDefault(tag, 0L) < gameLoop &&
                     unit.unit().getHealth().isPresent() &&
                     unit.unit().getHealth().get() < rememberedUnitHealth.get(tag)) {
                 //System.out.println("Unit " + tag + " started retreating");
-                unitsRetreatingUntil.put(tag, gameLoop + 22); // approx 1 sec.
-                unitCannotRetreatUntil.put(tag, gameLoop + 224); // approx 10 seconds
-                unitsRetreatingThisTick.add(tag);
+                float prevHealth = rememberedUnitHealth.get(tag);
+                float currentHealth = unit.unit().getHealth().get();
+                if (attackingArmy.contains(tag) && unitCannotRetreatUntil.getOrDefault(tag, 0L) < gameLoop) {
+                    unitsRetreatingUntil.put(tag, gameLoop + 22); // approx 1 sec.
+                    unitCannotRetreatUntil.put(tag, gameLoop + 224); // approx 10 seconds
+                    unitsRetreatingThisTick.add(tag);
+                }
+                if (data.gameData().isStructure(unit.unit().getType())) {
+                    createRepairTask(taskManager, unit.unit());
+                }
             }
             rememberedUnitHealth.put(tag, health);
         });
-
         if (gameLoop > lastCloakOrBurrowedUpdate + CLOAK_OR_BURROW_UPDATE_INTERVAL) {
             updateCloakOrBurrowed();
             lastCloakOrBurrowedUpdate = gameLoop;
@@ -150,6 +158,11 @@ public class FightManager {
         this.cloakedOrBurrowedUnitClusters = new ArrayList<>();
         Map<Point, List<UnitInPool>> clusters = Expansions.cluster(cloakedOrBurrowedUips, 8f);
         this.cloakedOrBurrowedUnitClusters = clusters.keySet().stream().map(Point::toPoint2d).collect(Collectors.toList());
+    }
+
+    private boolean createRepairTask(TaskManager taskManager, Unit unitToRepair) {
+        RepairTask maybeTask = new RepairTask(unitToRepair.getTag());
+        return taskManager.addTask(maybeTask, 1);
     }
 
     public List<Point2d> getCloakedOrBurrowedUnitClusters() {
