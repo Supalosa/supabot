@@ -129,7 +129,7 @@ public class BuildStructureTask implements Task {
                         agent.actions().unitCommand(assignedWorker.get(), ability, target, false)
                     );
                 }
-                System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
+                //System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
                 lastBuildAttempt = gameLoop;
                 ++buildAttempts;
             }
@@ -137,12 +137,7 @@ public class BuildStructureTask implements Task {
         if (matchingUnitAtLocation.isPresent()) {
             UnitInPool actualUnit = agent.observation().getUnit(matchingUnitAtLocation.get());
             if (actualUnit != null && actualUnit.getUnit().isPresent() && actualUnit.getUnit().get().getBuildProgress() > 0.99) {
-                //System.out.println(targetUnitType + ": " + actualUnit.getUnit().get().getBuildProgress());
                 isComplete = true;
-            }
-            if (isComplete) {
-                agent.actions().sendChat("Finished: " + targetUnitType, ActionChat.Channel.TEAM);
-                //System.out.println(targetUnitType + ": " + actualUnit.getUnit().get().getBuildProgress());
             }
         }
         //System.out.println("Onstep for task " + targetUnitType.toString() + " (Worker: " + worker + ",
@@ -222,6 +217,6 @@ public class BuildStructureTask implements Task {
 
     @Override
     public String getDebugText() {
-        return "Build " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere");
+        return "[" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS + "] Build " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere");
     }
 }
