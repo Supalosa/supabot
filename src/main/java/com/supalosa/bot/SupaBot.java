@@ -1,17 +1,11 @@
 package com.supalosa.bot;
 
-import SC2APIProtocol.Spatial;
 import com.github.ocraft.s2client.bot.S2Agent;
-import com.github.ocraft.s2client.bot.gateway.ExpansionParameters;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.ChatReceived;
-import com.github.ocraft.s2client.protocol.observation.Observation;
-import com.github.ocraft.s2client.protocol.observation.raw.MapState;
-import com.github.ocraft.s2client.protocol.observation.raw.ObservationRaw;
-import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
@@ -23,12 +17,11 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
+import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.BuildStructureTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.TaskManagerImpl;
-import org.danilopianini.util.FlexibleQuadTree;
-import org.danilopianini.util.SpatialIndex;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -44,8 +37,8 @@ public class SupaBot extends S2Agent implements AgentData {
     private final TaskManager taskManager;
     private final FightManager fightManager;
     private final GameData gameData;
+    private final MapAwareness mapAwareness;
     private final long lastGasCheck = 0L;
-    private final long expansionsValidatedAt = 0L;
     private final LoadingCache<UnitType, Integer> countOfUnits = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.SECONDS)
@@ -56,14 +49,7 @@ public class SupaBot extends S2Agent implements AgentData {
                     return count;
                 }
             });
-    private final Map<Expansion, Long> expansionLastAttempted = new HashMap<>();
-    LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
     private boolean isDebug;
-    private List<Expansion> expansionLocations = null;
-    private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
-    private Set<Point2d> unscoutedLocations = new HashSet<>();
-    private Set<Tag> scoutingWith = new HashSet<>();
-    private long scoutResetLoopTime = 0;
     private Optional<AnalysisResults> mapAnalysis = Optional.empty();
     private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
     private Map<UnitType, UnitTypeData> unitTypeData = null;
@@ -74,15 +60,14 @@ public class SupaBot extends S2Agent implements AgentData {
 
     public SupaBot(boolean isDebug) {
         this.isDebug = isDebug;
-        taskManager = new TaskManagerImpl();
-        fightManager = new FightManager(this);
+        this.taskManager = new TaskManagerImpl();
+        this.fightManager = new FightManager(this);
+        this.mapAwareness = new MapAwareness();
         this.gameData = new GameData(observation());
     }
 
     @Override
     public void onGameStart() {
-        System.out.println("Hello world of Starcraft II bots!");
-
         this.unitTypeData = observation().getUnitTypeData(true);
         mapAnalysis = observation().getGameInfo().getStartRaw().map(startRaw -> AnalyseMap.analyse(
                 observation(),
@@ -90,92 +75,11 @@ public class SupaBot extends S2Agent implements AgentData {
         structurePlacementCalculator = mapAnalysis
                 .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData,
                         observation().getStartLocation().toPoint2d()));
-    }
-
-    private void manageScouting() {
-
-        if (knownEnemyStartLocation.isEmpty()) {
-            Optional<Point2d> randomEnemyPosition = findRandomEnemyPosition();
-            if (observation().getFoodUsed() > 20 && scoutingWith.size() == 0 && randomEnemyPosition.isPresent()) {
-                Optional<Unit> randomScv = getRandomUnit(Units.TERRAN_SCV).flatMap(UnitInPool::getUnit);
-                randomScv.ifPresent(scv -> {
-                    scoutingWith.add(scv.getTag());
-                    actions().unitCommand(scv, Abilities.MOVE, randomEnemyPosition.get(), false);
-                });
-            }
-            scoutingWith =
-                    scoutingWith.stream().filter(tag -> observation().getUnit(tag).isAlive()).collect(Collectors.toSet());
-            observation().getGameInfo().getStartRaw().ifPresent(startRaw -> {
-                // Note: startRaw.getStartLocations() is actually potential `enemy` locations.
-                // If there's only one enemy location, the opponent is there.
-                Set<Point2d> enemyStartLocations = startRaw.getStartLocations();
-                if (enemyStartLocations.size() == 1) {
-                    knownEnemyStartLocation = enemyStartLocations.stream().findFirst();
-                    System.out.println("Pre-determined enemy location at " + knownEnemyStartLocation.get());
-                } else if (unitTypeData != null) {
-                    List<Unit> enemyStructures = observation().getUnits(
-                                    unitInPool -> unitInPool.getUnit().filter(
-                                            unit -> unit.getAlliance() == Alliance.ENEMY &&
-                                                    unitTypeData.get(unit.getType()).getAttributes().contains(UnitAttribute.STRUCTURE)
-                                    ).isPresent())
-                            .stream()
-                            .filter(unitInPool -> unitInPool.getUnit().isPresent())
-                            .map(unitInPool -> unitInPool.getUnit().get())
-                            .collect(Collectors.toList());
-                    for (Unit enemyStructure : enemyStructures) {
-                        Point2d position = enemyStructure.getPosition().toPoint2d();
-                        for (Point2d enemyStartLocation : enemyStartLocations) {
-                            if (position.distance(enemyStartLocation) < 10) {
-                                System.out.println("Scouted enemy location at " + enemyStartLocation);
-                                knownEnemyStartLocation = Optional.of(enemyStartLocation);
-                                return;
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        //debug().debugIgnoreMineral();
-
-        // Score expansions based on known enemy start location.
-        if (expansionLocations == null && knownEnemyStartLocation.isPresent() && observation().getGameLoop() > 200) {
-            ExpansionParameters parameters = ExpansionParameters.from(
-                    List.of(6.4, 5.3, 5.1),
-                    0.25,
-                    15.0);
-            expansionLocations = Expansions.processExpansions(
-                    observation(),
-                    query(),
-                    observation().getStartLocation().toPoint2d(),
-                    knownEnemyStartLocation.get(),
-                    Expansions.calculateExpansionLocations(observation(), query(), parameters));
-            structurePlacementCalculator.ifPresent(spc -> spc.handleExpansions(expansionLocations));
-            sendTeamChat("Calculated expansions (" + expansionLocations.size() + ")");
-        }
-        if (observation().getGameLoop() > scoutResetLoopTime) {
-            observation().getGameInfo().getStartRaw().ifPresent(startRaw -> {
-                unscoutedLocations = new HashSet<>(startRaw.getStartLocations());
-            });
-            if (expansionLocations != null) {
-                expansionLocations.forEach(expansion -> unscoutedLocations.add(expansion.position().toPoint2d()));
-            }
-            scoutResetLoopTime = observation().getGameLoop() + 22 * 300;
-        }
-        if (unscoutedLocations.size() > 0) {
-            unscoutedLocations = unscoutedLocations.stream()
-                    .filter(point -> observation().getVisibility(point) != Visibility.VISIBLE)
-                    .collect(Collectors.toSet());
-        }
+        this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
     }
 
     @Override
     public void onStep() {
-        /*if (observation().getGameLoop() == 0) {
-            observation().getGameInfo().getStartRaw().ifPresent(startRaw -> AnalyseMap.analyse(
-                    observation().getStartLocation(),
-                    startRaw));
-        }*/
         // TESTING
         /*SpatialIndex<Unit> unitMap = new FlexibleQuadTree<>();
         observation().getUnits().forEach(unitInPool -> {
@@ -184,8 +88,7 @@ public class SupaBot extends S2Agent implements AgentData {
         });*/
 
         countOfUnits.invalidateAll();
-        updateValidExpansions();
-        manageScouting();
+        mapAwareness.onStep(this, this);
         tryBuildSupplyDepot();
         tryBuildBarracks();
         tryBuildCommandCentre();
@@ -305,7 +208,7 @@ public class SupaBot extends S2Agent implements AgentData {
 
         taskManager.onStep(this, this);
 
-        fightManager.setAttackPosition(findEnemyPosition(true));
+        fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
         fightManager.onStep();
 
         Optional<UnitInPool> randomCc = getRandomUnit(Units.TERRAN_COMMAND_CENTER);
@@ -352,7 +255,7 @@ public class SupaBot extends S2Agent implements AgentData {
             fightManager.setDefencePosition(defencePosition);
         });
 
-        Optional<Point2d> nearestEnemy = findEnemyPosition(false);
+        Optional<Point2d> nearestEnemy = mapAwareness.getMaybeEnemyPositionNearBase();
         if (nearestEnemy.isPresent()) {
             if (observation().getStartLocation().toPoint2d().distance(nearestEnemy.get()) < 30) {
                 fightManager.setDefencePosition(nearestEnemy);
@@ -383,14 +286,6 @@ public class SupaBot extends S2Agent implements AgentData {
         }
 
         if (isDebug) {
-            if (this.expansionLocations != null) {
-                this.expansionLocations.forEach(expansion -> {
-                    debug().debugBoxOut(
-                            expansion.position().add(Point.of(-2.5f, -2.5f, 0.1f)),
-                            expansion.position().add(Point.of(2.5f, 2.5f, 0.1f)),
-                            Color.WHITE);
-                });
-            }
             if (this.taskManager != null) {
                 this.taskManager.debug(this);
             }
@@ -467,7 +362,7 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     private boolean needsCommandCentre() {
-        final int[] expansionSupply = new int[]{0, 18, 36, 80, 128, 172, 196};
+        final int[] expansionSupply = new int[]{0, 18, 72, 128, 156, 172, 196};
         int currentSupply = observation().getFoodUsed();
         int numCcs = countMiningBases();
         int index = Math.min(expansionSupply.length - 1, Math.max(0, numCcs));
@@ -482,7 +377,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (crisisMode) {
             return false;
         }
-        if (this.validExpansionLocations.size() == 0) {
+        if (this.mapAwareness.getValidExpansionLocations().isEmpty()) {
             return false;
         }
         return currentSupply >= nextExpansionAt;
@@ -501,49 +396,28 @@ public class SupaBot extends S2Agent implements AgentData {
         if (!needsCommandCentre()) {
             return false;
         }
-        if (this.expansionLocations == null || this.expansionLocations.size() == 0) {
-            actions().sendChat("ExpansionLocations missing", ActionChat.Channel.TEAM);
+        if (this.mapAwareness.getValidExpansionLocations().isEmpty()) {
+            actions().sendChat("Valid Expansions missing or empty", ActionChat.Channel.TEAM);
             return false;
         }
         if (observation().getMinerals() < 400) {
             return false;
         }
         long gameLoop = observation().getGameLoop();
-        updateValidExpansions();
-        //actions().sendChat("ExpansionLocations: " + this.validExpansionLocations.size(), ActionChat.Channel.TEAM);
-
-        for (Expansion validExpansionLocation : this.validExpansionLocations) {
+        for (Expansion validExpansionLocation : this.mapAwareness.getValidExpansionLocations().get()) {
             if (tryBuildStructure(
                     Abilities.BUILD_COMMAND_CENTER,
                     Units.TERRAN_COMMAND_CENTER,
                     Units.TERRAN_SCV,
                     1,
                     Optional.of(validExpansionLocation.position().toPoint2d()))) {
-                expansionLastAttempted.put(validExpansionLocation, gameLoop);
+                this.mapAwareness.onExpansionAttempted(validExpansionLocation, gameLoop);
                 lastExpansionTime = gameLoop;
                 System.out.println("Attempting to build command centre at " + validExpansionLocation);
                 return true;
             }
         }
         return false;
-    }
-
-    private void updateValidExpansions() {
-        long gameLoop = observation().getGameLoop();
-        if (this.expansionLocations != null && gameLoop > expansionsValidatedAt * 44L) {
-            // ExpansionLocations is ordered by distance to start point.
-            this.validExpansionLocations = new LinkedHashSet<>();
-            for (Expansion expansion : this.expansionLocations) {
-                if (!observation().isPlacable(expansion.position().toPoint2d())) {
-                    continue;
-                }
-                if (query().placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
-                    if (expansionLastAttempted.getOrDefault(expansion, 0L) < gameLoop - (15 * 22L)) {
-                        this.validExpansionLocations.add(expansion);
-                    }
-                }
-            }
-        }
     }
 
     private boolean needsSupplyDepot() {
@@ -917,37 +791,6 @@ public class SupaBot extends S2Agent implements AgentData {
         }*/
     }
 
-    // Finds a worthwhile enemy position to move units towards.
-    private Optional<Point2d> findEnemyPosition(boolean nearEnemyBase) {
-        Point startLocation = observation().getStartLocation();
-        Comparator<UnitInPool> comparator =
-                Comparator.comparing(unit -> unit.unit().getPosition().distance(startLocation));
-        if (nearEnemyBase && knownEnemyStartLocation.isPresent()) {
-            comparator =
-                    Comparator.comparing(unit -> unit.unit().getPosition().toPoint2d().distance(knownEnemyStartLocation.get()));
-        }
-        List<UnitInPool> enemyUnits = observation().getUnits(Alliance.ENEMY);
-        if (enemyUnits.size() > 0) {
-            // Move towards the closest to our base (for now)
-            return enemyUnits.stream()
-                    .min(comparator)
-                    .map(minUnit -> minUnit.unit().getPosition().toPoint2d())
-                    .or(() -> findRandomEnemyPosition());
-        } else {
-            return findRandomEnemyPosition();
-        }
-    }
-
-    // Tries to find a random location that can be pathed to on the map.
-    // Returns Point2d if a new, random location has been found that is pathable by the unit.
-    private Optional<Point2d> findRandomEnemyPosition() {
-        if (unscoutedLocations.size() > 0) {
-            return Optional.of(new ArrayList<>(unscoutedLocations)
-                    .get(ThreadLocalRandom.current().nextInt(unscoutedLocations.size())));
-        } else {
-            return Optional.empty();
-        }
-    }
 
     @Override
     public Optional<StructurePlacementCalculator> structurePlacementCalculator() {
@@ -957,5 +800,10 @@ public class SupaBot extends S2Agent implements AgentData {
     @Override
     public GameData gameData() {
         return gameData;
+    }
+
+    @Override
+    public MapAwareness mapAwareness() {
+        return mapAwareness;
     }
 }
