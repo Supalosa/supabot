@@ -18,6 +18,7 @@ import com.google.common.cache.LoadingCache;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.awareness.MapAwarenessImpl;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.BuildStructureTask;
 import com.supalosa.bot.task.TaskManager;
@@ -62,7 +63,7 @@ public class SupaBot extends S2Agent implements AgentData {
         this.isDebug = isDebug;
         this.taskManager = new TaskManagerImpl();
         this.fightManager = new FightManager(this);
-        this.mapAwareness = new MapAwareness();
+        this.mapAwareness = new MapAwarenessImpl();
         this.gameData = new GameData(observation());
     }
 
