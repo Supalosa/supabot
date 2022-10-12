@@ -205,8 +205,6 @@ public class SupaBot extends S2Agent implements AgentData {
         rebalanceWorkers();
 
         mineGas();
-        Map<Ability, AbilityData> abilities = observation().getAbilityData(true);
-
         taskManager.onStep(this, this);
 
         fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
@@ -219,7 +217,7 @@ public class SupaBot extends S2Agent implements AgentData {
             fightManager.setDefencePosition(Optional.empty());
         }
 
-        // update ramp
+        // Open or close the ramp.
         structurePlacementCalculator.ifPresent(spc -> {
             AtomicBoolean rampClosed = new AtomicBoolean(false);
             spc.getFirstSupplyDepot(observation()).ifPresent(supplyDepot -> {
@@ -263,7 +261,7 @@ public class SupaBot extends S2Agent implements AgentData {
             }
         }
 
-        // HACK
+        // HACK - crisis mode (which affects whether marines are built or not)
         if (observation().getFoodUsed() < 24) {
             Point start = observation().getStartLocation();
             long unitsNearBase = observation().getUnits(Alliance.ENEMY).stream().filter(unitInPool ->
