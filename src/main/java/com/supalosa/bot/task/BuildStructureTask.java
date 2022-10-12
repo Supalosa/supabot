@@ -110,7 +110,7 @@ public class BuildStructureTask implements Task {
             }
             return false;
         })) {
-            agent.actions().sendChat("Failed: " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere"), ActionChat.Channel.TEAM);
+            agent.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
             System.out.println("BuildTask " + targetUnitType + " failed");
             isComplete = true;
         }
@@ -218,5 +218,10 @@ public class BuildStructureTask implements Task {
                     "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);
         }
+    }
+
+    @Override
+    public String getDebugText() {
+        return "Build " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere");
     }
 }

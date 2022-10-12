@@ -26,4 +26,6 @@ public interface Task {
     boolean isSimilarTo(Task otherTask);
 
     void debug(S2Agent agent);
+
+    String getDebugText();
 }

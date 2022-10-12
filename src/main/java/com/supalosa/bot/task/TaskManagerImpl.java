@@ -4,6 +4,8 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
+import com.github.ocraft.s2client.protocol.debug.Color;
+import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.AgentData;
 
@@ -86,8 +88,14 @@ public class TaskManagerImpl implements TaskManager {
 
     @Override
     public void debug(S2Agent agent) {
-        taskSet.forEach((key, task) -> {
-           task.debug(agent);
-        });
+        agent.debug().debugTextOut("Tasks (" + taskSet.size() + ")", Point2d.of(0.01f, 0.0f), Color.WHITE, 8);
+        final float spacing = 0.01f;
+        float yPosition = 0.01f;
+        for (Map.Entry<String, Task> entry : taskSet.entrySet()) {
+            Task task = entry.getValue();
+            task.debug(agent);
+            agent.debug().debugTextOut(task.getDebugText(), Point2d.of(0.01f, yPosition), Color.WHITE, 8);
+            yPosition += (spacing);
+        }
     }
 }
