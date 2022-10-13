@@ -15,15 +15,15 @@ import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.MapAwarenessImpl;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
-import com.supalosa.bot.task.BuildStructureTask;
-import com.supalosa.bot.task.TaskManager;
-import com.supalosa.bot.task.TaskManagerImpl;
+import com.supalosa.bot.task.*;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 
@@ -63,6 +63,8 @@ public class SupaBot extends S2Agent implements AgentData {
     private long lastRebalanceAt = 0L;
     private Long lastExpansionTime = 0L;
 
+    private Multimap<Integer, Task> singletonTasksToDispatch = ArrayListMultimap.create();
+
     public SupaBot(boolean isDebug) {
         this.isDebug = isDebug;
         this.taskManager = new TaskManagerImpl();
@@ -81,6 +83,8 @@ public class SupaBot extends S2Agent implements AgentData {
                 .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData,
                         observation().getStartLocation().toPoint2d()));
         this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
+
+        dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemy(), 2));
     }
 
     @Override
@@ -102,6 +106,7 @@ public class SupaBot extends S2Agent implements AgentData {
         tryBuildCommandCentre();
         tryBuildRefinery();
         int supply = observation().getFoodUsed();
+
         if (supply > 60) {
             tryBuildMax(Abilities.BUILD_FACTORY, Units.TERRAN_FACTORY, Units.TERRAN_SCV, 1, 1);
         }
@@ -116,13 +121,12 @@ public class SupaBot extends S2Agent implements AgentData {
             observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
-                actions().unitCommand(unit.unit(), Abilities.BUILD_REACTOR, unit.unit().getPosition().toPoint2d(),
+                actions().unitCommand(unit.unit(), Abilities.BUILD_TECHLAB_STARPORT, unit.unit().getPosition().toPoint2d(),
                         false);
             });
         }
+        Set<Upgrade> upgrades = new HashSet<>(observation().getUpgrades());
         if (supply > 50) {
-            //Map<Upgrade, UpgradeData> upgradeData = observation().getUpgradeData(false);
-            Set<Upgrade> upgrades = new HashSet<>(observation().getUpgrades());
             observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
@@ -132,43 +136,25 @@ public class SupaBot extends S2Agent implements AgentData {
                 }
                 actions().unitCommand(unit.unit(), ability, unit.unit().getPosition().toPoint2d(), false);
             });
-            if (!upgrades.contains(Upgrades.COMBAT_SHIELD) || !upgrades.contains(Upgrades.STIMPACK)) {
-                observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                        UnitInPool.isUnit(Units.TERRAN_BARRACKS_TECHLAB).test(unitInPool)).forEach(unit -> {
-                    if (unit.unit().getOrders().isEmpty()) {
-                        if (!upgrades.contains(Upgrades.COMBAT_SHIELD)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_COMBAT_SHIELD, false);
-                        }
-                        if (!upgrades.contains(Upgrades.STIMPACK)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_STIMPACK, false);
-                        }
-                    }
-                });
-                observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                        UnitInPool.isUnit(Units.TERRAN_ENGINEERING_BAY).test(unitInPool)).forEach(unit -> {
-                    if (unit.unit().getOrders().isEmpty()) {
-                        if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
-                                    false);
-                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2,
-                                    false);
-                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3,
-                                    false);
-                        }
-                        if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL1, false);
-                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL2, false);
-                        } else if (!upgrades.contains(Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3)) {
-                            actions().unitCommand(unit.unit(), Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL3, false);
-                        }
-                    }
-                });
-            }
+                tryGetUpgrades(upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
+                    Upgrades.COMBAT_SHIELD, Abilities.RESEARCH_COMBAT_SHIELD,
+                    Upgrades.STIMPACK, Abilities.RESEARCH_STIMPACK,
+                    Upgrades.JACKHAMMER_CONCUSSION_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
+            ));
+            tryGetUpgrades(upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
+                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
+                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2,
+                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3,
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL1,
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL2,
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL3
+            ));
         }
-
+        if (supply > 120) {
+            tryGetUpgrades(upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
+                    Upgrades.TERRAN_BUILDING_ARMOR, Abilities.RESEARCH_TERRAN_STRUCTURE_ARMOR_UPGRADE
+            ));
+        }
         // upgrade orbital/planetaries
         int numCcs = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
         observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
@@ -180,7 +166,7 @@ public class SupaBot extends S2Agent implements AgentData {
             actions().unitCommand(unit.unit(), ability, false);
         });
         // land mules and scan cloaked items
-        float reserveCcEnergy = (fightManager.hasSeenCloakedOrBurrowedUnits() ? 85f : 50f);
+        float reserveCcEnergy = (fightManager.hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
         Set<Point2d> scanClusters = new HashSet<>(fightManager.getCloakedOrBurrowedUnitClusters());
         long gameLoop = observation().getGameLoop();
         new HashMap<>(scannedClusters).forEach((scannedCluster, time) -> {
@@ -211,6 +197,11 @@ public class SupaBot extends S2Agent implements AgentData {
         });
         tryBuildScvs();
         int marineCount = countUnitType(Units.TERRAN_MARINE);
+        if (fightManager.hasSeenCloakedOrBurrowedUnits() ||
+                mapAwareness.getObservedCreepCoverage().map(coverage -> coverage > 0.1f).orElse(false)) {
+            System.out.println("Requesting raven due to creep coverage.");
+            tryBuildUnit(Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, Optional.of(1));
+        }
         tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10,
                 marineCount / 6)));
         if (marineCount > 10) {
@@ -220,7 +211,6 @@ public class SupaBot extends S2Agent implements AgentData {
         if (observation().getMinerals() > 100) {
             tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
         }
-        //observation().getRawObservation().getRaw().get().getMapState().getCreep();
         rebalanceWorkers();
 
         mineGas();
@@ -231,7 +221,11 @@ public class SupaBot extends S2Agent implements AgentData {
         } else {
             Army enemyArmy = mapAwareness.getMaybeEnemyArmy().get();
             if (fightManager.predictWinAgainst(enemyArmy)) {
-                fightManager.setAttackPosition(Optional.of(enemyArmy.position()));
+                if (enemyArmy.threat() > 10f) {
+                    fightManager.setAttackPosition(Optional.of(enemyArmy.position()));
+                } else {
+                    fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
+                }
             } else {
                 fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearBase());
             }
@@ -285,7 +279,36 @@ public class SupaBot extends S2Agent implements AgentData {
 
         Optional<Point2d> nearestEnemy = mapAwareness.getMaybeEnemyPositionNearBase();
         if (nearestEnemy.isPresent() && mapAwareness.shouldDefendLocation(nearestEnemy.get())) {
-            fightManager.setDefencePosition(nearestEnemy);
+            if (mapAwareness.getMaybeEnemyArmy().isPresent()) {
+                Army enemyArmy = mapAwareness.getMaybeEnemyArmy().get();
+                if (enemyArmy.position().distance(nearestEnemy.get()) < 10f) {
+                    // enemy army is near base and we expect to win.
+                    if (fightManager.predictDefensiveWinAgainst(enemyArmy)) {
+                        fightManager.setDefencePosition(nearestEnemy);
+                    } else {
+                        // do nothing - the defence position defaults to the high ground.
+                    }
+                }
+            } else {
+                // Don't know where the enemy army is - just defend against what's nearby.
+                fightManager.setDefencePosition(nearestEnemy);
+            }
+        }
+
+        // Dispatch one-off tasks.
+        if (singletonTasksToDispatch.size() > 0) {
+            Set<Integer> suppliesReached = new HashSet<>();
+            Map<Task, Integer> notDispatched = new HashMap<>();
+            singletonTasksToDispatch.forEach((supplyTrigger, task) -> {
+                if (observation().getFoodUsed() >= supplyTrigger) {
+                    suppliesReached.add(supplyTrigger);
+                    if (!taskManager.addTask(task, 1)) {
+                        notDispatched.put(task, supplyTrigger);
+                    }
+                }
+            });
+            suppliesReached.forEach(supplyTrigger -> singletonTasksToDispatch.removeAll(supplyTrigger));
+            notDispatched.forEach((task, supplyTrigger) -> singletonTasksToDispatch.put(supplyTrigger, task));
         }
 
         // HACK - crisis mode (which affects whether marines are built or not)
@@ -327,8 +350,34 @@ public class SupaBot extends S2Agent implements AgentData {
             this.fightManager.debug(this);
             int miningBases = countMiningBases();
             debug().debugTextOut("Bases: " + miningBases, Point2d.of(0.95f, 0.2f), Color.WHITE, 8);
+            mapAwareness.getObservedCreepCoverage().ifPresent(creep ->
+                    debug().debugTextOut(String.format("Creep: %.1f%%", (creep * 100f)), Point2d.of(0.92f, 0.25f), Color.WHITE, 8));
+
             debug().sendDebug();
         }
+    }
+
+    private void dispatchTaskOnce(int atSupply, Task task) {
+        singletonTasksToDispatch.put(atSupply, task);
+    }
+
+    private void tryGetUpgrades(Set<Upgrade> upgrades, Units structure, Map<Upgrades, Abilities> upgradesToGet) {
+        Set<Upgrades> upgradesMissing = new HashSet<>(upgradesToGet.keySet());
+        upgradesMissing.removeAll(upgrades);
+        if (upgradesMissing.size() == 0) {
+            return;
+        }
+
+        observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                UnitInPool.isUnit(structure).test(unitInPool)).forEach(unit -> {
+            if (unit.unit().getOrders().isEmpty()) {
+                for (Map.Entry<Upgrades, Abilities> upgrade: upgradesToGet.entrySet()) {
+                    if (!upgrades.contains(upgrade.getKey())) {
+                        actions().unitCommand(unit.unit(), upgrade.getValue(), false);
+                    }
+                }
+            }
+        });
     }
 
     private void sendTeamChat(String message) {
@@ -728,6 +777,7 @@ public class SupaBot extends S2Agent implements AgentData {
             case TERRAN_MARINE:
             case TERRAN_MARAUDER:
             case TERRAN_MEDIVAC:
+            case TERRAN_RAVEN:
                 fightManager.addUnit(unitInPool.unit());
                 break;
         }
@@ -857,6 +907,11 @@ public class SupaBot extends S2Agent implements AgentData {
     @Override
     public GameData gameData() {
         return gameData;
+    }
+
+    @Override
+    public Optional<AnalysisResults> mapAnalysis() {
+        return this.mapAnalysis;
     }
 
     @Override

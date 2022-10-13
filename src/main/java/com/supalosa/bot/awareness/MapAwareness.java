@@ -63,4 +63,8 @@ public interface MapAwareness {
     Optional<Army> getMaybeEnemyArmy();
 
     void debug(S2Agent supaBot);
+
+    Optional<Point2d> getNextScoutTarget();
+
+    Optional<Float> getObservedCreepCoverage();
 }

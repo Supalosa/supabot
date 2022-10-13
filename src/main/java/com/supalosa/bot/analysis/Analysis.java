@@ -26,6 +26,7 @@ public class Analysis {
         Set<Point2d> borderTiles = new HashSet<>();
         int iterations = 0;
         int initialTerrainValue = -1;
+        int pathableTiles = 0;
 
         while (!points.isEmpty() && (++iterations) < 100000) {
             Point2d newPoint = points.poll();
@@ -36,6 +37,9 @@ public class Analysis {
 
             if (terrainValue == 0 && pathingValue == 0 && placementValue == 0) {
                 continue;
+            }
+            if (pathingValue > 0) {
+                pathableTiles++;
             }
             if (initialTerrainValue == -1) {
                 initialTerrainValue = terrainValue;
@@ -218,7 +222,7 @@ public class Analysis {
             mapOfRamps.put(rampId, ramp);
         });
 
-        return new AnalysisResults(result, mapOfRamps, topOfRampLocations.keySet());
+        return new AnalysisResults(result, mapOfRamps, topOfRampLocations.keySet(), pathableTiles);
     }
 
     private static boolean isTerrainHeightNearMaxHeight(int terrainHeight, int maxHeight) {

@@ -10,10 +10,12 @@ public class AnalysisResults {
     private final Grid<Tile> grid;
     private final Map<Integer, Ramp> ramps;
     private final Set<Point2d> topOfRamps;
-    public AnalysisResults(Grid<Tile> grid, Map<Integer,Ramp> ramps, Set<Point2d> topOfRamps) {
+    private final int pathableTiles;
+    public AnalysisResults(Grid<Tile> grid, Map<Integer,Ramp> ramps, Set<Point2d> topOfRamps, int pathableTiles) {
         this.grid = grid;
         this.ramps = ramps;
         this.topOfRamps = topOfRamps;
+        this.pathableTiles = pathableTiles;
     }
 
     public Set<Point2d> getTopOfRamps() {
@@ -26,5 +28,9 @@ public class AnalysisResults {
 
     public Ramp getRamp(int rampId) {
         return ramps.get(rampId);
+    }
+
+    public int getPathableTiles() {
+        return pathableTiles;
     }
 }

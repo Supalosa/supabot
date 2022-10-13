@@ -8,6 +8,7 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
+import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
@@ -19,7 +20,6 @@ import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
-import org.checkerframework.checker.units.qual.A;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -50,6 +50,10 @@ public class MapAwarenessImpl implements MapAwareness {
     private long maybeEnemyArmyCalculatedAt = 0L;
     private Optional<ImmutableArmy> maybeEnemyArmy = Optional.empty();
     private Map<Point, List<UnitInPool>> enemyClusters = new HashMap<>();
+
+    private Optional<ImageData> cachedCreepMap = Optional.empty();
+    private Optional<Float> creepCoveragePercentage = Optional.empty();
+    private long creepMapUpdatedAt = 0L;
 
     public MapAwarenessImpl() {
         this.startPosition = Optional.empty();
@@ -109,6 +113,8 @@ public class MapAwarenessImpl implements MapAwareness {
         updateValidExpansions(agent.observation(), agent.query());
         updateMyDefendableStructures(data, agent.observation());
 
+        analyseCreep(data, agent);
+
         if (agent.observation().getGameLoop() > maybeEnemyArmyCalculatedAt + 22L) {
             maybeEnemyArmyCalculatedAt = agent.observation().getGameLoop();
             List<UnitInPool> enemyArmy = agent.observation().getUnits(
@@ -124,8 +130,8 @@ public class MapAwarenessImpl implements MapAwareness {
                         .withThreat(army.threat() * 0.5f - 1.0f));
             } else {
                 maybeEnemyArmy = maybeEnemyArmy.map(army -> army
-                        .withSize(army.size() * 0.99f)
-                        .withThreat(army.threat() * 0.99f));
+                        .withSize(army.size() * 0.999f)
+                        .withThreat(army.threat() * 0.999f));
             }
             maybeEnemyArmy = maybeEnemyArmy.filter(army -> army.size() > 1.0);
             if (this.enemyClusters.size() > 0) {
@@ -162,6 +168,34 @@ public class MapAwarenessImpl implements MapAwareness {
 
         this.maybeEnemyPositionNearEnemy = findEnemyPosition(agent.observation(), true);
         this.maybeEnemyPositionNearBase = findEnemyPosition(agent.observation(), false);
+    }
+
+    private void analyseCreep(AgentData data, S2Agent agent) {
+        if (agent.observation().getGameLoop() > creepMapUpdatedAt + 22L * 10) {
+            creepMapUpdatedAt = agent.observation().getGameLoop();
+            cachedCreepMap = agent.observation().getRawObservation().getRaw().map(raw -> raw.getMapState().getCreep());
+            cachedCreepMap.ifPresent(creepData -> {
+                data.mapAnalysis().ifPresent(mapAnalysis -> {
+                    int pixelsWithCreep = 0;
+                    for (int x = 0; x < creepData.getSize().getX(); ++x) {
+                        for (int y = 0; y < creepData.getSize().getY(); ++y) {
+                            boolean creepAtPoint = (creepData.sample(Point2d.of(x, y), ImageData.Origin.BOTTOM_LEFT) > 0);
+                            if (creepAtPoint) {
+                                ++pixelsWithCreep;
+                            }
+                        }
+                    }
+                    float creepPercentage = pixelsWithCreep / (float)mapAnalysis.getPathableTiles();
+                    creepCoveragePercentage = Optional.of(creepPercentage);
+                });
+            });
+        }
+    }
+
+    @Override
+    public Optional<Float> getObservedCreepCoverage() {
+        System.out.println("Creep coverage = " + creepCoveragePercentage);
+        return creepCoveragePercentage;
     }
 
     private Collection<UnitType> getComposition(List<UnitInPool> unitInPools) {
@@ -395,5 +429,10 @@ public class MapAwarenessImpl implements MapAwareness {
             agent.debug().debugSphereOut(point, army.size(), Color.RED);
             agent.debug().debugTextOut("[" + army.size() + ", " + army.threat() + "]", point, Color.WHITE, 10);
         });
+    }
+
+    @Override
+    public Optional<Point2d> getNextScoutTarget() {
+        return findRandomEnemyPosition();
     }
 }

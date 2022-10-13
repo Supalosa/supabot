@@ -3,10 +3,7 @@ package com.supalosa.bot;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.data.Abilities;
-import com.github.ocraft.s2client.protocol.data.Buff;
-import com.github.ocraft.s2client.protocol.data.Buffs;
-import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -17,7 +14,9 @@ import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class FightManager {
@@ -231,11 +230,14 @@ public class FightManager {
                 if (!isRegrouping) {
                     attackWithAll = true;
                 } else {
-                    // For now all near and far units attack move to regroup
+                    // Units far away from the centre of mass should run there.
                     if (farUnits.size() > 0) {
+                        // Bit of a hack but sometimes attacking and moving helps
+                        Ability ability = ThreadLocalRandom.current().nextBoolean() ? Abilities.ATTACK : Abilities.MOVE;
                         centreOfMass.ifPresent(point2d ->
-                                agent.actions().unitCommand(farUnits, Abilities.MOVE, point2d, false));
+                                agent.actions().unitCommand(farUnits, ability, point2d, false));
                     }
+                    // Units near the centre of mass can attack move.
                     if (nearUnits.size() > 0) {
                         attackPosition.ifPresent(point2d ->
                                 agent.actions().unitCommand(nearUnits, Abilities.ATTACK, point2d, false));
@@ -258,32 +260,47 @@ public class FightManager {
                             () -> defencePosition.ifPresent(point2d -> agent.actions().unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
                 }
                 if (maybeEnemyArmy.isPresent()) {
-                    // TODO this belongs in a task
-                    Set<Tag> marinesWithStim = observationInterface.getUnits(unitInPool ->
+                    // TODO this belongs in a task.
+                    AtomicInteger stimmedMarines = new AtomicInteger(0);
+                    AtomicInteger stimmedMarauders = new AtomicInteger(0);
+                    Set<Tag> marinesWithoutStim = observationInterface.getUnits(unitInPool ->
                             unitsToAttackWith.contains(unitInPool.getTag()) &&
                                     (unitInPool.unit().getType() == Units.TERRAN_MARINE) &&
-                                    !unitInPool.unit().getBuffs().contains(Buffs.STIMPACK) &&
                                     unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
                                     unitInPool.unit().getHealth().filter(health -> health > 25f).isPresent()
-                    ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
+                    ).stream().filter(unitInPool -> {
+                        if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK)) {
+                            stimmedMarines.incrementAndGet();
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
 
-                    Set<Tag> maraudersWithStim = observationInterface.getUnits(unitInPool ->
+                    Set<Tag> maraudersWithoutStim = observationInterface.getUnits(unitInPool ->
                             unitsToAttackWith.contains(unitInPool.getTag()) &&
                                     (unitInPool.unit().getType() == Units.TERRAN_MARAUDER) &&
-                                    !unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER) &&
                                     unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
                                     unitInPool.unit().getHealth().filter(health -> health > 40f).isPresent()
-                    ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
+                    ).stream().filter(unitInPool -> {
+                        if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER)) {
+                            stimmedMarauders.incrementAndGet();
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
                     // Stim 1:1 ratio
-                    int armySize = (int)maybeEnemyArmy.get().size();
-                    marinesWithStim =
-                            marinesWithStim.stream().limit(armySize).collect(Collectors.toSet());
-                    if (marinesWithStim.size() > 0) {
-                        agent.actions().unitCommand(marinesWithStim, Abilities.EFFECT_STIM_MARINE, false);
+                    int stimsRequested = Math.max(0, (int)maybeEnemyArmy.get().size() - stimmedMarines.get() - stimmedMarauders.get());
+                    marinesWithoutStim =
+                            marinesWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
+                    if (marinesWithoutStim.size() > 0) {
+                        agent.actions().unitCommand(marinesWithoutStim, Abilities.EFFECT_STIM_MARINE, false);
+                        stimsRequested -= marinesWithoutStim.size();
                     }
-                    maraudersWithStim = maraudersWithStim.stream().limit(armySize).collect(Collectors.toSet());
-                    if (maraudersWithStim.size() > 0) {
-                        agent.actions().unitCommand(maraudersWithStim, Abilities.EFFECT_STIM_MARAUDER, false);
+                    maraudersWithoutStim = maraudersWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
+                    if (maraudersWithoutStim.size() > 0) {
+                        agent.actions().unitCommand(maraudersWithoutStim, Abilities.EFFECT_STIM_MARAUDER, false);
                     }
                 }
             }
@@ -312,7 +329,7 @@ public class FightManager {
     public int getTargetMarines() {
         int attackingArmySize = attackingArmy.size();
         int myFoodCap = agent.observation().getFoodCap() - attackingArmySize;
-        int result = Math.max(10, Math.min(attackingArmySize / 3, (int)(myFoodCap * 0.5)));
+        int result = Math.max(10, Math.min(attackingArmySize / 4, (int)(myFoodCap * 0.25)));
         return result;
     }
 
@@ -344,5 +361,9 @@ public class FightManager {
     public boolean predictWinAgainst(Army army) {
         // secret sauce.
         return (attackingArmy.size() > army.threat());
+    }
+    public boolean predictDefensiveWinAgainst(Army army) {
+        // secret sauce.
+        return (reserveArmy.size() > army.threat());
     }
 }

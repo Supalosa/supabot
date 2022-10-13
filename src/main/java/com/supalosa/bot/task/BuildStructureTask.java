@@ -152,8 +152,18 @@ public class BuildStructureTask implements Task {
         }
         if (matchingUnitAtLocation.isPresent()) {
             UnitInPool actualUnit = agent.observation().getUnit(matchingUnitAtLocation.get());
-            if (actualUnit != null && actualUnit.getUnit().isPresent() && actualUnit.getUnit().get().getBuildProgress() > 0.99) {
-                isComplete = true;
+            if (actualUnit != null) {
+                float buildProgress = actualUnit.unit().getBuildProgress();
+                if (buildProgress > 0.99) {
+                    isComplete = true;
+                }
+                // Cancel if low HP.
+                float expectedHp = actualUnit.unit().getHealthMax().map(healthMax -> healthMax * buildProgress).orElse(1000f);
+                if (actualUnit.unit().getHealth().map(health -> health < expectedHp * 0.25f).orElse(false)) {
+                    matchingUnitAtLocation.ifPresent(tag -> {
+                        agent.actions().unitCommand(tag, Abilities.CANCEL, false);
+                    });
+                }
             }
         }
         //System.out.println("Onstep for task " + targetUnitType.toString() + " (Worker: " + worker + ",
