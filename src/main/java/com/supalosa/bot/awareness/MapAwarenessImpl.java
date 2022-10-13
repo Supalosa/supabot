@@ -314,6 +314,7 @@ public class MapAwarenessImpl implements MapAwareness {
         if (enemyUnits.size() > 0) {
             // Move towards the closest to our base (for now)
             return enemyUnits.stream()
+                    .filter(unitInPool -> unitInPool.unit().getType() != Units.ZERG_LARVA)
                     .min(comparator)
                     .map(minUnit -> minUnit.unit().getPosition().toPoint2d())
                     .or(() -> findRandomEnemyPosition());
