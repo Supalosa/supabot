@@ -4,10 +4,15 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
+import com.github.ocraft.s2client.protocol.data.Buff;
+import com.github.ocraft.s2client.protocol.data.Buffs;
 import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.*;
+import com.supalosa.bot.awareness.Army;
+import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 
@@ -39,6 +44,7 @@ public class FightManager {
 
     private boolean hasSeenCloakedOrBurrowedUnits = false;
     private long lastDefenceCommand = 0L;
+    private Optional<Point2d> centreOfMass = Optional.empty();
 
     public FightManager(S2Agent agent) {
         this.agent = agent;
@@ -53,6 +59,7 @@ public class FightManager {
     }
 
     public void onStep(TaskManager taskManager, AgentData data) {
+        MapAwareness mapAwareness = data.mapAwareness();
         AtomicBoolean doAttack = new AtomicBoolean(false);
         if ((reserveArmy.size()) >= getTargetMarines()) {
             attackingArmy.addAll(reserveArmy);
@@ -72,6 +79,7 @@ public class FightManager {
         long gameLoop = agent.observation().getGameLoop();
 
         if (gameLoop > lastDefenceCommand + 22L && defencePosition.isPresent()) {
+            doAttack.set(true);
             defenceCommand();
             lastDefenceCommand = gameLoop;
         }
@@ -120,14 +128,15 @@ public class FightManager {
         unitsToRemoveFromRetreat.forEach(toRemove -> {
             unitsRetreatingUntil.remove(toRemove);
         });
+
         if (doAttack.get()) {
             OptionalDouble averageX = armyPositions.stream().mapToDouble(point -> point.getX()).average();
             OptionalDouble averageY = armyPositions.stream().mapToDouble(point -> point.getY()).average();
-            Optional<Point2d> centreOfMass = Optional.empty();
+            centreOfMass = Optional.empty();
             if (averageX.isPresent() && averageY.isPresent()) {
                 centreOfMass = Optional.of(Point2d.of((float)averageX.getAsDouble(), (float)averageY.getAsDouble()));
             }
-            attackCommand(agent.observation(), centreOfMass);
+            attackCommand(agent.observation(), centreOfMass, mapAwareness.getMaybeEnemyArmy());
         }
         if (unitsRetreatingThisTick.size() > 0 && defencePosition.isPresent()) {
             agent.actions().unitCommand(unitsRetreatingThisTick, Abilities.MOVE, defencePosition.get(), false);
@@ -187,7 +196,11 @@ public class FightManager {
         return this.cloakedOrBurrowedUnitClusters;
     }
 
-    private void attackCommand(ObservationInterface observationInterface, Optional<Point2d> centreOfMass) {
+    private boolean isRegrouping = false;
+
+    private void attackCommand(ObservationInterface observationInterface,
+                               Optional<Point2d> centreOfMass,
+                               Optional<Army> maybeEnemyArmy) {
         Set<Tag> unitsToAttackWith = new HashSet<>(attackingArmy);
         unitsToAttackWith.removeAll(unitsRetreatingUntil.keySet());
         boolean attackWithAll = false;
@@ -202,7 +215,7 @@ public class FightManager {
                         unitsToAttackWith.contains(unitInPool.getTag())).stream()
                         .map(uip -> uip.unit())
                         .filter(unit -> {
-                            if (unit.getPosition().toPoint2d().distance(centreOfMass.get()) < 20f) {
+                            if (unit.getPosition().toPoint2d().distance(centreOfMass.get()) < (isRegrouping ? 5f : 10f)) {
                                 return true;
                             } else {
                                 farUnits.add(unit);
@@ -210,16 +223,21 @@ public class FightManager {
                             }
                         })
                         .collect(Collectors.toList());
-                if (defencePosition.isEmpty() || nearUnits.size() > unitsToAttackWith.size() / 2) {
+                if (nearUnits.size() > unitsToAttackWith.size() * 0.75) {
+                    isRegrouping = false;
+                } else if (nearUnits.size() < unitsToAttackWith.size() * 0.35) {
+                    isRegrouping = true;
+                }
+                if (!isRegrouping) {
                     attackWithAll = true;
-                } else if (defencePosition.isPresent()){
+                } else {
                     // For now all near and far units attack move to regroup
                     if (farUnits.size() > 0) {
                         centreOfMass.ifPresent(point2d ->
                                 agent.actions().unitCommand(farUnits, Abilities.MOVE, point2d, false));
                     }
                     if (nearUnits.size() > 0) {
-                        centreOfMass.ifPresent(point2d ->
+                        attackPosition.ifPresent(point2d ->
                                 agent.actions().unitCommand(nearUnits, Abilities.ATTACK, point2d, false));
                     }
                 }
@@ -238,6 +256,35 @@ public class FightManager {
                     centreOfMass.ifPresentOrElse(point2d ->
                                     agent.actions().unitCommand(unitsThatMustMove, Abilities.ATTACK, point2d, false),
                             () -> defencePosition.ifPresent(point2d -> agent.actions().unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
+                }
+                if (maybeEnemyArmy.isPresent()) {
+                    // TODO this belongs in a task
+                    Set<Tag> marinesWithStim = observationInterface.getUnits(unitInPool ->
+                            unitsToAttackWith.contains(unitInPool.getTag()) &&
+                                    (unitInPool.unit().getType() == Units.TERRAN_MARINE) &&
+                                    !unitInPool.unit().getBuffs().contains(Buffs.STIMPACK) &&
+                                    unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
+                                    unitInPool.unit().getHealth().filter(health -> health > 25f).isPresent()
+                    ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
+
+                    Set<Tag> maraudersWithStim = observationInterface.getUnits(unitInPool ->
+                            unitsToAttackWith.contains(unitInPool.getTag()) &&
+                                    (unitInPool.unit().getType() == Units.TERRAN_MARAUDER) &&
+                                    !unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER) &&
+                                    unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
+                                    unitInPool.unit().getHealth().filter(health -> health > 40f).isPresent()
+                    ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
+                    // Stim 1:1 ratio
+                    int armySize = (int)maybeEnemyArmy.get().size();
+                    marinesWithStim =
+                            marinesWithStim.stream().limit(armySize).collect(Collectors.toSet());
+                    if (marinesWithStim.size() > 0) {
+                        agent.actions().unitCommand(marinesWithStim, Abilities.EFFECT_STIM_MARINE, false);
+                    }
+                    maraudersWithStim = maraudersWithStim.stream().limit(armySize).collect(Collectors.toSet());
+                    if (maraudersWithStim.size() > 0) {
+                        agent.actions().unitCommand(maraudersWithStim, Abilities.EFFECT_STIM_MARAUDER, false);
+                    }
                 }
             }
         }
@@ -265,7 +312,7 @@ public class FightManager {
     public int getTargetMarines() {
         int attackingArmySize = attackingArmy.size();
         int myFoodCap = agent.observation().getFoodCap() - attackingArmySize;
-        int result = Math.max(10, Math.min(attackingArmySize / 2, (int)(myFoodCap * 0.75)));
+        int result = Math.max(10, Math.min(attackingArmySize / 3, (int)(myFoodCap * 0.5)));
         return result;
     }
 
@@ -285,5 +332,17 @@ public class FightManager {
                 }
             }
         }
+    }
+
+    public void debug(S2Agent agent) {
+        centreOfMass.ifPresent(point2d -> {
+            float z = agent.observation().terrainHeight(point2d);
+            agent.debug().debugSphereOut(Point.of(point2d.getX(), point2d.getY(), z), isRegrouping ? 5f : 10f, Color.YELLOW);
+        });
+    }
+
+    public boolean predictWinAgainst(Army army) {
+        // secret sauce.
+        return (attackingArmy.size() > army.threat());
     }
 }

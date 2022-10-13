@@ -70,11 +70,23 @@ public class BuildStructureTask implements Task {
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             unitInPool.unit().getType().equals(Units.TERRAN_SCV)).map(unitInPool -> unitInPool.getTag());
-            //assignedWorker.ifPresent(tag -> System.out.println("Reserved unit " + tag));
+            // Resume the construction if applicable.
+            assignedWorker.ifPresent(theWorker -> {
+                matchingUnitAtLocation.ifPresent(tag -> {
+                    UnitInPool unit = agent.observation().getUnit(tag);
+                    if (unit != null) {
+                        agent.actions().unitCommand(theWorker, Abilities.SMART, unit.unit(), false);
+                    }
+                });
+            });
         } else {
             worker = assignedWorker
                     .map(assignedWorkerTag -> agent.observation().getUnit(assignedWorkerTag));
             if (worker.isEmpty()) {
+                if (assignedWorker.isPresent()) {
+                    // Worker was assigned but not found - the worker probably died.
+                    ++buildAttempts;
+                }
                 assignedWorker = Optional.empty();
             }
         }
@@ -82,7 +94,7 @@ public class BuildStructureTask implements Task {
             final Optional<Point2d> locationToSearch = location.isPresent() ?
                     location :
                     worker.map(w -> w.unit().getPosition().toPoint2d());
-            // Find any matching units within 1.0 range of target location
+            // Find any matching units within 1.5 range of target location
             List<UnitInPool> matchingUnits = agent.observation().getUnits(unitInPool ->
                     unitInPool.getUnit().filter(unit -> unit.getAlliance() == Alliance.SELF &&
                             unit.getType().equals(targetUnitType) &&
@@ -108,6 +120,10 @@ public class BuildStructureTask implements Task {
             if (actionError.getUnitTag().equals(assignedWorker) || actionError.getAbility().equals(Optional.of(ability))) {
                 System.out.println("Action error: " + actionError.getActionResult());
             }
+            // Cancel the construction if applicable.
+            matchingUnitAtLocation.ifPresent(tag -> {
+                agent.actions().unitCommand(tag, Abilities.CANCEL, false);
+            });
             return false;
         })) {
             agent.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);

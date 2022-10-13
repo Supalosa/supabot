@@ -5,6 +5,8 @@ import com.github.ocraft.s2client.bot.gateway.*;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.UnitAttribute;
 import com.github.ocraft.s2client.protocol.data.UnitType;
+import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -12,13 +14,16 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
+import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.checkerframework.checker.units.qual.A;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MapAwarenessImpl implements MapAwareness {
@@ -41,6 +46,10 @@ public class MapAwarenessImpl implements MapAwareness {
 
     private final long myDefendableStructuresCalculatedAt = 0L;
     private List<Unit> myDefendableStructures = new ArrayList<>();
+
+    private long maybeEnemyArmyCalculatedAt = 0L;
+    private Optional<ImmutableArmy> maybeEnemyArmy = Optional.empty();
+    private Map<Point, List<UnitInPool>> enemyClusters = new HashMap<>();
 
     public MapAwarenessImpl() {
         this.startPosition = Optional.empty();
@@ -100,9 +109,96 @@ public class MapAwarenessImpl implements MapAwareness {
         updateValidExpansions(agent.observation(), agent.query());
         updateMyDefendableStructures(data, agent.observation());
 
+        if (agent.observation().getGameLoop() > maybeEnemyArmyCalculatedAt + 22L) {
+            maybeEnemyArmyCalculatedAt = agent.observation().getGameLoop();
+            List<UnitInPool> enemyArmy = agent.observation().getUnits(
+                    UnitFilter.builder()
+                            .alliance(Alliance.ENEMY)
+                            .unitTypes(Constants.ARMY_UNIT_TYPES)
+                            .build());
+            this.enemyClusters = Expansions.cluster(enemyArmy, 20f);
+            // Army threat decays slowly
+            if (maybeEnemyArmy.isPresent() && agent.observation().getVisibility(maybeEnemyArmy.get().position()) == Visibility.VISIBLE) {
+                maybeEnemyArmy = maybeEnemyArmy.map(army -> army
+                        .withSize(army.size() * 0.5f - 1.0f)
+                        .withThreat(army.threat() * 0.5f - 1.0f));
+            } else {
+                maybeEnemyArmy = maybeEnemyArmy.map(army -> army
+                        .withSize(army.size() * 0.99f)
+                        .withThreat(army.threat() * 0.99f));
+            }
+            maybeEnemyArmy = maybeEnemyArmy.filter(army -> army.size() > 1.0);
+            if (this.enemyClusters.size() > 0) {
+                // TODO: Threat calc instead of number of units
+                int biggestArmySize = Integer.MIN_VALUE;
+                Point biggestArmy = null;
+                for (Map.Entry<Point, List<UnitInPool>> entry : this.enemyClusters.entrySet()) {
+                    Point point = entry.getKey();
+                    List<UnitInPool> units = entry.getValue();
+                    int size = units.size();
+                    if (size > biggestArmySize) {
+                        biggestArmySize = size;
+                        biggestArmy = point;
+                    }
+                }
+                if (biggestArmy != null) {
+                    if (this.maybeEnemyArmy.isEmpty() || biggestArmySize > this.maybeEnemyArmy.get().size()) {
+                        Collection<UnitType> composition = getComposition(this.enemyClusters.get(biggestArmy));
+                        double threat = calculateThreat(composition);
+                        this.maybeEnemyArmy = Optional.of(
+                                ImmutableArmy.builder()
+                                        .position(biggestArmy.toPoint2d())
+                                        .size(biggestArmySize)
+                                        .composition(composition)
+                                        .threat(threat)
+                                        .build());
+                    }
+                }
+            }
+        }
+
+        lockedScoutTarget = lockedScoutTarget.filter(point2d ->
+                agent.observation().getVisibility(point2d) != Visibility.VISIBLE);
+
         this.maybeEnemyPositionNearEnemy = findEnemyPosition(agent.observation(), true);
         this.maybeEnemyPositionNearBase = findEnemyPosition(agent.observation(), false);
     }
+
+    private Collection<UnitType> getComposition(List<UnitInPool> unitInPools) {
+        return unitInPools.stream().map(unitInPool -> unitInPool.unit().getType()).collect(Collectors.toList());
+    }
+
+    private double calculateThreat(Collection<UnitType> composition) {
+        double enemyThreat = composition.stream().mapToDouble(unitType -> {
+            if (unitType instanceof Units) {
+                switch ((Units)unitType) {
+                    case TERRAN_SIEGE_TANK_SIEGED:
+                    case TERRAN_SIEGE_TANK:
+                    case ZERG_ULTRALISK:
+                    case PROTOSS_MOTHERSHIP:
+                    case PROTOSS_CARRIER:
+                        return 10.0;
+                    case TERRAN_THOR:
+                    case ZERG_BROODLORD:
+                    case PROTOSS_IMMORTAL:
+                        return 5.0;
+                    case ZERG_QUEEN:
+                        return 3.0;
+                    case TERRAN_MARAUDER:
+                    case ZERG_ROACH:
+                    case PROTOSS_ZEALOT:
+                    case PROTOSS_STALKER:
+                        return 2.0;
+                    default:
+                        return 1.5;
+                }
+            } else {
+                return 1.5;
+            }
+        }).sum();
+        return enemyThreat;
+    }
+
 
     private void updateMyDefendableStructures(AgentData data, ObservationInterface observation) {
         long gameLoop = observation.getGameLoop();
@@ -133,6 +229,11 @@ public class MapAwarenessImpl implements MapAwareness {
             }
         }
         return false;
+    }
+
+    @Override
+    public Optional<Army> getMaybeEnemyArmy() {
+        return maybeEnemyArmy.map(Function.identity());
     }
 
     private void updateValidExpansions(ObservationInterface observationInterface, QueryInterface queryInterface) {
@@ -174,15 +275,20 @@ public class MapAwarenessImpl implements MapAwareness {
         }
     }
 
+    private Optional<Point2d> lockedScoutTarget = Optional.empty();
+
     // Tries to find a random location that can be pathed to on the map.
     // Returns Point2d if a new, random location has been found that is pathable by the unit.
     private Optional<Point2d> findRandomEnemyPosition() {
-        if (unscoutedLocations.size() > 0) {
-            return Optional.of(new ArrayList<>(unscoutedLocations)
-                    .get(ThreadLocalRandom.current().nextInt(unscoutedLocations.size())));
-        } else {
-            return Optional.empty();
+        if (lockedScoutTarget.isEmpty()) {
+            if (unscoutedLocations.size() > 0) {
+                lockedScoutTarget = Optional.of(new ArrayList<>(unscoutedLocations)
+                        .get(ThreadLocalRandom.current().nextInt(unscoutedLocations.size())));
+            } else {
+                return Optional.empty();
+            }
         }
+        return lockedScoutTarget;
     }
 
     private void manageScouting(
@@ -255,12 +361,25 @@ public class MapAwarenessImpl implements MapAwareness {
             });
             expansionLocations.ifPresent(locations ->
                     locations.forEach(expansion -> unscoutedLocations.add(expansion.position().toPoint2d())));
-            scoutResetLoopTime = observationInterface.getGameLoop() + 22 * 300;
+            scoutResetLoopTime = observationInterface.getGameLoop() + 22 * 180;
         }
         if (unscoutedLocations.size() > 0) {
             unscoutedLocations = unscoutedLocations.stream()
                     .filter(point -> observationInterface.getVisibility(point) != Visibility.VISIBLE)
                     .collect(Collectors.toSet());
         }
+    }
+
+    @Override
+    public void debug(S2Agent agent) {
+        this.enemyClusters.forEach((point, units) -> {
+            agent.debug().debugSphereOut(point, units.size(), Color.RED);
+        });
+        maybeEnemyArmy.ifPresent(army -> {
+            float z = agent.observation().terrainHeight(army.position());
+            Point point = Point.of(army.position().getX(), army.position().getY(), z);
+            agent.debug().debugSphereOut(point, army.size(), Color.RED);
+            agent.debug().debugTextOut("[" + army.size() + ", " + army.threat() + "]", point, Color.WHITE, 10);
+        });
     }
 }

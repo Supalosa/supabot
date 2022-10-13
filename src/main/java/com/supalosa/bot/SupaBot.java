@@ -17,6 +17,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
+import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.MapAwarenessImpl;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
@@ -212,7 +213,16 @@ public class SupaBot extends S2Agent implements AgentData {
         mineGas();
         taskManager.onStep(this, this);
 
-        fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
+        if (mapAwareness.getMaybeEnemyArmy().isEmpty()) {
+            fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
+        } else {
+            Army enemyArmy = mapAwareness.getMaybeEnemyArmy().get();
+            if (fightManager.predictWinAgainst(enemyArmy)) {
+                fightManager.setAttackPosition(Optional.of(enemyArmy.position()));
+            } else {
+                fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearBase());
+            }
+        }
         fightManager.onStep(taskManager, this);
 
         Optional<UnitInPool> randomCc = getRandomUnit(Units.TERRAN_COMMAND_CENTER);
@@ -291,10 +301,17 @@ public class SupaBot extends S2Agent implements AgentData {
         }
 
         if (isDebug) {
+            /*try {
+                Thread.sleep(60);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }*/
             if (this.taskManager != null) {
                 this.taskManager.debug(this);
             }
+            this.mapAwareness().debug(this);
             this.structurePlacementCalculator.ifPresent(spc -> spc.debug(this));
+            this.fightManager.debug(this);
             int miningBases = countMiningBases();
             debug().debugTextOut("Bases: " + miningBases, Point2d.of(0.95f, 0.2f), Color.WHITE, 8);
             debug().sendDebug();

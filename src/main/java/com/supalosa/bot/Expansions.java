@@ -138,7 +138,7 @@ public class Expansions {
         return expansionLocations;
     }
 
-    static Map<Point, List<UnitInPool>> cluster(List<UnitInPool> units, double distanceApart) {
+    public static Map<Point, List<UnitInPool>> cluster(List<UnitInPool> units, double distanceApart) {
         Map<Point, List<UnitInPool>> clusters = new LinkedHashMap<>();
         for (UnitInPool u : units) {
             double distance = Double.MAX_VALUE;

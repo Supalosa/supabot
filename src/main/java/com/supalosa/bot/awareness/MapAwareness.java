@@ -4,6 +4,7 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
+import com.supalosa.bot.SupaBot;
 
 import java.util.List;
 import java.util.Optional;
@@ -54,4 +55,12 @@ public interface MapAwareness {
      * @TODO this should be moved to a 'decision maker' class rather than an 'awareness' class.
      */
     boolean shouldDefendLocation(Point2d location);
+
+    /**
+     * Returns the potential location of the enemy army.
+     * If there are multiple armies, it is the biggest one we see.
+     */
+    Optional<Army> getMaybeEnemyArmy();
+
+    void debug(S2Agent supaBot);
 }

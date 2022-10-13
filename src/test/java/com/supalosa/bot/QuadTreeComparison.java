@@ -14,8 +14,8 @@ import java.util.Random;
  */
 public class QuadTreeComparison {
 
-    public static final int NUM_POINTS = 1000;
-    public static final int NUM_SEARCHES = 100000;
+    public static final int NUM_POINTS = 100000;
+    public static final int NUM_SEARCHES = 1000;
 
     public static void main(String[] args) {
         List<Point2d> points = new ArrayList<>(NUM_POINTS);

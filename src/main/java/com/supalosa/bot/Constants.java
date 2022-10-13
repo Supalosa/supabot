@@ -48,4 +48,39 @@ public class Constants {
             Units.NEUTRAL_SPACE_PLATFORM_GEYSER, Units.NEUTRAL_PURIFIER_VESPENE_GEYSER,
             Units.NEUTRAL_SHAKURAS_VESPENE_GEYSER, Units.NEUTRAL_RICH_VESPENE_GEYSER
     ));
+
+    /**
+     * Units that we will classify as 'army', so not harrassment units.
+     */
+    public static final Set<UnitType> ARMY_UNIT_TYPES = Set.of(
+            Units.TERRAN_MARINE,
+            Units.TERRAN_MARAUDER,
+            Units.TERRAN_GHOST,
+            Units.TERRAN_SIEGE_TANK,
+            Units.TERRAN_SIEGE_TANK_SIEGED,
+            Units.TERRAN_LIBERATOR,
+            Units.TERRAN_LIBERATOR_AG,
+            Units.TERRAN_THOR,
+            Units.TERRAN_THOR_AP,
+            Units.TERRAN_BATTLECRUISER,
+            Units.ZERG_ZERGLING,
+            Units.ZERG_ROACH,
+            Units.ZERG_BANELING,
+            Units.ZERG_HYDRALISK,
+            Units.ZERG_LURKER_MP,
+            Units.ZERG_ULTRALISK,
+            Units.ZERG_MUTALISK,
+            Units.ZERG_CORRUPTOR,
+            Units.ZERG_RAVAGER,
+            Units.ZERG_QUEEN, // thanks to queen bot
+            Units.PROTOSS_ZEALOT,
+            Units.PROTOSS_ADEPT,
+            Units.PROTOSS_ARCHON,
+            Units.PROTOSS_COLOSSUS,
+            Units.PROTOSS_IMMORTAL,
+            Units.PROTOSS_CARRIER,
+            Units.PROTOSS_TEMPEST,
+            Units.PROTOSS_SENTRY,
+            Units.PROTOSS_DISRUPTOR,
+            Units.PROTOSS_STALKER);
 }
