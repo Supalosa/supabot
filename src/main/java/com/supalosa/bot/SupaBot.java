@@ -199,7 +199,6 @@ public class SupaBot extends S2Agent implements AgentData {
         int marineCount = countUnitType(Units.TERRAN_MARINE);
         if (fightManager.hasSeenCloakedOrBurrowedUnits() ||
                 mapAwareness.getObservedCreepCoverage().map(coverage -> coverage > 0.1f).orElse(false)) {
-            System.out.println("Requesting raven due to creep coverage.");
             tryBuildUnit(Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, Optional.of(1));
         }
         tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10,

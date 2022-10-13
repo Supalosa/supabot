@@ -122,7 +122,7 @@ public class MapAwarenessImpl implements MapAwareness {
                             .alliance(Alliance.ENEMY)
                             .unitTypes(Constants.ARMY_UNIT_TYPES)
                             .build());
-            this.enemyClusters = Expansions.cluster(enemyArmy, 20f);
+            this.enemyClusters = Expansions.cluster(enemyArmy, 10f);
             // Army threat decays slowly
             if (maybeEnemyArmy.isPresent() && agent.observation().getVisibility(maybeEnemyArmy.get().position()) == Visibility.VISIBLE) {
                 maybeEnemyArmy = maybeEnemyArmy.map(army -> army
@@ -194,7 +194,6 @@ public class MapAwarenessImpl implements MapAwareness {
 
     @Override
     public Optional<Float> getObservedCreepCoverage() {
-        System.out.println("Creep coverage = " + creepCoveragePercentage);
         return creepCoveragePercentage;
     }
 
