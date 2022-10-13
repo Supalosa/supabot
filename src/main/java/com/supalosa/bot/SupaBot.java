@@ -22,6 +22,7 @@ import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.MapAwarenessImpl;
+import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.utils.UnitComparator;
@@ -65,16 +66,25 @@ public class SupaBot extends S2Agent implements AgentData {
 
     private Multimap<Integer, Task> singletonTasksToDispatch = ArrayListMultimap.create();
 
-    public SupaBot(boolean isDebug) {
+    private final DebugTarget debugTarget;
+
+    public SupaBot(boolean isDebug, DebugTarget debugTarget) {
         this.isDebug = isDebug;
         this.taskManager = new TaskManagerImpl();
         this.fightManager = new FightManager(this);
         this.mapAwareness = new MapAwarenessImpl();
         this.gameData = new GameData(observation());
+        this.debugTarget = debugTarget;
+    }
+
+    @Override
+    public void onGameEnd() {
+        this.debugTarget.stop();
     }
 
     @Override
     public void onGameStart() {
+        this.debugTarget.initialise(this);
         this.unitTypeData = observation().getUnitTypeData(true);
         mapAnalysis = observation().getGameInfo().getStartRaw().map(startRaw -> AnalyseMap.analyse(
                 observation(),
@@ -335,6 +345,7 @@ public class SupaBot extends S2Agent implements AgentData {
             }
         }
 
+        debugTarget.onStep(this, this);
         if (isDebug) {
             /*try {
                 Thread.sleep(60);

@@ -9,4 +9,5 @@ public class Tile {
     public boolean pathable = false;
     // for reapers, colossus etc.
     public boolean traversableCliff = false;
+    public int distanceToBorder = 0;
 }

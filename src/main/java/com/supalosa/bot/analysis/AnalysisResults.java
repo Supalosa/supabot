@@ -11,7 +11,8 @@ public class AnalysisResults {
     private final Map<Integer, Ramp> ramps;
     private final Set<Point2d> topOfRamps;
     private final int pathableTiles;
-    public AnalysisResults(Grid<Tile> grid, Map<Integer,Ramp> ramps, Set<Point2d> topOfRamps, int pathableTiles) {
+
+    public AnalysisResults(Grid<Tile> grid, Map<Integer, Ramp> ramps, Set<Point2d> topOfRamps, int pathableTiles) {
         this.grid = grid;
         this.ramps = ramps;
         this.topOfRamps = topOfRamps;

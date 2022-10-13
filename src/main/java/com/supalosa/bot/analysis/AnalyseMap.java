@@ -16,6 +16,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class AnalyseMap {
     private static final int MAX_BYTE = 255;
@@ -34,11 +35,25 @@ public class AnalyseMap {
         Grid pathing = new BitmapGrid(pathingBmp);
         Grid placement = new BitmapGrid(placementBmp);
         // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
-        Point2d start = Point2d.of(37.5f, 53.5f);
+
+        Point2d start = findAnyPathable(pathing);
         AnalysisResults data = Analysis.run(start, terrain, pathing, placement);
         GameData gameData = new GameData(null);
         StructurePlacementCalculator spc = new StructurePlacementCalculator(data, gameData, start);
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
+    }
+
+    private static Point2d findAnyPathable(Grid<Integer> pathing) {
+        int iters = 0;
+        while (++iters < 1000000) {
+            int x = ThreadLocalRandom.current().nextInt(pathing.getWidth());
+            int y = ThreadLocalRandom.current().nextInt(pathing.getHeight());
+            if ((pathing.get(x, y) & 0xFF) > 0) {
+                System.out.println("Found pathable point in " + iters + " iterations");
+                return Point2d.of(x, y);
+            }
+        }
+        throw new IllegalStateException("Could not find pathable point on the map");
     }
 
     /**
@@ -59,7 +74,7 @@ public class AnalyseMap {
         Point playerStartLocation = observationInterface.getStartLocation();
         AnalysisResults data = Analysis.run(playerStartLocation.toPoint2d(), terrain, pathing, placement);
         System.out.println("Start location=" + playerStartLocation.toPoint2d());
-        VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");
+        //VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");
 
         return data;
     }

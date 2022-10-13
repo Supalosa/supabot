@@ -1,9 +1,15 @@
 package com.supalosa.bot.analysis;
 
+import com.github.ocraft.s2client.protocol.data.Buff;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.supalosa.bot.analysis.utils.BitmapGrid;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -11,6 +17,7 @@ public class Analysis {
 
     public static AnalysisResults run(Point2d startLocation, Grid<Integer> terrain, Grid<Integer> pathing, Grid<Integer> placement) {
         AnalysisResults results = floodFill(startLocation, terrain, pathing, placement);
+
 
         return results;
     }
@@ -222,7 +229,50 @@ public class Analysis {
             mapOfRamps.put(rampId, ramp);
         });
 
+        Grid<Integer> distanceTransformGrid = distanceTransform(pathing, result);
+
         return new AnalysisResults(result, mapOfRamps, topOfRampLocations.keySet(), pathableTiles);
+    }
+
+    private static Grid<Integer> distanceTransform(Grid<Integer> pathing, Grid<Tile> output) {
+        BufferedImage image = new BufferedImage(pathing.getWidth(), pathing.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
+        Grid<Integer> result = new BitmapGrid(image);
+        // Using L1 distance transformation.
+        for (int x = 0; x < result.getWidth(); ++x) {
+            for (int y = 0; y < result.getHeight(); ++y) {
+                if ((pathing.get(x, y) & 0xFF) == 0) {
+                    result.set(x, y, 0);
+                } else {
+                    result.set(x, y, 255);
+                }
+            }
+        }
+
+        for (int x = 1; x < result.getWidth(); ++x) {
+            for (int y = 1; y < result.getHeight(); ++y) {
+                int value = Math.min(result.get(x, y).intValue(), Math.min(result.get(x-1, y) + 1, result.get(x, y-1) + 1));
+                result.set(x, y, value);
+                Tile t = output.get(x, y);
+                t.distanceToBorder = value & 0xFF;
+            }
+        }
+
+        for (int x = result.getWidth() - 2; x >= 0; --x) {
+            for (int y = result.getHeight() - 2; y >= 0; --y) {
+                int value = Math.min(result.get(x, y).intValue(), Math.min(result.get(x+1, y) + 1, result.get(x, y+1) + 1));
+                result.set(x, y, value);
+                Tile t = output.get(x, y);
+                t.distanceToBorder = value & 0xFF;
+            }
+        }
+
+        File outputFile = new File("distanceTransform.bmp");
+        try {
+            ImageIO.write(image, "bmp", outputFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 
     private static boolean isTerrainHeightNearMaxHeight(int terrainHeight, int maxHeight) {

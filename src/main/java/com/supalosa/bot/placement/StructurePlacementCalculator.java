@@ -549,4 +549,8 @@ public class StructurePlacementCalculator {
         }
         return Pair.of(existingPosition, existingFootprint);
     }
+
+    public Grid<Boolean> getMutableFreePlacementGrid() {
+        return this.mutableFreePlacementGrid;
+    }
 }

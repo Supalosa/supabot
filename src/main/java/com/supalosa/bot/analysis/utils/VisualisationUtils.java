@@ -1,5 +1,6 @@
 package com.supalosa.bot.analysis.utils;
 
+import com.github.ocraft.s2client.protocol.data.Buff;
 import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.AnalysisResults;
@@ -11,6 +12,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.Stack;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class VisualisationUtils {
     static final int TILE_SIZE = 32;
@@ -18,6 +21,32 @@ public class VisualisationUtils {
 
     private static int getInvertedY(int gameY, int gridHeight) {
         return gridHeight - gameY - 1;
+    }
+
+    /**
+     * Render the game-oriented (bottom-left-origin) Grid into a top-left-origin Bitmap.
+     */
+    public static <T> BufferedImage renderNewGrid(Grid<T> grid, Function<T, Integer> valueToRgb) {
+        BufferedImage image = new BufferedImage(grid.getWidth(), grid.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
+        for (int x = 0; x < grid.getWidth(); ++x) {
+            for (int gameY = 0; gameY < grid.getHeight(); ++gameY) {
+                int y = getInvertedY(gameY, grid.getHeight());
+                image.setRGB(x, y, valueToRgb.apply(grid.get(x, gameY)));
+            }
+        }
+        return image;
+    }
+
+    public static <T> BufferedImage addToRenderedGrid(BufferedImage image, Grid<T> grid, Function<T, Integer> valueToRgb, BiFunction<Integer, Integer, Integer> blending) {
+        for (int x = 0; x < grid.getWidth(); ++x) {
+            for (int gameY = 0; gameY < grid.getHeight(); ++gameY) {
+                int y = getInvertedY(gameY, grid.getHeight());
+                int existingValue = image.getRGB(x, y);
+                int newValue = valueToRgb.apply(grid.get(x, gameY));
+                image.setRGB(x, y, blending.apply(existingValue, newValue));
+            }
+        }
+        return image;
     }
 
     public static void writeCombinedData(Point2d playerStartLocation,
@@ -69,24 +98,31 @@ public class VisualisationUtils {
                 drawSquare(img, x * TILE_SIZE + 2, y * TILE_SIZE + 2,
                         x * TILE_SIZE + TILE_SIZE - 2,
                         y * TILE_SIZE + TILE_SIZE - 2, dataColor);
-                drawNumber(img, x * TILE_SIZE + 10,
+                drawNumber(img, x * TILE_SIZE + 5,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2)),
                         tile.terrain, 0);
-                drawNumber(img, x * TILE_SIZE + 10,
+                drawNumber(img, x * TILE_SIZE + 5,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 6),
                         tile.pathable ? 1 : 0, 0);
-                drawNumber(img, x * TILE_SIZE + 10,
+                drawNumber(img, x * TILE_SIZE + 5,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 12),
                         tile.placeable ? 1 : 0, 0);
                 if (tile.rampId >= 0) {
-                    drawNumber(img, x * TILE_SIZE + 10,
+                    drawNumber(img, x * TILE_SIZE + 5,
                             (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 18),
                             tile.rampId, 0);
                 }
+
+                if (tile.distanceToBorder != 0) {
+                    System.out.println(tile.distanceToBorder);
+                }
+                drawNumber(img, x * TILE_SIZE + 15,
+                        (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 6),
+                        tile.distanceToBorder, 0);
             }
         }
 
-        int green = makeRgb(0, 255, 0);
+        /*int green = makeRgb(0, 255, 0);
         drawSquare(img,
                 (int)(playerStartLocation.getX() * TILE_SIZE),
                 (getInvertedY((int)playerStartLocation.getY(), gridHeight) * TILE_SIZE),
@@ -98,7 +134,7 @@ public class VisualisationUtils {
                 int red = makeRgb(255, 0, 0);
                 img.setRGB((int)startLocation.getX()* TILE_SIZE +2, (int)startLocation.getY()* TILE_SIZE +2, red);
             });
-        });
+        });*/
 
         File outputFile = new File(filename);
         try {
@@ -190,8 +226,13 @@ public class VisualisationUtils {
                         0b01110,0b01010,0b01110,0b00010,0b00010,
                 };
                 break;
+            case '-':
+                bits = new int[]{
+                        0b00000, 0b00000, 0b01110, 0b00000, 0b00000,
+                };
+                break;
             default:
-            bits = new int[]{};
+                bits = new int[]{};
         }
         for (int row = 0; row < bits.length; ++row) {
             int bitsForRow = bits[row];
@@ -209,7 +250,7 @@ public class VisualisationUtils {
         int test;
         // 36 % 10 = 6, (36 % 10) / 1 = 6
         // 36 % 100 = 36, (36 % 100) / 10 = 3
-        Stack<Character> characters = new Stack<Character>();
+        /*Stack<Character> characters = new Stack<Character>();
         do {
             test = (int) Math.pow(10, position);
             int digit = (number % test) / (test / 10);
@@ -222,6 +263,12 @@ public class VisualisationUtils {
             char c = characters.pop();
             drawLetter(canvas, x + (characterPos * LETTER_WIDTH), y, c, color);
             ++characterPos;
+        }*/
+        String integerAsString = Integer.toString(number);
+        int characterPos = 0;
+        char[] characters = integerAsString.toCharArray();
+        for (int i = 0; i < characters.length; ++i) {
+            drawLetter(canvas, x + (i * LETTER_WIDTH), y, characters[i], color);
         }
     }
 }
