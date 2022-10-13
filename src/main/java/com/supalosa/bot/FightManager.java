@@ -12,7 +12,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.task.ArmyTask;
+import com.supalosa.bot.task.DefaultArmyTask;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 
@@ -24,8 +24,8 @@ public class FightManager {
 
     private final S2Agent agent;
 
-    private ArmyTask attackingArmy = new ArmyTask("Attack");
-    private ArmyTask reserveArmy = new ArmyTask("Reserve");
+    private DefaultArmyTask attackingArmy = new DefaultArmyTask("Attack");
+    private DefaultArmyTask reserveArmy = new DefaultArmyTask("Reserve");
 
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
 
@@ -61,7 +61,7 @@ public class FightManager {
         MapAwareness mapAwareness = data.mapAwareness();
         AtomicBoolean doAttack = new AtomicBoolean(false);
         if ((reserveArmy.getSize()) >= getTargetMarines()) {
-            attackingArmy.takeFrom(reserveArmy);
+            attackingArmy.takeAllFrom(reserveArmy);
             doAttack.set(true);
         }
 
