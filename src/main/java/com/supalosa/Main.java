@@ -12,13 +12,13 @@ public class Main {
 
     public static void main(String[] args) {
         SupaBot supaBot = new SupaBot(true);
-        PlayerSettings opponent = S2Coordinator.createComputer(Race.RANDOM, Difficulty.VERY_HARD, AiBuild.RANDOM_BUILD);
+        PlayerSettings opponent = S2Coordinator.createComputer(Race.RANDOM, Difficulty.VERY_HARD, AiBuild.MACRO);
         LauncherUtils.startSC2(
                 args,
                 supaBot,
                 LocalMap.of(Paths.get("2000AtmospheresAIE.SC2Map")),
                 //BattlenetMap.of("BerlingradAIE"),
-                true,
+                false,
                 new PlayerSettings[]{opponent});
     }
 }

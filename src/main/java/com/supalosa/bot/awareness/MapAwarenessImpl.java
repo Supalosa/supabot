@@ -38,7 +38,7 @@ public class MapAwarenessImpl implements MapAwareness {
     LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
     private Optional<List<Expansion>> expansionLocations = Optional.empty();
 
-    private final long expansionsValidatedAt = 0L;
+    private long expansionsValidatedAt = 0L;
 
     // Temporary 'binary' enemy positions.
     private Optional<Point2d> maybeEnemyPositionNearEnemy = Optional.empty();
@@ -173,7 +173,7 @@ public class MapAwarenessImpl implements MapAwareness {
             if (unitType instanceof Units) {
                 switch ((Units)unitType) {
                     case TERRAN_SIEGE_TANK_SIEGED:
-                    case TERRAN_SIEGE_TANK:
+                        return 25.0;
                     case ZERG_ULTRALISK:
                     case PROTOSS_MOTHERSHIP:
                     case PROTOSS_CARRIER:
@@ -188,6 +188,7 @@ public class MapAwarenessImpl implements MapAwareness {
                     case ZERG_ROACH:
                     case PROTOSS_ZEALOT:
                     case PROTOSS_STALKER:
+                    case TERRAN_SIEGE_TANK:
                         return 2.0;
                     default:
                         return 1.5;
@@ -238,15 +239,28 @@ public class MapAwarenessImpl implements MapAwareness {
 
     private void updateValidExpansions(ObservationInterface observationInterface, QueryInterface queryInterface) {
         long gameLoop = observationInterface.getGameLoop();
-        if (this.expansionLocations.isPresent() && gameLoop > expansionsValidatedAt * 44L) {
+        if (this.expansionLocations.isPresent() && gameLoop > expansionsValidatedAt + 44L) {
+            expansionsValidatedAt = gameLoop;
             // ExpansionLocations is ordered by distance to start point.
             this.validExpansionLocations = new LinkedHashSet<>();
+            List<UnitInPool> minerals = observationInterface.getUnits(UnitFilter.builder()
+                    .alliance(Alliance.NEUTRAL)
+                    .unitTypes(Constants.MINERAL_TYPES).build());
             for (Expansion expansion : this.expansionLocations.get()) {
                 if (!observationInterface.isPlacable(expansion.position().toPoint2d())) {
                     continue;
                 }
-                if (queryInterface.placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
-                    if (expansionLastAttempted.getOrDefault(expansion, 0L) < gameLoop - (15 * 22L)) {
+                int remainingMinerals = expansion.resourcePositions().stream().mapToInt(point2d -> {
+                    Optional<UnitInPool> maybeMineral = minerals.stream()
+                            .filter(mineral -> mineral.unit().getPosition().toPoint2d().equals(point2d))
+                            .findFirst();
+                    // We use '100' for unknown mineral content (placeholder for snapshots)
+                    return maybeMineral.map(unitInPool -> unitInPool.unit().getMineralContents().orElse(100)).orElse(0);
+                }).sum();
+                //System.out.println("Expansion at " + expansion.position() + " has " + remainingMinerals + " remaining");
+                if (remainingMinerals > 0 &&
+                        queryInterface.placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
+                    if (gameLoop > expansionLastAttempted.getOrDefault(expansion, 0L) + (15 * 22L)) {
                         this.validExpansionLocations.add(expansion);
                     }
                 }

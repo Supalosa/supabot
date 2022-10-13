@@ -53,6 +53,7 @@ public class SupaBot extends S2Agent implements AgentData {
                     return count;
                 }
             });
+    private final Map<Point2d, Long> scannedClusters = new HashMap<>();
     private boolean isDebug;
     private Optional<AnalysisResults> mapAnalysis = Optional.empty();
     private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
@@ -178,9 +179,16 @@ public class SupaBot extends S2Agent implements AgentData {
             }
             actions().unitCommand(unit.unit(), ability, false);
         });
-        // land mules
+        // land mules and scan cloaked items
         float reserveCcEnergy = (fightManager.hasSeenCloakedOrBurrowedUnits() ? 85f : 50f);
         Set<Point2d> scanClusters = new HashSet<>(fightManager.getCloakedOrBurrowedUnitClusters());
+        long gameLoop = observation().getGameLoop();
+        new HashMap<>(scannedClusters).forEach((scannedCluster, time) -> {
+            // Scan lasts for 12.3 seconds.
+            if (gameLoop > time + 22L * 12) {
+                scannedClusters.remove(scannedCluster);
+            }
+        });
         observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                 UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
             if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > reserveCcEnergy) {
@@ -190,8 +198,13 @@ public class SupaBot extends S2Agent implements AgentData {
                 });
             }
             if (scanClusters.size() > 0) {
-                scanClusters.stream().findFirst().ifPresent(scanPoint -> {
+                scanClusters.stream().filter(scanPoint ->
+                    // Return scan points that are not near an already scanned point.
+                    !scannedClusters.keySet().stream()
+                            .anyMatch(alreadyScannedPoint -> alreadyScannedPoint.distance(scanPoint) < 8f)
+                ).findFirst().ifPresent(scanPoint -> {
                     actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
+                    scannedClusters.put(scanPoint, gameLoop);
                     scanClusters.remove(scanPoint);
                 });
             }
@@ -723,6 +736,9 @@ public class SupaBot extends S2Agent implements AgentData {
     @Override
     public void onUnitIdle(UnitInPool unitInPool) {
         Unit unit = unitInPool.unit();
+        if (!(unit.getType() instanceof Units)) {
+            return;
+        }
         switch ((Units) unit.getType()) {
             case TERRAN_SCV:
                 findNearestCommandCentre(unit.getPosition().toPoint2d()).ifPresent(commandCentre -> {

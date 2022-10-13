@@ -120,14 +120,14 @@ public class BuildStructureTask implements Task {
             if (actionError.getUnitTag().equals(assignedWorker) || actionError.getAbility().equals(Optional.of(ability))) {
                 System.out.println("Action error: " + actionError.getActionResult());
             }
-            // Cancel the construction if applicable.
-            matchingUnitAtLocation.ifPresent(tag -> {
-                agent.actions().unitCommand(tag, Abilities.CANCEL, false);
-            });
             return false;
         })) {
             agent.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
             System.out.println("BuildTask " + targetUnitType + " failed");
+            // Cancel the construction if applicable.
+            matchingUnitAtLocation.ifPresent(tag -> {
+                agent.actions().unitCommand(tag, Abilities.CANCEL, false);
+            });
             isComplete = true;
         }
 
