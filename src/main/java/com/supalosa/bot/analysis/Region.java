@@ -13,4 +13,5 @@ public interface Region {
     List<Integer> connectedRegions();
     Optional<Integer> getRampId();
     Set<Point2d> getTiles();
+    Point2d centrePoint();
 }

@@ -83,6 +83,8 @@ public class AnalyseMap {
                     (colComponent ^ (colComponent >>> 11)) & 0xFF);
         });
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
+        PathfinderTest.run(data);
+
         System.out.println("Calculation took " + (endTime - startTime) + "ms");
     }
 

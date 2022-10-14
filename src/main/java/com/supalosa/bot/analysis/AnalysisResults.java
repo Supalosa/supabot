@@ -3,6 +3,7 @@ package com.supalosa.bot.analysis;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.utils.Grid;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,5 +41,9 @@ public class AnalysisResults {
 
     public Region getRegion(int regionId) {
         return regions.get(regionId);
+    }
+
+    public Collection<Region> getRegions() {
+        return regions.values();
     }
 }

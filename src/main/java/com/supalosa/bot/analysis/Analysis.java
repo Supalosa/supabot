@@ -387,12 +387,14 @@ public class Analysis {
     private static Map<Integer, Region> floodFillRegions(Set<Point2d> confirmedMaxima, Map<Integer, Ramp> mapOfRamps, Grid<Tile> grid) {
         PriorityQueue<Tile> queue = new PriorityQueue<>(Comparator.comparingInt(tile -> -tile.distanceToBorder));
         AtomicInteger tempCounter = new AtomicInteger();
+        Map<Integer, Point2d> centrePoints = new HashMap<>();
         confirmedMaxima.forEach(maxima -> {
             Tile value = grid.get((int)maxima.getX(), (int)maxima.getY());
             queue.add(value);
             /*if (value.regionId == -1) {
                 value.regionId = tempCounter.getAndIncrement();
             }*/
+            centrePoints.put(value.regionId, Point2d.of(maxima.getX(), maxima.getY()));
         });
         // Add ramps as their own regions.
         Multimap<Integer, Tile> regions = ArrayListMultimap.create();
@@ -403,11 +405,18 @@ public class Analysis {
                tile.regionId = 1000 + rampId;
                regions.put(1000 + rampId, tile);
                regionIdToRampId.put(tile.regionId, rampId);
+               // TODO this is wrong
+               centrePoints.put(tile.regionId, Point2d.of(rampTile.getX(), rampTile.getY()));
            });
         });
         Set<Tile> alreadyEnqueued = new HashSet<>();
         SetMultimap<Integer, Integer> connectedRegions = HashMultimap.create();
         final BiConsumer<Integer, Tile> maybeEnqueue = (regionId, tile) -> {
+            if (tile.regionId != -1 && tile.regionId != regionId) {
+                // Found a connection.
+                connectedRegions.put(tile.regionId, regionId);
+                connectedRegions.put(regionId, tile.regionId);
+            }
             if (alreadyEnqueued.contains(tile)) {
                 return;
             }
@@ -418,10 +427,6 @@ public class Analysis {
                 tile.regionId = regionId;
                 alreadyEnqueued.add(tile);
                 queue.add(tile);
-            } else if (tile.regionId != regionId) {
-                // Found a connection.
-                connectedRegions.put(tile.regionId, regionId);
-                connectedRegions.put(regionId, tile.regionId);
             }
         };
         while (queue.size() > 0) {
@@ -444,6 +449,7 @@ public class Analysis {
                             .collect(Collectors.toList()))
                     .rampId(Optional.ofNullable(regionIdToRampId.get(regionId)))
                     .connectedRegions(connectedRegions.get(regionId))
+                    .centrePoint(centrePoints.get(regionId))
                     .build();
             result.put(regionId, newRegion);
         });
