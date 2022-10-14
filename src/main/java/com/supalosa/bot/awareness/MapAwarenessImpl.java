@@ -14,10 +14,15 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
+import com.supalosa.bot.analysis.AnalysisResults;
+import com.supalosa.bot.analysis.ImmutableRegion;
+import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -55,9 +60,27 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<Float> creepCoveragePercentage = Optional.empty();
     private long creepMapUpdatedAt = 0L;
 
+    private Map<Integer, RegionData> regionData = new HashMap<>();
+    private long regionDataCalculatedAt = 0L;
+
     public MapAwarenessImpl() {
         this.startPosition = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
+    }
+
+    @Override
+    public Optional<RegionData> getRegionDataForPoint(Point2d point) {
+        return Optional.empty();
+    }
+
+    @Override
+    public List<RegionData> generatePath(Point2d startPosition, Point2d endPosition) {
+        return new ArrayList<>();
+    }
+
+    @Override
+    public Collection<RegionData> getAllRegionData() {
+        return regionData.values();
     }
 
     @Override
@@ -114,6 +137,7 @@ public class MapAwarenessImpl implements MapAwareness {
         updateMyDefendableStructures(data, agent.observation());
 
         analyseCreep(data, agent);
+        updateRegionData(data, agent);
 
         if (agent.observation().getGameLoop() > maybeEnemyArmyCalculatedAt + 22L) {
             maybeEnemyArmyCalculatedAt = agent.observation().getGameLoop();
@@ -170,6 +194,73 @@ public class MapAwarenessImpl implements MapAwareness {
         this.maybeEnemyPositionNearBase = findEnemyPosition(agent.observation(), false);
     }
 
+    private void updateRegionData(AgentData data, S2Agent agent) {
+        long gameLoop = agent.observation().getGameLoop();
+        if (data.mapAnalysis().isPresent() && gameLoop > regionDataCalculatedAt + 22L) {
+            regionDataCalculatedAt = gameLoop;
+            AnalysisResults analysisResults = data.mapAnalysis().get();
+
+            List<UnitInPool> allUnits = agent.observation().getUnits();
+            Multimap<Integer, UnitInPool> regionIdToEnemyUnits = ArrayListMultimap.create();
+            Multimap<Integer, UnitInPool> regionIdToSelfUnits = ArrayListMultimap.create();
+            allUnits.forEach(unit -> {
+                Point2d point2d = unit.unit().getPosition().toPoint2d();
+                boolean isEnemy = unit.unit().getAlliance() == Alliance.ENEMY;
+                boolean isSelf = unit.unit().getAlliance() == Alliance.SELF;
+                if (!isEnemy && !isSelf)
+                    return;
+                analysisResults.getTile((int)point2d.getX(), (int)point2d.getY()).ifPresent(tile -> {
+                    if (tile.regionId > 0) {
+                        if (isEnemy) {
+                            regionIdToEnemyUnits.put(tile.regionId, unit);
+                        } else if (isSelf) {
+                            regionIdToSelfUnits.put(tile.regionId, unit);
+                        }
+                    }
+                });
+            });
+            double maxEnemyThreat = 0;
+            Map<Integer, Double> regionToEnemyThreat = new HashMap<>();
+
+            for (Region region : analysisResults.getRegions()) {
+                Optional<RegionData> previousData = Optional.ofNullable(regionData.get(region.regionId()));
+                double currentThreatValue = calculateThreat(
+                        regionIdToEnemyUnits.get(region.regionId()).stream()
+                                .map(unitInPool -> unitInPool.unit().getType())
+                                .collect(Collectors.toUnmodifiableList()));
+                // Decay of region threat.
+                double threatValue = previousData.isEmpty() ?
+                        currentThreatValue :
+                        Math.max(currentThreatValue, previousData.get().enemyThreat() * 0.99 - 0.25);
+                regionToEnemyThreat.put(region.regionId(), threatValue);
+                if (threatValue > maxEnemyThreat) {
+                    maxEnemyThreat = threatValue;
+                }
+            }
+
+            double finalMaxEnemyThreat = maxEnemyThreat;
+            analysisResults.getRegions().forEach(region -> {
+                double currentSelfThreat = calculateThreat(
+                        regionIdToSelfUnits.get(region.regionId()).stream()
+                                .map(unitInPool -> unitInPool.unit().getType())
+                                .collect(Collectors.toUnmodifiableList()));
+                double enemyThreat = regionToEnemyThreat.get(region.regionId());
+                Optional<Double> killzoneThreat = region.onLowGroundOfRegions().stream().map(highGroundRegionId ->
+                   regionToEnemyThreat.get(highGroundRegionId)
+                ).reduce(Double::sum);
+                ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
+                        .region(region)
+                        .weight(1.0)
+                        .enemyArmyFactor(enemyThreat / Math.max(1.0, finalMaxEnemyThreat))
+                        .killzoneFactor(killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat)).orElse(1.0))
+                        .enemyThreat(enemyThreat)
+                        .playerThreat(currentSelfThreat);
+
+               regionData.put(region.regionId(), builder.build());
+            });
+        }
+    }
+
     private void analyseCreep(AgentData data, S2Agent agent) {
         if (agent.observation().getGameLoop() > creepMapUpdatedAt + 22L * 10) {
             creepMapUpdatedAt = agent.observation().getGameLoop();
@@ -223,6 +314,10 @@ public class MapAwarenessImpl implements MapAwareness {
                     case PROTOSS_STALKER:
                     case TERRAN_SIEGE_TANK:
                         return 2.0;
+                    case ZERG_DRONE:
+                    case TERRAN_SCV:
+                    case PROTOSS_PROBE:
+                        return 0.5;
                     default:
                         return 1.5;
                 }

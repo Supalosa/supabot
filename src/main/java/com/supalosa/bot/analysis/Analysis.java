@@ -215,7 +215,7 @@ public class Analysis {
 
         // Construct ramp data objects.
         Map<Integer, Ramp> mapOfRamps = new HashMap<>();
-        rampMaxHeights.keySet().forEach(rampId -> {
+        rampMaxHeights.forEach((rampId, rampMaxHeight) -> {
             // TODO optimise this
             Set<Point2d> rampPoints = rampLocations
                     .stream()
@@ -226,8 +226,14 @@ public class Analysis {
                     .filter(ramp -> ramp.getValue() == rampId)
                     .map(ramp -> ramp.getKey())
                     .collect(Collectors.toSet());
-            Ramp ramp = new Ramp(rampId, rampPoints, topOfRampPoints, Ramp.calculateDirection(rampPoints, topOfRampPoints));
-            System.out.println("Ramp " + rampId + " is facing " + ramp.getRampDirection().name());
+            int rampMinHeight = rampMinHeights.get(rampId);
+
+            Ramp ramp = new Ramp(rampId,
+                    rampPoints,
+                    topOfRampPoints,
+                    Ramp.calculateDirection(rampPoints, topOfRampPoints),
+                    (int)((rampMaxHeight + rampMinHeight) / 2.0));
+            System.out.println("Ramp " + rampId + " is facing " + ramp.getRampDirection().name() + " and midheight " + ramp.getRampMidHeight());
             mapOfRamps.put(rampId, ramp);
         });
 
@@ -399,6 +405,7 @@ public class Analysis {
         // Add ramps as their own regions.
         Multimap<Integer, Tile> regions = ArrayListMultimap.create();
         Map<Integer, Integer> regionIdToRampId = new HashMap<>();
+        Map<Integer, Integer> regionIdToCumulativeHeight = new HashMap<>();
         mapOfRamps.forEach((rampId, ramp) -> {
            ramp.getRampTiles().forEach(rampTile -> {
                Tile tile = grid.get((int)rampTile.getX(), (int)rampTile.getY());
@@ -429,9 +436,12 @@ public class Analysis {
                 queue.add(tile);
             }
         };
+        // Floodfill to expand the regions.
         while (queue.size() > 0) {
             Tile head = queue.poll();
             regions.put(head.regionId, head);
+            regionIdToCumulativeHeight.put(head.regionId,
+                    regionIdToCumulativeHeight.getOrDefault(head.regionId, 0) + head.terrain);
             maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y - 1));
             maybeEnqueue.accept(head.regionId, grid.get(head.x, head.y - 1));
             maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y - 1));
@@ -441,6 +451,46 @@ public class Analysis {
             maybeEnqueue.accept(head.regionId, grid.get(head.x, head.y + 1));
             maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y + 1));
         }
+        Map<Integer, Integer> regionIdToAverageHeight = new HashMap<>();
+        regionIdToCumulativeHeight.forEach((regionId, cumulativeHeight) -> {
+            regionIdToAverageHeight.put(regionId, cumulativeHeight / regions.get(regionId).size());
+        });
+
+        // Get all the ramps and mark high/low grounds.
+        Multimap<Integer, Integer> regionIsOnHighGroundOf = HashMultimap.create();
+        Multimap<Integer, Integer> regionIsOnLowGroundOf = HashMultimap.create();
+        mapOfRamps.values().forEach((ramp) -> {
+            ramp.getTiles().stream().findFirst().ifPresent(firstTile -> {
+                int regionId = grid.get((int)firstTile.getX(), (int)firstTile.getY()).regionId;
+                int rampMidpointHeight = ramp.getRampMidHeight();
+                Set<Integer> highGrounds = new HashSet<>();
+                Set<Integer> lowGrounds = new HashSet<>();
+                connectedRegions.get(regionId).forEach(connectedRegionId -> {
+                    int connectedRegionHeight = regionIdToAverageHeight.get(connectedRegionId);
+                    if (connectedRegionHeight > rampMidpointHeight) {
+                        // connected region is on our high ground
+                        highGrounds.add(connectedRegionId);
+                        regionIsOnHighGroundOf.put(connectedRegionId, regionId);
+                        regionIsOnLowGroundOf.put(regionId, connectedRegionId);
+                    }
+                    if (connectedRegionHeight < rampMidpointHeight) {
+                        lowGrounds.add(connectedRegionId);
+                        regionIsOnLowGroundOf.put(connectedRegionId, regionId);
+                        regionIsOnHighGroundOf.put(regionId, connectedRegionId);
+                    }
+                    highGrounds.forEach(highGroundRegionId -> {
+                        lowGrounds.forEach(lowGroundRegionId -> {
+                            System.out.println("Region " + highGroundRegionId + " >> " + lowGroundRegionId);
+                            System.out.println("Region " + lowGroundRegionId + " << " + highGroundRegionId);
+                            regionIsOnLowGroundOf.put(lowGroundRegionId, highGroundRegionId);
+                            regionIsOnHighGroundOf.put(highGroundRegionId, lowGroundRegionId);
+                        });
+                    });
+                });
+
+            });
+        });
+
         Map<Integer, Region> result = new HashMap<>();
         regions.keySet().forEach(regionId -> {
             Region newRegion = ImmutableRegion.builder()
@@ -450,12 +500,12 @@ public class Analysis {
                     .rampId(Optional.ofNullable(regionIdToRampId.get(regionId)))
                     .connectedRegions(connectedRegions.get(regionId))
                     .centrePoint(centrePoints.get(regionId))
+                    .addAllOnHighGroundOfRegions(regionIsOnHighGroundOf.get(regionId))
+                    .addAllOnLowGroundOfRegions(regionIsOnLowGroundOf.get(regionId))
                     .build();
             result.put(regionId, newRegion);
         });
-        connectedRegions.forEach((region1, region2) -> {
-           System.out.println("Region " + region1 + " connected to " + region2);
-        });
+
         return result;
     }
 

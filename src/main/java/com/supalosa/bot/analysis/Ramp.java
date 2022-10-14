@@ -5,11 +5,12 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import java.util.Optional;
 import java.util.Set;
 
-public class Ramp {
+public class Ramp implements TileSet {
     private final int rampId;
     private final Set<Point2d> rampTiles;
     private final Set<Point2d> topOfRampTiles;
     private final RampDirection rampDirection;
+    private final int rampMidHeight;
 
     public enum RampDirection {
         NORTH_EAST,
@@ -19,11 +20,12 @@ public class Ramp {
         UNKNOWN
     }
 
-    public Ramp(int rampId, Set<Point2d> rampTiles, Set<Point2d> topOfRampTiles, RampDirection rampDirection) {
+    public Ramp(int rampId, Set<Point2d> rampTiles, Set<Point2d> topOfRampTiles, RampDirection rampDirection, int rampMidHeight) {
         this.rampId = rampId;
         this.rampTiles = rampTiles;
         this.topOfRampTiles = topOfRampTiles;
         this.rampDirection = rampDirection;
+        this.rampMidHeight = rampMidHeight;
     }
 
     public int getRampId() {
@@ -34,12 +36,21 @@ public class Ramp {
         return rampTiles;
     }
 
+    @Override
+    public Set<Point2d> getTiles() {
+        return getRampTiles();
+    }
+
     public Set<Point2d> getTopOfRampTiles() {
         return topOfRampTiles;
     }
 
     public RampDirection getRampDirection() {
         return rampDirection;
+    }
+
+    public int getRampMidHeight() {
+        return rampMidHeight;
     }
 
     /**

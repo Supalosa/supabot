@@ -24,7 +24,7 @@ public class PathfinderTest {
         GraphPath<Region, DefaultWeightedEdge> path = pathfinder.getPath(startRegion, endRegion);
         if (path != null) {
             path.getVertexList().forEach(region -> {
-                System.out.println("Region: " + region);
+                System.out.println("Region: " + region.regionId());
             });
         } else {
             System.out.println("No path");
@@ -48,7 +48,7 @@ public class PathfinderTest {
                 }
                 g.setEdgeWeight(region, otherRegion, distance);
 
-                System.out.println("Weight = " + g.getEdgeWeight(g.getEdge(region, otherRegion)));
+                //System.out.println("Weight = " + g.getEdgeWeight(g.getEdge(region, otherRegion)));
             });
         });
 

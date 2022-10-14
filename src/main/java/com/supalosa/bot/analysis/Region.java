@@ -7,11 +7,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Represents the static data of a region (calculated at analysis time).
+ */
 @Value.Immutable
-public interface Region {
+public interface Region extends TileSet {
     int regionId();
     List<Integer> connectedRegions();
+    List<Integer> onLowGroundOfRegions();
+    List<Integer> onHighGroundOfRegions();
     Optional<Integer> getRampId();
-    Set<Point2d> getTiles();
     Point2d centrePoint();
 }

@@ -5,11 +5,35 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.SupaBot;
+import com.supalosa.bot.analysis.Region;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface MapAwareness {
+
+    enum PathRules {
+        /**
+         * Path directly to enemy base.
+         */
+        NONE,
+        /**
+         * Path by avoiding the enemy army.
+         */
+        AVOID_ENEMY_ARMY,
+        /**
+         * Path by avoiding 'killzones' (low ground, siege tanks, liberators)
+         */
+        AVOID_KILL_ZONE
+    };
+
+    Optional<RegionData> getRegionDataForPoint(Point2d point);
+
+    List<RegionData> generatePath(Point2d startPosition, Point2d endPosition);
+
+    Collection<RegionData> getAllRegionData();
+
     void setStartPosition(Point2d startPosition);
 
     Optional<Point2d> getStartPosition();

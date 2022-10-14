@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Tile;
+import com.supalosa.bot.analysis.TileSet;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -37,7 +38,20 @@ public class VisualisationUtils {
         return image;
     }
 
-    public static <T> BufferedImage addToRenderedGrid(BufferedImage image, Grid<T> grid, Function<T, Integer> valueToRgb, BiFunction<Integer, Integer, Integer> blending) {
+    public static BufferedImage addToRenderedGrid(BufferedImage image,
+                                                      TileSet tileSet, Function<Integer, Integer> valueAndBlending) {
+        for(Point2d point2d : tileSet.getTiles()) {
+            int x = (int)point2d.getX();
+            int y = getInvertedY((int)point2d.getY(), image.getHeight());
+            int newValue = valueAndBlending.apply(image.getRGB(x, y));
+            image.setRGB(x, y, newValue);
+        }
+        return image;
+    }
+
+    public static <T> BufferedImage addToRenderedGrid(BufferedImage image,
+                                                      Grid<T> grid, Function<T, Integer> valueToRgb,
+                                                      BiFunction<Integer, Integer, Integer> blending) {
         for (int x = 0; x < grid.getWidth(); ++x) {
             for (int gameY = 0; gameY < grid.getHeight(); ++gameY) {
                 int y = getInvertedY(gameY, grid.getHeight());
@@ -48,7 +62,6 @@ public class VisualisationUtils {
         }
         return image;
     }
-
     public static void writeCombinedData(Point2d playerStartLocation,
                                           Optional<StartRaw> startRaw,
                                           AnalysisResults data,

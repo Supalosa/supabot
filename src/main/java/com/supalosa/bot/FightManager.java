@@ -3,6 +3,7 @@ package com.supalosa.bot;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
+import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -177,5 +178,12 @@ public class FightManager {
     public boolean predictDefensiveWinAgainst(Army army) {
         // secret sauce.
         return (reserveArmy.getSize() > army.threat());
+    }
+
+    public Set<UnitType> getRequestedUnitTypes() {
+        Set<UnitType> requestedTypes = new HashSet<>();
+        requestedTypes.addAll(attackingArmy.requestingUnitTypes());
+        requestedTypes.addAll(reserveArmy.requestingUnitTypes());
+        return requestedTypes;
     }
 }

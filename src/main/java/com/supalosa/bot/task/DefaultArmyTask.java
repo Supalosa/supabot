@@ -4,10 +4,7 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ActionInterface;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.data.Abilities;
-import com.github.ocraft.s2client.protocol.data.Ability;
-import com.github.ocraft.s2client.protocol.data.Buffs;
-import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -31,6 +28,8 @@ public class DefaultArmyTask implements ArmyTask {
 
     private Optional<Point2d> centreOfMass = Optional.empty();
     private long centreOfMassLastUpdated = 0L;
+
+    private int numMedivacs = 0;
 
     private final String armyName;
 
@@ -60,6 +59,9 @@ public class DefaultArmyTask implements ArmyTask {
                     UnitInPool unit = agent.observation().getUnit(tag);
                     if (unit != null) {
                         armyPositions.add(unit.unit().getPosition().toPoint2d());
+                        if (unit.unit().getType() == Units.TERRAN_MEDIVAC) {
+                            numMedivacs++;
+                        }
                     }
                     return (unit != null && unit.isAlive());
                 })
@@ -210,6 +212,19 @@ public class DefaultArmyTask implements ArmyTask {
     @Override
     public void onUnitIdle(UnitInPool unitTag) {
 
+    }
+
+    @Override
+    public Set<UnitType> requestingUnitTypes() {
+        if (armyUnits.size() < 10) {
+            return Set.of(Units.TERRAN_MARINE);
+        } else if (armyUnits.size() < 40) {
+            return Set.of(Units.TERRAN_MARINE, Units.TERRAN_MARAUDER);
+        } else if (numMedivacs < 6) {
+            return Set.of(Units.TERRAN_MARINE, Units.TERRAN_MARAUDER, Units.TERRAN_MEDIVAC);
+        } else {
+            return Set.of(Units.TERRAN_MARINE, Units.TERRAN_MARAUDER);
+        }
     }
 
     /**
