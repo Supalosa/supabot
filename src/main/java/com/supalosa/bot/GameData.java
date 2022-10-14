@@ -118,6 +118,11 @@ public class GameData {
         return Optional.ofNullable(abilityToUnitType.get(ability));
     }
 
+    public Optional<Ability> getAbilityForUnitType(UnitType unitType) {
+        UnitTypeData data = getOrInitUnitTypeData().get(unitType);
+        return data != null ? data.getAbility() : Optional.empty();
+    }
+
     public boolean isStructure(UnitType unitType) {
         if (!structureTypes.containsKey(unitType)) {
             Optional<UnitTypeData> maybeUnitTypeData = getUnitTypeData(unitType);

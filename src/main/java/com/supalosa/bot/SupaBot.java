@@ -19,6 +19,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
+import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.MapAwarenessImpl;
@@ -211,14 +212,14 @@ public class SupaBot extends S2Agent implements AgentData {
                 mapAwareness.getObservedCreepCoverage().map(coverage -> coverage > 0.1f).orElse(false)) {
             tryBuildUnit(Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, Optional.of(1));
         }
-        tryBuildUnit(Abilities.TRAIN_MEDIVAC, Units.TERRAN_MEDIVAC, Units.TERRAN_STARPORT, Optional.of(Math.min(10,
-                marineCount / 6)));
-        if (marineCount > 10) {
-            tryBuildUnit(Abilities.TRAIN_MARAUDER, Units.TERRAN_MARAUDER, Units.TERRAN_BARRACKS,
-                    Optional.of(Math.min(25, marineCount / 2)));
-        }
-        if (observation().getMinerals() > 100) {
-            tryBuildUnit(Abilities.TRAIN_MARINE, Units.TERRAN_MARINE, Units.TERRAN_BARRACKS, Optional.empty());
+        List<UnitTypeRequest> requestedUnitTypes = fightManager.getRequestedUnitTypes();
+        if (requestedUnitTypes.size() > 0) {
+            requestedUnitTypes.forEach(requestedUnitType -> {
+                tryBuildUnit(
+                        requestedUnitType.productionAbility(),
+                        requestedUnitType.unitType(),
+                        requestedUnitType.producingUnitType(), Optional.of(requestedUnitType.amount()));
+            });
         }
         rebalanceWorkers();
 

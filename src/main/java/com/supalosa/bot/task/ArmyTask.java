@@ -4,7 +4,9 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.supalosa.bot.analysis.production.UnitTypeRequest;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -25,5 +27,5 @@ public interface ArmyTask extends Task {
      * Return a set of unit types that this army is requesting construction for.
      * Stop returning the unit if you have enough of it.
      */
-    Set<UnitType> requestingUnitTypes();
+    List<UnitTypeRequest> requestingUnitTypes();
 }

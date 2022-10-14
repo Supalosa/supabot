@@ -3,6 +3,7 @@ package com.supalosa.bot;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
+import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point;
@@ -11,8 +12,11 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.CloakState;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.task.ArmyTask;
 import com.supalosa.bot.task.DefaultArmyTask;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
@@ -24,6 +28,7 @@ import java.util.stream.Collectors;
 public class FightManager {
 
     private final S2Agent agent;
+    private final Set<ArmyTask> armyTasks;
 
     private DefaultArmyTask attackingArmy = new DefaultArmyTask("Attack");
     private DefaultArmyTask reserveArmy = new DefaultArmyTask("Reserve");
@@ -40,6 +45,7 @@ public class FightManager {
 
     public FightManager(S2Agent agent) {
         this.agent = agent;
+        armyTasks = Set.of(attackingArmy, reserveArmy);
     }
 
     public void setAttackPosition(Optional<Point2d> attackPosition) {
@@ -180,10 +186,25 @@ public class FightManager {
         return (reserveArmy.getSize() > army.threat());
     }
 
-    public Set<UnitType> getRequestedUnitTypes() {
-        Set<UnitType> requestedTypes = new HashSet<>();
-        requestedTypes.addAll(attackingArmy.requestingUnitTypes());
-        requestedTypes.addAll(reserveArmy.requestingUnitTypes());
-        return requestedTypes;
+    public List<UnitTypeRequest> getRequestedUnitTypes() {
+        Map<UnitType, Integer> requestedAmount = new HashMap<>();
+        Map<UnitType, UnitType> producingUnitType = new HashMap<>();
+        Map<UnitType, Ability> productionAbility = new HashMap<>();
+        armyTasks.forEach(armyTask -> {
+            attackingArmy.requestingUnitTypes().forEach(unitTypeRequest -> {
+                requestedAmount.put(unitTypeRequest.unitType(),
+                        requestedAmount.getOrDefault(unitTypeRequest.unitType(), 0) + unitTypeRequest.amount());
+                producingUnitType.put(unitTypeRequest.unitType(), unitTypeRequest.producingUnitType());
+                productionAbility.put(unitTypeRequest.unitType(), unitTypeRequest.productionAbility());
+            });
+        });
+        return requestedAmount.entrySet().stream()
+                .map(entry -> ImmutableUnitTypeRequest.builder()
+                        .unitType(entry.getKey())
+                        .amount(entry.getValue())
+                        .producingUnitType(producingUnitType.get(entry.getKey()))
+                        .productionAbility(productionAbility.get(entry.getKey()))
+                        .build())
+                .collect(Collectors.toList());
     }
 }

@@ -11,6 +11,8 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 
 import java.util.*;
@@ -215,16 +217,36 @@ public class DefaultArmyTask implements ArmyTask {
     }
 
     @Override
-    public Set<UnitType> requestingUnitTypes() {
-        if (armyUnits.size() < 10) {
-            return Set.of(Units.TERRAN_MARINE);
-        } else if (armyUnits.size() < 40) {
-            return Set.of(Units.TERRAN_MARINE, Units.TERRAN_MARAUDER);
-        } else if (numMedivacs < 6) {
-            return Set.of(Units.TERRAN_MARINE, Units.TERRAN_MARAUDER, Units.TERRAN_MEDIVAC);
-        } else {
-            return Set.of(Units.TERRAN_MARINE, Units.TERRAN_MARAUDER);
+    public List<UnitTypeRequest> requestingUnitTypes() {
+        List<UnitTypeRequest> result = new ArrayList<>();
+        if (armyUnits.size() < 20) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                            .unitType(Units.TERRAN_MARINE)
+                            .productionAbility(Abilities.TRAIN_MARINE)
+                            .producingUnitType(Units.TERRAN_BARRACKS)
+                            .amount(1000)
+                            .build()
+                    );
         }
+        if (armyUnits.size() < 40) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_MARAUDER)
+                    .productionAbility(Abilities.TRAIN_MARAUDER)
+                    .producingUnitType(Units.TERRAN_BARRACKS)
+                    .amount(10)
+                    .build()
+            );
+        }
+        if (armyUnits.size() > 10 && numMedivacs < armyUnits.size() * 0.1) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_MEDIVAC)
+                    .productionAbility(Abilities.TRAIN_MEDIVAC)
+                    .producingUnitType(Units.TERRAN_STARPORT)
+                    .amount(10)
+                    .build()
+            );
+        }
+        return result;
     }
 
     /**
