@@ -21,8 +21,9 @@ import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.AnalysisResults;
-import com.supalosa.bot.analysis.ImmutableRegion;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.pathfinding.GraphUtils;
+import com.supalosa.bot.pathfinding.RegionGraph;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -63,6 +64,12 @@ public class MapAwarenessImpl implements MapAwareness {
     private Map<Integer, RegionData> regionData = new HashMap<>();
     private long regionDataCalculatedAt = 0L;
 
+    private Optional<RegionGraph> normalGraph = Optional.empty();
+    private Optional<RegionGraph> avoidArmyGraph = Optional.empty();
+    private Optional<RegionGraph> avoidKillzoneGraph = Optional.empty();
+
+    private Optional<AnalysisResults> mapAnalysisResults = Optional.empty();
+
     public MapAwarenessImpl() {
         this.startPosition = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
@@ -70,12 +77,27 @@ public class MapAwarenessImpl implements MapAwareness {
 
     @Override
     public Optional<RegionData> getRegionDataForPoint(Point2d point) {
-        return Optional.empty();
+        return mapAnalysisResults.flatMap(analysis -> {
+            Optional<Integer> maybeRegionId = analysis.getTile((int)point.getX(), (int)point.getY()).map(tile -> tile.regionId);
+            if (maybeRegionId.isPresent()) {
+                return Optional.ofNullable(regionData.get(maybeRegionId.get()));
+            } else {
+                return Optional.empty();
+            }
+        });
     }
 
     @Override
-    public List<RegionData> generatePath(Point2d startPosition, Point2d endPosition) {
-        return new ArrayList<>();
+    public Optional<List<Region>> generatePath(Region startRegion, Region endRegion, PathRules rules) {
+        switch (rules) {
+            case AVOID_ENEMY_ARMY:
+                return avoidArmyGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+            case AVOID_KILL_ZONE:
+                return avoidKillzoneGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+            case NONE:
+            default:
+                return normalGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+        }
     }
 
     @Override
@@ -248,16 +270,33 @@ public class MapAwarenessImpl implements MapAwareness {
                 Optional<Double> killzoneThreat = region.onLowGroundOfRegions().stream().map(highGroundRegionId ->
                    regionToEnemyThreat.get(highGroundRegionId)
                 ).reduce(Double::sum);
+                // For ramps only, detect if they are blocked.
+                boolean isRampAndBlocked = false;
+                if (mapAnalysisResults.isPresent() && region.getRampId().isPresent()) {
+                    isRampAndBlocked = mapAnalysisResults.map(analysis -> analysis
+                            .getRamp(region.getRampId().get()).calculateIsBlocked(agent.observation())).orElse(false);
+                }
                 ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
                         .region(region)
-                        .weight(1.0)
-                        .enemyArmyFactor(enemyThreat / Math.max(1.0, finalMaxEnemyThreat))
-                        .killzoneFactor(killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat)).orElse(1.0))
+                        .weight(1.0) // hack
+                        .isBlocked(isRampAndBlocked)
+                        .enemyArmyFactor(1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat))
+                        .killzoneFactor(1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0))
                         .enemyThreat(enemyThreat)
                         .playerThreat(currentSelfThreat);
 
                regionData.put(region.regionId(), builder.build());
             });
+
+            normalGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
+                    (sourceRegion, destinationRegion) -> destinationRegion.weight()));
+
+            // Edges are weighted by how much army is in the destination.
+            avoidArmyGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
+                    (sourceRegion, destinationRegion) -> destinationRegion.enemyArmyFactor()));
+
+            avoidKillzoneGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
+                    (sourceRegion, destinationRegion) -> destinationRegion.killzoneFactor() < 10.0f ? destinationRegion.killzoneFactor() : null));
         }
     }
 
@@ -529,5 +568,10 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public Optional<Point2d> getNextScoutTarget() {
         return findRandomEnemyPosition();
+    }
+
+    @Override
+    public void setMapAnalysisResults(AnalysisResults analysis) {
+        this.mapAnalysisResults = Optional.of(analysis);
     }
 }

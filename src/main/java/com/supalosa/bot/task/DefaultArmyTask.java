@@ -13,7 +13,10 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
+import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.awareness.RegionData;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -29,6 +32,16 @@ public class DefaultArmyTask implements ArmyTask {
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
 
     private Optional<Point2d> centreOfMass = Optional.empty();
+    private boolean isRegrouping = false;
+
+    private MapAwareness.PathRules pathingRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
+    private Optional<Region> currentRegion = Optional.empty();
+    private Optional<Region> targetRegion = Optional.empty();
+    private List<Region> regionWaypoints = new ArrayList<>();
+    private Optional<Region> waypointsCalculatedFrom = Optional.empty();
+    private Optional<Region> waypointsCalculatedAgainst = Optional.empty();
+    private long waypointsCalculatedAt = 0L;
+
     private long centreOfMassLastUpdated = 0L;
 
     private int numMedivacs = 0;
@@ -85,13 +98,52 @@ public class DefaultArmyTask implements ArmyTask {
                     centreOfMass,
                     data.mapAwareness().getMaybeEnemyArmy());
         }
-    }
 
-    private boolean isRegrouping = false;
+        // Handle pathfinding.
+        targetRegion = targetPosition.flatMap(position ->
+                data.mapAwareness().getRegionDataForPoint(position).map(RegionData::region));
+        // TODO if regrouping is current region valid?
+        currentRegion = centreOfMass.flatMap(centre ->
+                data.mapAwareness().getRegionDataForPoint(centre).map(RegionData::region));
+        if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
+                currentRegion.get().equals(regionWaypoints.get(0)) ||
+                (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 2.5f)
+        )) {
+            // Arrived at the head waypoint.
+            regionWaypoints.remove(0);
+            if (regionWaypoints.size() > 0) {
+                waypointsCalculatedFrom = Optional.of(regionWaypoints.get(0));
+            } else {
+                // Finished path.
+                waypointsCalculatedAgainst = Optional.empty();
+                waypointsCalculatedFrom = Optional.empty();
+            }
+        }
+
+        if (gameLoop > waypointsCalculatedAt + 44L) {
+            waypointsCalculatedAt = gameLoop;
+            // Target has changed, clear pathfinding.
+            if (!waypointsCalculatedAgainst.equals(targetRegion)) {
+                waypointsCalculatedAgainst = Optional.empty();
+                regionWaypoints.clear();
+            }
+            // Calculate path every time - TODO probably don't need to.
+            if (currentRegion.isPresent() && targetRegion.isPresent() && !currentRegion.equals(targetRegion)) {
+                Optional<List<Region>> maybePath = data
+                        .mapAwareness()
+                        .generatePath(currentRegion.get(), targetRegion.get(), pathingRules);
+                maybePath.ifPresent(path -> {
+                    regionWaypoints = path;
+                    waypointsCalculatedFrom = currentRegion;
+                    waypointsCalculatedAgainst = targetRegion;
+                });
+            }
+        }
+    }
 
     private void attackCommand(ObservationInterface observationInterface,
                                ActionInterface actionInterface,
-                               Optional<Point2d> centreOfMass,
+                               Optional<Point2d> centreOfatMass,
                                Optional<Army> maybeEnemyArmy) {
         Set<Tag> unitsToAttackWith = new HashSet<>(armyUnits);
         boolean attackWithAll = false;
@@ -140,8 +192,22 @@ public class DefaultArmyTask implements ArmyTask {
             }
             if (attackWithAll) {
                 unitsToAttackWith.removeAll(unitsThatMustMove);
+                Optional<Point2d> positionToAttackMove = targetPosition;
+                // Handle pathfinding.
+                if (waypointsCalculatedAgainst.isPresent() && regionWaypoints.size() > 0) {
+                    Region head = regionWaypoints.get(0);
+                    if (targetRegion.isPresent() && targetRegion.get().equals(head)) {
+                        // Arrived; attack the target.
+                        positionToAttackMove = targetPosition;
+                    } else {
+                        // Attack move to centre of the next region.
+                        positionToAttackMove = Optional.of(head.centrePoint());
+                    }
+                } else {
+                    //System.out.println("No waypoint target or no points (" + regionWaypoints.size() + ")");
+                }
                 if (unitsToAttackWith.size() > 0) {
-                    targetPosition.ifPresentOrElse(point2d ->
+                    positionToAttackMove.ifPresentOrElse(point2d ->
                                     actionInterface.unitCommand(unitsToAttackWith, Abilities.ATTACK, point2d, false),
                             () -> retreatPosition.ifPresent(point2d ->
                                     actionInterface.unitCommand(unitsToAttackWith,
@@ -154,7 +220,7 @@ public class DefaultArmyTask implements ArmyTask {
                                     actionInterface.unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
                 }
                 if (maybeEnemyArmy.isPresent()) {
-                    // TODO this belongs in a task.
+                    // TODO this belongs in a method.
                     AtomicInteger stimmedMarines = new AtomicInteger(0);
                     AtomicInteger stimmedMarauders = new AtomicInteger(0);
                     Set<Tag> marinesWithoutStim = observationInterface.getUnits(unitInPool ->
@@ -300,11 +366,29 @@ public class DefaultArmyTask implements ArmyTask {
             agent.debug().debugSphereOut(point, 1f, Color.YELLOW);
             agent.debug().debugTextOut(this.armyName, point, Color.WHITE, 8);
         });
+        if (regionWaypoints.size() > 0) {
+            // FIXME default value
+            Point2d startPoint = centreOfMass.orElse(retreatPosition.orElse(Point2d.of(0, 0)));
+            Point lastPoint = Point.of(startPoint.getX(), startPoint.getY(), agent.observation().terrainHeight(startPoint)+1f);
+            for (Region waypoint : regionWaypoints) {
+                Point2d nextPoint = waypoint.centrePoint();
+                Point newPoint = Point.of(nextPoint.getX(), nextPoint.getY(), agent.observation().terrainHeight(nextPoint)+1f);
+
+                agent.debug().debugSphereOut(newPoint, 1f, Color.WHITE);
+                agent.debug().debugLineOut(lastPoint, newPoint, Color.WHITE);
+                lastPoint = newPoint;
+            }
+        }
     }
 
     @Override
     public String getDebugText() {
         return "Army (" + armyName + ") " + targetPosition.map(point2d -> point2d.getX() + "," + point2d.getY()).orElse("?") +
                 " (" + armyUnits.size() + ")";
+    }
+
+    @Override
+    public Optional<List<Region>> getWaypoints() {
+        return Optional.of(this.regionWaypoints);
     }
 }

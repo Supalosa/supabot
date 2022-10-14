@@ -54,4 +54,9 @@ public interface RegionData {
     default double playerThreat() {
         return 0.0;
     }
+
+    @Value.Default
+    default boolean isBlocked() {
+        return false;
+    }
 }

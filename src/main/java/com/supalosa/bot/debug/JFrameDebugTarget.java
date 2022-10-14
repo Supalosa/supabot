@@ -82,27 +82,15 @@ public class JFrameDebugTarget implements DebugTarget {
                     regionBmp,
                     regionData.region(),
                     (_prevVal) -> {
-                        if (regionData.enemyThreat() > regionData.playerThreat()) {
-                            return VisualisationUtils.makeRgb(
-                                    255 - (int) (255 * regionData.playerThreat() / baseThreat),
-                                    255 - (int) (255 * regionData.enemyThreat() / baseThreat),
-                                    255 - (int) (255 * regionData.enemyThreat() / baseThreat));
-                        } else {
-                            return VisualisationUtils.makeRgb(
-                                    255 - (int) (255 * regionData.playerThreat() / baseThreat),
-                                    255 - (int) (255 * regionData.enemyThreat() / baseThreat),
-                                    255 - (int) (128 * regionData.playerThreat() / baseThreat))
-                                        - (int) (127 * regionData.enemyThreat() / baseThreat);
+                        if (regionData.isBlocked()) {
+                            return VisualisationUtils.makeRgb(128, 128, 128);
                         }
+                        double red = (255 - (int) (255 * regionData.playerThreat() / baseThreat)) / regionData.killzoneFactor();
+                        double green = (255 - (int) (255 * regionData.enemyThreat() / baseThreat)) / regionData.killzoneFactor();
+                        double blue = (255 - (int) (128 * regionData.playerThreat() / baseThreat)
+                                        - (int) (127 * regionData.enemyThreat() / baseThreat)) / regionData.killzoneFactor();
+                        return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     });
-            if (regionData.killzoneFactor() > 1.0) {
-                VisualisationUtils.addToRenderedGrid(
-                        regionBmp,
-                        regionData.region(),
-                        (_prevVal) ->
-                            VisualisationUtils.makeRgb(_prevVal & 0xFF, _prevVal & 0xFF, _prevVal & 0xFF)
-                        );
-            }
         });
         // scale the bitmap
         AffineTransform transform = new AffineTransform();

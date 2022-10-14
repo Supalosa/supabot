@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.SupaBot;
+import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
 
 import java.util.Collection;
@@ -26,11 +27,11 @@ public interface MapAwareness {
          * Path by avoiding 'killzones' (low ground, siege tanks, liberators)
          */
         AVOID_KILL_ZONE
-    };
+    }
 
     Optional<RegionData> getRegionDataForPoint(Point2d point);
 
-    List<RegionData> generatePath(Point2d startPosition, Point2d endPosition);
+    Optional<List<Region>> generatePath(Region startRegion, Region endRegion, PathRules rules);
 
     Collection<RegionData> getAllRegionData();
 
@@ -91,4 +92,6 @@ public interface MapAwareness {
     Optional<Point2d> getNextScoutTarget();
 
     Optional<Float> getObservedCreepCoverage();
+
+    void setMapAnalysisResults(AnalysisResults mapAnalysis);
 }

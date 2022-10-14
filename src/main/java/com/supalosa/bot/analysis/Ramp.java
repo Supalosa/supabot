@@ -1,9 +1,9 @@
 package com.supalosa.bot.analysis;
 
+import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 public class Ramp implements TileSet {
     private final int rampId;
@@ -105,5 +105,45 @@ public class Ramp implements TileSet {
             }
         }
         return RampDirection.UNKNOWN;
+    }
+
+    private static final Point2d[] FOUR_NEIGHBOURS = new Point2d[]{
+            Point2d.of(-1, 0),
+            Point2d.of(1, 0),
+            Point2d.of(0,-1),
+            Point2d.of(0, 1)
+    };
+
+    /**
+     * Returns true if this ramp is blocked, that is, no path exists from a highground to a lowground tile.
+     * This is a relatively expensive, uncached method, do not call too frequently.
+     */
+    public boolean calculateIsBlocked(ObservationInterface observation) {
+        if (rampTiles.size() == 0) {
+            return false;
+        }
+        List<Point2d> tiles = new ArrayList<>();
+        tiles.add(rampTiles.stream().findFirst().get());
+        Set<Point2d> visited = new HashSet<>();
+        while (tiles.size() > 0) {
+            Point2d head = tiles.remove(0);
+            visited.add(head);
+            // note, use 4-neighbour not 8-neighbour for correctness.
+            for (int i = 0; i < FOUR_NEIGHBOURS.length; ++i) {
+                Point2d neighbourPoint = head.add(FOUR_NEIGHBOURS[i]);
+                if (rampTiles.contains(neighbourPoint) && !visited.contains(neighbourPoint)) {
+                    visited.add(neighbourPoint);
+                    if (observation.isPathable(neighbourPoint)) {
+                        tiles.add(neighbourPoint);
+                    }
+                }
+            }
+        }
+        // If we visited all the tiles then it's unblocked.
+        if (visited.size() != rampTiles.size()) {
+            int i = 1;
+            ++i;
+        }
+        return visited.size() != rampTiles.size();
     }
 }

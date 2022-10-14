@@ -94,6 +94,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData,
                         observation().getStartLocation().toPoint2d()));
         this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
+        mapAnalysis.ifPresent(analysis -> this.mapAwareness.setMapAnalysisResults(analysis));
 
         dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemy(), 2));
     }

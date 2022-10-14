@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.analysis.Region;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,4 +29,6 @@ public interface ArmyTask extends Task {
      * Stop returning the unit if you have enough of it.
      */
     List<UnitTypeRequest> requestingUnitTypes();
+
+    Optional<List<Region>> getWaypoints();
 }
