@@ -7,6 +7,8 @@ import com.supalosa.bot.analysis.utils.VisualisationUtils;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowEvent;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 
 public class JFrameDebugTarget implements DebugTarget {
@@ -47,12 +49,22 @@ public class JFrameDebugTarget implements DebugTarget {
         lastFrameUpdate = gameLoop;
         frame.getContentPane().removeAll();
 
+        float distanceToBorderMax = 20;
         BufferedImage placementBmp = VisualisationUtils.renderNewGrid(
                 data.mapAnalysis().get().getGrid(),
-                tile -> tile.placeable ? WHITE : BLACK);
+                tile -> {
+                    if (!tile.pathable && !tile.placeable) {
+                        return BLACK;
+                    }
+                    if (tile.distanceToBorder == 1) {
+                        return WHITE;
+                    }
+                    float dbRatio = tile.distanceToBorder / distanceToBorderMax;
+                    int colComponent = (int)(255 * dbRatio);
+                    return VisualisationUtils.makeRgb(0, colComponent, colComponent);
+                });
 
         data.structurePlacementCalculator().ifPresent(spc -> {
-            frame.getContentPane().add(new JLabel("Placement Grid"));
             VisualisationUtils.addToRenderedGrid(
                     placementBmp,
                     spc.getMutableFreePlacementGrid(),
@@ -61,7 +73,13 @@ public class JFrameDebugTarget implements DebugTarget {
 
         });
 
-        QuickDrawPanel placementPanel = new QuickDrawPanel(placementBmp);
+        // scale the bitmap
+        AffineTransform transform = new AffineTransform();
+        transform.scale(2.0, 2.0);
+        AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
+
+        BufferedImage after = new BufferedImage(placementBmp.getWidth() * 2, placementBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        QuickDrawPanel placementPanel = new QuickDrawPanel(transformOp.filter(placementBmp, after));
         frame.getContentPane().add(placementPanel);
 
         frame.pack();

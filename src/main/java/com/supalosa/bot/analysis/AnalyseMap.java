@@ -9,14 +9,18 @@ import com.supalosa.bot.GameData;
 import com.supalosa.bot.analysis.utils.BitmapGrid;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
+import com.supalosa.bot.debug.JFrameDebugTarget;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 
 import javax.imageio.ImageIO;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 
 public class AnalyseMap {
     private static final int MAX_BYTE = 255;
@@ -37,10 +41,49 @@ public class AnalyseMap {
         // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
 
         Point2d start = findAnyPathable(pathing);
+
+        long startTime = System.currentTimeMillis();
         AnalysisResults data = Analysis.run(start, terrain, pathing, placement);
         GameData gameData = new GameData(null);
         StructurePlacementCalculator spc = new StructurePlacementCalculator(data, gameData, start);
+        long endTime = System.currentTimeMillis();
+
+        niceRender("niceTransform.bmp", data, tile -> {
+            if (!tile.pathable && !tile.placeable) {
+                return BLACK;
+            }
+            if (tile.isPostFilteredLocalMaximum) {
+                return GREEN;
+            }
+            if (tile.isLocalMaximum) {
+                return GRAY;
+            }
+            if (tile.distanceToBorder == 1) {
+                return WHITE;
+            }
+            float dbRatio = tile.distanceToBorder / 20f;
+            int colComponent = (int)(255 * dbRatio);
+            return VisualisationUtils.makeRgb(0, colComponent, colComponent);
+        });
+        niceRender("regionMap.bmp", data, tile -> {
+            if (!tile.pathable && !tile.placeable) {
+                return BLACK;
+            }
+            if (tile.isPostFilteredLocalMaximum) {
+                return GREEN;
+            }
+            if (tile.distanceToBorder == 1) {
+                return WHITE;
+            }
+            int colComponent = (int)(tile.regionId);
+            colComponent = 31 * colComponent + (int) colComponent;
+            return VisualisationUtils.makeRgb(
+                    (colComponent ^ (colComponent >>> 3)) & 0xFF,
+                    (colComponent ^ (colComponent >>> 7)) & 0xFF,
+                    (colComponent ^ (colComponent >>> 11)) & 0xFF);
+        });
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
+        System.out.println("Calculation took " + (endTime - startTime) + "ms");
     }
 
     private static Point2d findAnyPathable(Grid<Integer> pathing) {
@@ -109,5 +152,31 @@ public class AnalyseMap {
             }
         }
         return img;*/
+    }
+
+    public static final int WHITE = VisualisationUtils.makeRgb(255, 255, 255);
+    public static final int BLACK = VisualisationUtils.makeRgb(0, 0, 0);
+    public static final int GREEN = VisualisationUtils.makeRgb(0, 255, 0);
+    public static final int GRAY = VisualisationUtils.makeRgb(128, 128, 128);
+
+    private static void niceRender(String fileName, AnalysisResults data, Function<Tile, Integer> tileRenderer) {
+        BufferedImage niceBmp = VisualisationUtils.renderNewGrid(
+                data.getGrid(), tileRenderer);
+
+        //niceBmp.setRGB(48, niceBmp.getHeight() - 109, VisualisationUtils.makeRgb(255, 0, 0));
+        //niceBmp.setRGB(110, niceBmp.getHeight() - 161, VisualisationUtils.makeRgb(255, 0, 0));
+
+        // scale the bitmap
+        AffineTransform transform = new AffineTransform();
+        transform.scale(2.0, 2.0);
+        AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+
+        BufferedImage after = new BufferedImage(niceBmp.getWidth() * 2, niceBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        File outputFile = new File(fileName);
+        try {
+            ImageIO.write(transformOp.filter(niceBmp, after), "bmp", outputFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

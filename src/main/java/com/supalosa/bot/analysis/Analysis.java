@@ -1,16 +1,16 @@
 package com.supalosa.bot.analysis;
 
-import com.github.ocraft.s2client.protocol.data.Buff;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.supalosa.bot.analysis.utils.BitmapGrid;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.SetMultimap;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 public class Analysis {
@@ -83,6 +83,8 @@ public class Analysis {
                 }
             }
             Tile t = result.get(x, y);
+            t.x = x;
+            t.y = y;
             t.terrain = terrainValue;
             t.pathable = pathingValue > 0;
             t.placeable = placementValue > 0;
@@ -230,13 +232,14 @@ public class Analysis {
         });
 
         Grid<Integer> distanceTransformGrid = distanceTransform(pathing, result);
+        Set<Point2d> confirmedMaxima = findLocalMaximumAndConfirmedMaxima(distanceTransformGrid, result);
+        Map<Integer, Region> regions = floodFillRegions(confirmedMaxima, mapOfRamps, result);
 
-        return new AnalysisResults(result, mapOfRamps, topOfRampLocations.keySet(), pathableTiles);
+        return new AnalysisResults(result, mapOfRamps, topOfRampLocations.keySet(), pathableTiles, regions);
     }
 
     private static Grid<Integer> distanceTransform(Grid<Integer> pathing, Grid<Tile> output) {
-        BufferedImage image = new BufferedImage(pathing.getWidth(), pathing.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
-        Grid<Integer> result = new BitmapGrid(image);
+        Grid<Integer> result = new InMemoryGrid(Integer.class, pathing.getWidth(), pathing.getHeight(), () -> 0);
         // Using L1 distance transformation.
         for (int x = 0; x < result.getWidth(); ++x) {
             for (int y = 0; y < result.getHeight(); ++y) {
@@ -250,7 +253,7 @@ public class Analysis {
 
         for (int x = 1; x < result.getWidth(); ++x) {
             for (int y = 1; y < result.getHeight(); ++y) {
-                int value = Math.min(result.get(x, y).intValue(), Math.min(result.get(x-1, y) + 1, result.get(x, y-1) + 1));
+                int value = Math.min(result.get(x, y), Math.min(result.get(x-1, y) + 1, result.get(x, y-1) + 1));
                 result.set(x, y, value);
                 Tile t = output.get(x, y);
                 t.distanceToBorder = value & 0xFF;
@@ -259,19 +262,194 @@ public class Analysis {
 
         for (int x = result.getWidth() - 2; x >= 0; --x) {
             for (int y = result.getHeight() - 2; y >= 0; --y) {
-                int value = Math.min(result.get(x, y).intValue(), Math.min(result.get(x+1, y) + 1, result.get(x, y+1) + 1));
+                int value = Math.min(result.get(x, y), Math.min(result.get(x+1, y) + 1, result.get(x, y+1) + 1));
                 result.set(x, y, value);
                 Tile t = output.get(x, y);
                 t.distanceToBorder = value & 0xFF;
             }
         }
 
-        File outputFile = new File("distanceTransform.bmp");
-        try {
-            ImageIO.write(image, "bmp", outputFile);
-        } catch (IOException e) {
-            e.printStackTrace();
+        return result;
+    }
+
+    private static Set<Point2d> findLocalMaximumAndConfirmedMaxima(Grid<Integer> distanceTransformGrid, Grid<Tile> result) {
+        // we don't test on the edges as an implementation detail, as it's usually outside the map +
+        // should never be a maximum.
+        // this is super naive and probably needs improvement to be run live, but is fine for
+        // static analysis.
+        Multimap<Integer, Point2d> localMaximums = ArrayListMultimap.create();
+        for (int x = 1; x < result.getWidth() - 1; ++x) {
+            for (int y = 1; y < result.getHeight() - 1; ++y) {
+                int myValue = distanceTransformGrid.get(x, y);
+                if (myValue == 0) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x - 1, y)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x + 1, y)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x, y - 1)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x, y + 1)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x - 1, y - 1)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x + 1, y - 1)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x - 1, y + 1)) {
+                    continue;
+                }
+                if (myValue < distanceTransformGrid.get(x + 1, y + 1)) {
+                    continue;
+                }
+                result.get(x, y).isLocalMaximum = true;
+                localMaximums.put(myValue, Point2d.of(x, y));
+            }
         }
+        if (localMaximums.size() == 0) {
+            return null;
+        }
+        OptionalInt maxLocalMaximum = localMaximums.keySet().stream().mapToInt(key -> key.intValue()).max();
+        Set<Point2d> removedLocalMaxima = new HashSet<>();
+        Set<Point2d> confirmedLocalMaxima = new HashSet<>();
+        // Starting from the highest DT value, remove all other local maximums less than it, within the radius.
+        for (int i = maxLocalMaximum.getAsInt(); i >= 0; --i) {
+            Set<Point2d> localMaximaWithValue = new HashSet<>(localMaximums.get(i));
+            localMaximaWithValue.removeAll(removedLocalMaxima);
+            Set<Point2d> lowerMaxima = new HashSet<>();
+            for (int j = 0; j < i; ++j) {
+                lowerMaxima.addAll(localMaximums.get(j));
+                lowerMaxima.removeAll(removedLocalMaxima);
+            }
+            int finalI = i;
+            localMaximaWithValue.forEach(currentMaxima -> {
+                lowerMaxima.forEach(otherMaxima -> {
+                    if (currentMaxima.distance(otherMaxima) <= finalI * 1.5f) {
+                        removedLocalMaxima.add(otherMaxima);
+                    }
+                });
+            });
+            confirmedLocalMaxima.addAll(localMaximaWithValue);
+        }
+        System.out.println("Filtered " + removedLocalMaxima.size() + " maxima");
+        System.out.println("Remaining local maxima = " + confirmedLocalMaxima.size() + "/" + localMaximums.size());
+        confirmedLocalMaxima.forEach(confirmedMaxima -> {
+           result.get((int)confirmedMaxima.getX(), (int)confirmedMaxima.getY()).isPostFilteredLocalMaximum = true;
+        });
+        // group contiguous maxima
+        int currentMaximaId = 0;
+        Map<Point2d, Integer> maximaToId = new HashMap<>();
+        if (confirmedLocalMaxima.size() > 0) {
+            Queue<Point2d> openMaxima = new LinkedList<>();
+            Set<Point2d> unexploredMaxima = new HashSet<>(confirmedLocalMaxima);
+            openMaxima.add(confirmedLocalMaxima.stream().findFirst().get());
+            while (openMaxima.isEmpty() == false) {
+                Point2d point = openMaxima.poll();
+                unexploredMaxima.remove(point);
+
+                int x = (int)point.getX(), y = (int)point.getY();
+                maximaToId.put(point, currentMaximaId);
+                Tile t = result.get(x, y);
+                t.regionId = currentMaximaId;
+                result.set(x, y, t);
+
+                // Explore neighbours of point.
+                for (int dx = -1; dx <= 1; ++dx) {
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        if (dx == 0 && dy == 0) {
+                            continue;
+                        }
+                        Point2d neighbour = Point2d.of(x + dx, y + dy);
+                        if (unexploredMaxima.contains(neighbour)) {
+                            unexploredMaxima.remove(neighbour);
+                            openMaxima.add(neighbour);
+                        }
+                    }
+                }
+                if (openMaxima.isEmpty()) {
+                    // start exploring other ramp tiles
+                    ++currentMaximaId;
+                    if (unexploredMaxima.size() > 0) {
+                        openMaxima.add(unexploredMaxima.stream().findFirst().get());
+                    }
+                }
+            }
+        }
+        return confirmedLocalMaxima;
+    }
+
+    private static Map<Integer, Region> floodFillRegions(Set<Point2d> confirmedMaxima, Map<Integer, Ramp> mapOfRamps, Grid<Tile> grid) {
+        PriorityQueue<Tile> queue = new PriorityQueue<>(Comparator.comparingInt(tile -> -tile.distanceToBorder));
+        AtomicInteger tempCounter = new AtomicInteger();
+        confirmedMaxima.forEach(maxima -> {
+            Tile value = grid.get((int)maxima.getX(), (int)maxima.getY());
+            queue.add(value);
+            /*if (value.regionId == -1) {
+                value.regionId = tempCounter.getAndIncrement();
+            }*/
+        });
+        // Add ramps as their own regions.
+        Multimap<Integer, Tile> regions = ArrayListMultimap.create();
+        Map<Integer, Integer> regionIdToRampId = new HashMap<>();
+        mapOfRamps.forEach((rampId, ramp) -> {
+           ramp.getRampTiles().forEach(rampTile -> {
+               Tile tile = grid.get((int)rampTile.getX(), (int)rampTile.getY());
+               tile.regionId = 1000 + rampId;
+               regions.put(1000 + rampId, tile);
+               regionIdToRampId.put(tile.regionId, rampId);
+           });
+        });
+        Set<Tile> alreadyEnqueued = new HashSet<>();
+        SetMultimap<Integer, Integer> connectedRegions = HashMultimap.create();
+        final BiConsumer<Integer, Tile> maybeEnqueue = (regionId, tile) -> {
+            if (alreadyEnqueued.contains(tile)) {
+                return;
+            }
+            if (!tile.pathable) {
+                return;
+            }
+            if (tile.regionId == -1) {
+                tile.regionId = regionId;
+                alreadyEnqueued.add(tile);
+                queue.add(tile);
+            } else if (tile.regionId != regionId) {
+                // Found a connection.
+                connectedRegions.put(tile.regionId, regionId);
+                connectedRegions.put(regionId, tile.regionId);
+            }
+        };
+        while (queue.size() > 0) {
+            Tile head = queue.poll();
+            regions.put(head.regionId, head);
+            maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y - 1));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x, head.y - 1));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y - 1));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y + 1));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x, head.y + 1));
+            maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y + 1));
+        }
+        Map<Integer, Region> result = new HashMap<>();
+        regions.keySet().forEach(regionId -> {
+            Region newRegion = ImmutableRegion.builder()
+                    .regionId(regionId)
+                    .addAllTiles(regions.get(regionId).stream().map(tile -> Point2d.of(tile.x, tile.y))
+                            .collect(Collectors.toList()))
+                    .rampId(Optional.ofNullable(regionIdToRampId.get(regionId)))
+                    .connectedRegions(connectedRegions.get(regionId))
+                    .build();
+            result.put(regionId, newRegion);
+        });
+        connectedRegions.forEach((region1, region2) -> {
+           System.out.println("Region " + region1 + " connected to " + region2);
+        });
         return result;
     }
 

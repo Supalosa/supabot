@@ -4,6 +4,7 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import org.immutables.value.Value;
 
 import java.util.Optional;
@@ -18,9 +19,14 @@ public abstract class UnitFilter implements Predicate<UnitInPool> {
     public abstract Optional<Set<UnitType>> unitTypes();
     public abstract Optional<Point2d> inRangeOf();
     public abstract Optional<Float> range();
+    public abstract Optional<Predicate<Unit>> filter();
 
     public static ImmutableUnitFilter.Builder builder() {
         return ImmutableUnitFilter.builder();
+    }
+
+    public static UnitFilter of(Predicate<Unit> predicate) {
+        return ImmutableUnitFilter.builder().filter(predicate).build();
     }
 
     @Override
@@ -48,6 +54,11 @@ public abstract class UnitFilter implements Predicate<UnitInPool> {
         }
         if (inRangeOf().isPresent() && range().isPresent()) {
             if (unitInPool.unit().getPosition().toPoint2d().distance(inRangeOf().get()) > range().get()) {
+                return false;
+            }
+        }
+        if (filter().isPresent()) {
+            if (!filter().get().test(unitInPool.unit())) {
                 return false;
             }
         }

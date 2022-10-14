@@ -565,6 +565,9 @@ public class SupaBot extends S2Agent implements AgentData {
     private boolean tryBuildScvs() {
         int numBases = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
         int numScvs = countUnitType(Units.TERRAN_SCV);
+        if (observation().getFoodUsed() == observation().getFoodCap()) {
+            return false;
+        }
         observation().getUnits(Alliance.SELF,
                 unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
             if (commandCentre.unit().getOrders().isEmpty()) {
@@ -584,6 +587,9 @@ public class SupaBot extends S2Agent implements AgentData {
                 return false;
             }
         }
+        if (observation().getFoodUsed() == observation().getFoodCap()) {
+            return false;
+        }
         observation().getUnits(Alliance.SELF, UnitInPool.isUnit(buildFrom)).forEach(structure -> {
             boolean reactor = false;
             if (structure.unit().getAddOnTag().isPresent()) {
@@ -598,7 +604,8 @@ public class SupaBot extends S2Agent implements AgentData {
             }
             List<UnitOrder> orders = structure.unit().getOrders();
             if (orders.isEmpty() || (reactor && orders.size() < 2)) {
-                if (!needsCommandCentre()) {
+                // Hack here - need prioritsation.
+                if (observation().getMinerals() > 600 || !needsCommandCentre()) {
                     actions().unitCommand(structure.unit(), abilityToCast, false);
                 }
             }
@@ -801,14 +808,15 @@ public class SupaBot extends S2Agent implements AgentData {
         }
         switch ((Units) unit.getType()) {
             case TERRAN_SCV:
-                findNearestCommandCentre(unit.getPosition().toPoint2d()).ifPresent(commandCentre -> {
-                    findNearestMineralPatch(commandCentre.getPosition().toPoint2d()).ifPresent(mineralPath ->
-                            actions().unitCommand(unit, Abilities.SMART, mineralPath, false));
+                findNearestCommandCentreWithMinerals(unit.getPosition().toPoint2d()).ifPresent(commandCentre -> {
+                    findNearestMineralPatch(commandCentre.getPosition().toPoint2d()).ifPresent(mineralPatch ->
+                            actions().unitCommand(unit, Abilities.SMART, mineralPatch, false));
                 });
                 break;
             case TERRAN_MARINE:
             case TERRAN_MARAUDER:
             case TERRAN_MEDIVAC:
+            case TERRAN_RAVEN:
                 fightManager.onUnitIdle(unitInPool);
                 break;
             default:
@@ -816,11 +824,13 @@ public class SupaBot extends S2Agent implements AgentData {
         }
     }
 
-    private Optional<Unit> findNearestCommandCentre(Point2d start) {
+    private Optional<Unit> findNearestCommandCentreWithMinerals(Point2d start) {
         List<UnitInPool> units = observation().getUnits(
                 UnitFilter.builder()
                         .alliance(Alliance.SELF)
-                        .unitTypes(Constants.TERRAN_CC_TYPES).build());
+                        .unitTypes(Constants.TERRAN_CC_TYPES)
+                        .filter(unit -> unit.getIdealHarvesters().isPresent())
+                        .build());
         return units.stream()
                 .min(UnitComparator.builder()
                         .distanceToPoint(start)
@@ -857,8 +867,8 @@ public class SupaBot extends S2Agent implements AgentData {
         }
 
         int numBarracks = countUnitType(Units.TERRAN_BARRACKS);
-        int numCc = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
-        if (numBarracks > numCc * 3) {
+        int numCc = countMiningBases();
+        if (numBarracks > numCc * 4) {
             return false;
         }
         Optional<Point2d> position = Optional.empty();

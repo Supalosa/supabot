@@ -107,18 +107,21 @@ public class VisualisationUtils {
                 drawNumber(img, x * TILE_SIZE + 5,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 12),
                         tile.placeable ? 1 : 0, 0);
-                if (tile.rampId >= 0) {
+                if (tile.regionId > 0) {
                     drawNumber(img, x * TILE_SIZE + 5,
                             (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 18),
-                            tile.rampId, 0);
+                            tile.regionId, 0);
                 }
 
-                if (tile.distanceToBorder != 0) {
-                    System.out.println(tile.distanceToBorder);
-                }
                 drawNumber(img, x * TILE_SIZE + 15,
                         (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 6),
                         tile.distanceToBorder, 0);
+
+                if (tile.rampId >= 0) {
+                    drawNumber(img, x * TILE_SIZE + 15,
+                            (int) (y * TILE_SIZE + (TILE_SIZE * 0.2) + 12),
+                            tile.rampId, 0);
+                }
             }
         }
 
