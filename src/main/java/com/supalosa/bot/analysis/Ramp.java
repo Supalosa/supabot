@@ -81,6 +81,14 @@ public class Ramp implements TileSet {
         }
     }
 
+    public Point2d calculateMidpoint() {
+        double averageRampX = rampTiles.stream()
+                .mapToDouble(point -> point.getX()).average().orElse(Double.NaN);
+        double averageRampY = rampTiles.stream()
+                .mapToDouble(point -> point.getY()).average().orElse(Double.NaN);
+        return Point2d.of((float)averageRampX, (float)averageRampY);
+    }
+
     public static RampDirection calculateDirection(Set<Point2d> rampPoints, Set<Point2d> topOfRampPoints) {
         double averageRampX = rampPoints.stream()
                 .mapToDouble(point -> point.getX()).average().orElse(Double.NaN);

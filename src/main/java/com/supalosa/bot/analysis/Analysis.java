@@ -412,8 +412,7 @@ public class Analysis {
                tile.regionId = 1000 + rampId;
                regions.put(1000 + rampId, tile);
                regionIdToRampId.put(tile.regionId, rampId);
-               // TODO this is wrong
-               centrePoints.put(tile.regionId, Point2d.of(rampTile.getX(), rampTile.getY()));
+               centrePoints.put(tile.regionId, ramp.calculateMidpoint());
            });
         });
         Set<Tile> alreadyEnqueued = new HashSet<>();
