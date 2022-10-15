@@ -1,0 +1,226 @@
+package com.supalosa.bot.task;
+
+import com.github.ocraft.s2client.bot.S2Agent;
+import com.github.ocraft.s2client.bot.gateway.ActionInterface;
+import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
+import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.supalosa.bot.AgentData;
+import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.awareness.Army;
+import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.awareness.RegionData;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+public abstract class AbstractDefaultArmyTask implements ArmyTask {
+
+    protected final String armyName;
+    protected final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
+    protected Set<Tag> armyUnits = new HashSet<>();
+    protected Optional<Point2d> targetPosition = Optional.empty();
+    protected Optional<Point2d> retreatPosition = Optional.empty();
+    protected Optional<Point2d> centreOfMass = Optional.empty();
+    protected boolean isRegrouping = false;
+    protected MapAwareness.PathRules pathingRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
+    protected Optional<Region> currentRegion = Optional.empty();
+    protected Optional<Region> targetRegion = Optional.empty();
+    protected List<Region> regionWaypoints = new ArrayList<>();
+    protected Optional<Region> waypointsCalculatedFrom = Optional.empty();
+    protected Optional<Region> waypointsCalculatedAgainst = Optional.empty();
+    protected long waypointsCalculatedAt = 0L;
+    protected long centreOfMassLastUpdated = 0L;
+    protected MicroState microState = MicroState.BALANCED;
+
+    public AbstractDefaultArmyTask(String armyName) {
+        this.armyName = armyName;
+    }
+
+    @Override
+    public void setTargetPosition(Optional<Point2d> targetPosition) {
+        this.targetPosition = targetPosition;
+    }
+
+    @Override
+    public void setRetreatPosition(Optional<Point2d> retreatPosition) {
+        this.retreatPosition = retreatPosition;
+    }
+
+    @Override
+    public int getSize() {
+        return this.armyUnits.size();
+    }
+
+    @Override
+    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+        List<Point2d> armyPositions = new ArrayList<>();
+        armyUnits = armyUnits.stream().filter(tag -> {
+                    UnitInPool unit = agent.observation().getUnit(tag);
+                    if (unit != null) {
+                        armyPositions.add(unit.unit().getPosition().toPoint2d());
+                    }
+                    return (unit != null && unit.isAlive());
+                })
+                .collect(Collectors.toSet());
+
+        long gameLoop = agent.observation().getGameLoop();
+
+        if (gameLoop > centreOfMassLastUpdated + 22L) {
+            centreOfMassLastUpdated = gameLoop;
+            updateCentreOfMassAndAttack(data, agent, armyPositions);
+        }
+
+        // Handle pathfinding.
+        updateCurrentRegions(data);
+
+        if (gameLoop > waypointsCalculatedAt + 44L) {
+            waypointsCalculatedAt = gameLoop;
+            calculateNewPath(data);
+        }
+    }
+
+    private void calculateNewPath(AgentData data) {
+        // Target has changed, clear pathfinding.
+        if (!waypointsCalculatedAgainst.equals(targetRegion)) {
+            waypointsCalculatedAgainst = Optional.empty();
+            regionWaypoints.clear();
+        }
+        // Calculate path every time - TODO probably don't need to.
+        if (currentRegion.isPresent() && targetRegion.isPresent() && !currentRegion.equals(targetRegion)) {
+            Optional<List<Region>> maybePath = data
+                    .mapAwareness()
+                    .generatePath(currentRegion.get(), targetRegion.get(), pathingRules);
+            maybePath.ifPresent(path -> {
+                regionWaypoints = path;
+                waypointsCalculatedFrom = currentRegion;
+                waypointsCalculatedAgainst = targetRegion;
+            });
+        }
+    }
+
+    private void updateCurrentRegions(AgentData data) {
+        targetRegion = targetPosition.flatMap(position ->
+                data.mapAwareness().getRegionDataForPoint(position).map(RegionData::region));
+        // TODO if regrouping, is current region valid? It will end up thinking the unit is in a region halfway between
+        // the clumps.
+        currentRegion = centreOfMass.flatMap(centre ->
+                data.mapAwareness().getRegionDataForPoint(centre).map(RegionData::region));
+        if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
+                currentRegion.get().equals(regionWaypoints.get(0)) ||
+                        (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 2.5f)
+        )) {
+            // Arrived at the head waypoint.
+            regionWaypoints.remove(0);
+            if (regionWaypoints.size() > 0) {
+                waypointsCalculatedFrom = Optional.of(regionWaypoints.get(0));
+            } else {
+                // Finished path.
+                waypointsCalculatedAgainst = Optional.empty();
+                waypointsCalculatedFrom = Optional.empty();
+            }
+        }
+    }
+
+    private void updateCentreOfMassAndAttack(AgentData data, S2Agent agent, List<Point2d> armyPositions) {
+        OptionalDouble averageX = armyPositions.stream().mapToDouble(point -> point.getX()).average();
+        OptionalDouble averageY = armyPositions.stream().mapToDouble(point -> point.getY()).average();
+        centreOfMass = Optional.empty();
+        if (averageX.isPresent() && averageY.isPresent()) {
+            centreOfMass = Optional.of(Point2d.of((float)averageX.getAsDouble(), (float)averageY.getAsDouble()));
+        }
+        attackCommand(
+                agent.observation(),
+                agent.actions(),
+                centreOfMass,
+                data.mapAwareness().getMaybeEnemyArmy());
+    }
+
+    /**
+     * Override this to handle how the army's units handle being told to attack or move.
+     * It's basically a periodic 'update' command. Maybe I should rename it.
+     */
+    protected abstract void attackCommand(ObservationInterface observationInterface,
+                                          ActionInterface actionInterface,
+                                          Optional<Point2d> centreOfatMass,
+                                          Optional<Army> maybeEnemyArmy);
+
+    @Override
+    public boolean addUnit(Tag unitTag) {
+        return armyUnits.add(unitTag);
+    }
+
+    @Override
+    public boolean hasUnit(Tag unitTag) {
+        return armyUnits.contains(unitTag);
+    }
+
+    @Override
+    public void onUnitIdle(UnitInPool unitTag) {
+
+    }
+
+    @Override
+    public abstract List<UnitTypeRequest> requestingUnitTypes();
+
+    /**
+     * Take all units from the other army. The other army becomes an empty army.
+     */
+    public void takeAllFrom(DefaultArmyTask otherArmy) {
+        if (otherArmy == this) {
+            return;
+        }
+        this.armyUnits.addAll(otherArmy.armyUnits);
+        otherArmy.armyUnits.clear();
+    }
+
+    @Override
+    public Optional<TaskResult> getResult() {
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean isComplete() {
+        return false;
+    }
+
+    @Override
+    public String getKey() {
+        return "ATTACK." + armyName;
+    }
+
+    @Override
+    public abstract boolean isSimilarTo(Task otherTask);
+
+    @Override
+    public abstract void debug(S2Agent agent);
+
+    @Override
+    public String getDebugText() {
+        return "Army (" + armyName + ") " + targetPosition.map(point2d -> point2d.getX() + "," + point2d.getY()).orElse("?") +
+                " (" + armyUnits.size() + ")";
+    }
+
+    @Override
+    public Optional<List<Region>> getWaypoints() {
+        return Optional.of(this.regionWaypoints);
+    }
+
+    @Override
+    public Optional<Point2d> getCentreOfMass() {
+        return centreOfMass;
+    }
+
+    @Override
+    public Optional<Point2d> getTargetPosition() {
+        return targetPosition;
+    }
+
+    @Override
+    public void setMicroState(MicroState microState) {
+        this.microState = microState;
+    }
+}

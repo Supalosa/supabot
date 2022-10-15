@@ -12,27 +12,73 @@ import java.util.Optional;
 import java.util.Set;
 
 public interface ArmyTask extends Task {
+
+    /**
+     * Defines how this army will handle engagements.
+     */
+    enum MicroState {
+        // Full aggression towards the enemy. Never retreats.
+        FULL_AGGRESSION,
+
+        // Holding ground in a fight. Retreat if losing.
+        BALANCED,
+
+        // Retreat without trying to fight back.
+        FULL_RETREAT,
+    }
+
+    /**
+     * Sets the target position that this army is trying to move towards.
+     */
     void setTargetPosition(Optional<Point2d> targetPosition);
 
+    /**
+     * Sets the position that this army should try to retreat towards, if its micro state allows it.
+     */
     void setRetreatPosition(Optional<Point2d> retreatPosition);
 
+    /**
+     * Returns the number of units in this army.
+     */
     int getSize();
 
+    /**
+     * Adds a unit to this army. It is assumed to already be reserved for the army through the TaskManger.
+     * Returns false if the unit is already in the army.
+     * Note: If a unit is in multiple armies, both armies will end up controlling it.
+     */
     boolean addUnit(Tag unitTag);
 
+    /**
+     * Returns true if this army has the given unit in it.
+     */
     boolean hasUnit(Tag unitTag);
 
+    /**
+     * Call this when a given unit (which is part of the army) goes idle.
+     */
     void onUnitIdle(UnitInPool unitTag);
 
     /**
-     * Return a set of unit types that this army is requesting construction for.
-     * Stop returning the unit if you have enough of it.
+     * Return the desired composition of this army.
      */
     List<UnitTypeRequest> requestingUnitTypes();
 
+    /**
+     * Returns a list of Regions that this army wants to move through (based on the targetPosition), or empty
+     * if no path is calculated.
+     */
     Optional<List<Region>> getWaypoints();
 
+    /**
+     * Returns the centre of mass of this army.
+     */
     Optional<Point2d> getCentreOfMass();
 
+    /**
+     * Returns the position that this army is trying to move to.
+     */
     Optional<Point2d> getTargetPosition();
+
+    void setMicroState(MicroState microState);
 }

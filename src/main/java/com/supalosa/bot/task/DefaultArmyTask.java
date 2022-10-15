@@ -23,128 +23,34 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-public class DefaultArmyTask implements ArmyTask {
-
-    public Set<Tag> armyUnits = new HashSet<>();
-    public Optional<Point2d> targetPosition = Optional.empty();
-    public Optional<Point2d> retreatPosition = Optional.empty();
-
-    private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
-
-    private Optional<Point2d> centreOfMass = Optional.empty();
-    private boolean isRegrouping = false;
-
-    private MapAwareness.PathRules pathingRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
-    private Optional<Region> currentRegion = Optional.empty();
-    private Optional<Region> targetRegion = Optional.empty();
-    private List<Region> regionWaypoints = new ArrayList<>();
-    private Optional<Region> waypointsCalculatedFrom = Optional.empty();
-    private Optional<Region> waypointsCalculatedAgainst = Optional.empty();
-    private long waypointsCalculatedAt = 0L;
-
-    private long centreOfMassLastUpdated = 0L;
+public class DefaultArmyTask extends AbstractDefaultArmyTask {
 
     private int numMedivacs = 0;
 
-    private final String armyName;
-
     public DefaultArmyTask(String armyName) {
-        this.armyName = armyName;
-    }
-
-    @Override
-    public void setTargetPosition(Optional<Point2d> targetPosition) {
-        this.targetPosition = targetPosition;
-    }
-
-    @Override
-    public void setRetreatPosition(Optional<Point2d> retreatPosition) {
-        this.retreatPosition = retreatPosition;
-    }
-
-    @Override
-    public int getSize() {
-        return this.armyUnits.size();
+        super(armyName);
     }
 
     @Override
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
-        List<Point2d> armyPositions = new ArrayList<>();
-        armyUnits = armyUnits.stream().filter(tag -> {
-                    UnitInPool unit = agent.observation().getUnit(tag);
-                    if (unit != null) {
-                        armyPositions.add(unit.unit().getPosition().toPoint2d());
-                        if (unit.unit().getType() == Units.TERRAN_MEDIVAC) {
-                            numMedivacs++;
-                        }
-                    }
-                    return (unit != null && unit.isAlive());
-                })
-                .collect(Collectors.toSet());
-
+        super.onStep(taskManager, data, agent);
         long gameLoop = agent.observation().getGameLoop();
-
-        if (gameLoop > centreOfMassLastUpdated + 22L) {
-            centreOfMassLastUpdated = gameLoop;
-            OptionalDouble averageX = armyPositions.stream().mapToDouble(point -> point.getX()).average();
-            OptionalDouble averageY = armyPositions.stream().mapToDouble(point -> point.getY()).average();
-            centreOfMass = Optional.empty();
-            if (averageX.isPresent() && averageY.isPresent()) {
-                centreOfMass = Optional.of(Point2d.of((float)averageX.getAsDouble(), (float)averageY.getAsDouble()));
+        numMedivacs = 0;
+        armyUnits.forEach(tag -> {
+            UnitInPool unit = agent.observation().getUnit(tag);
+            if (unit != null) {
+                if (unit.unit().getType() == Units.TERRAN_MEDIVAC) {
+                    numMedivacs++;
+                }
             }
-            attackCommand(
-                    agent.observation(),
-                    agent.actions(),
-                    centreOfMass,
-                    data.mapAwareness().getMaybeEnemyArmy());
-        }
-
-        // Handle pathfinding.
-        targetRegion = targetPosition.flatMap(position ->
-                data.mapAwareness().getRegionDataForPoint(position).map(RegionData::region));
-        // TODO if regrouping is current region valid?
-        currentRegion = centreOfMass.flatMap(centre ->
-                data.mapAwareness().getRegionDataForPoint(centre).map(RegionData::region));
-        if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
-                currentRegion.get().equals(regionWaypoints.get(0)) ||
-                (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 2.5f)
-        )) {
-            // Arrived at the head waypoint.
-            regionWaypoints.remove(0);
-            if (regionWaypoints.size() > 0) {
-                waypointsCalculatedFrom = Optional.of(regionWaypoints.get(0));
-            } else {
-                // Finished path.
-                waypointsCalculatedAgainst = Optional.empty();
-                waypointsCalculatedFrom = Optional.empty();
-            }
-        }
-
-        if (gameLoop > waypointsCalculatedAt + 44L) {
-            waypointsCalculatedAt = gameLoop;
-            // Target has changed, clear pathfinding.
-            if (!waypointsCalculatedAgainst.equals(targetRegion)) {
-                waypointsCalculatedAgainst = Optional.empty();
-                regionWaypoints.clear();
-            }
-            // Calculate path every time - TODO probably don't need to.
-            if (currentRegion.isPresent() && targetRegion.isPresent() && !currentRegion.equals(targetRegion)) {
-                Optional<List<Region>> maybePath = data
-                        .mapAwareness()
-                        .generatePath(currentRegion.get(), targetRegion.get(), pathingRules);
-                maybePath.ifPresent(path -> {
-                    regionWaypoints = path;
-                    waypointsCalculatedFrom = currentRegion;
-                    waypointsCalculatedAgainst = targetRegion;
-                });
-            }
-        }
+        });
     }
 
-    private void attackCommand(ObservationInterface observationInterface,
-                               ActionInterface actionInterface,
-                               Optional<Point2d> centreOfatMass,
-                               Optional<Army> maybeEnemyArmy) {
+    @Override
+    protected void attackCommand(ObservationInterface observationInterface,
+                                 ActionInterface actionInterface,
+                                 Optional<Point2d> centreOfatMass,
+                                 Optional<Army> maybeEnemyArmy) {
         Set<Tag> unitsToAttackWith = new HashSet<>(armyUnits);
         boolean attackWithAll = false;
         if (unitsToAttackWith.size() > 0) {
@@ -268,21 +174,6 @@ public class DefaultArmyTask implements ArmyTask {
     }
 
     @Override
-    public boolean addUnit(Tag unitTag) {
-        return armyUnits.add(unitTag);
-    }
-
-    @Override
-    public boolean hasUnit(Tag unitTag) {
-        return armyUnits.contains(unitTag);
-    }
-
-    @Override
-    public void onUnitIdle(UnitInPool unitTag) {
-
-    }
-
-    @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
         // TODO cache this.
         List<UnitTypeRequest> result = new ArrayList<>();
@@ -315,32 +206,6 @@ public class DefaultArmyTask implements ArmyTask {
             );
         }
         return result;
-    }
-
-    /**
-     * Take all units from the other army. The other army becomes an empty army.
-     */
-    public void takeAllFrom(DefaultArmyTask otherArmy) {
-        if (otherArmy == this) {
-            return;
-        }
-        this.armyUnits.addAll(otherArmy.armyUnits);
-        otherArmy.armyUnits.clear();
-    }
-
-    @Override
-    public Optional<TaskResult> getResult() {
-        return Optional.empty();
-    }
-
-    @Override
-    public boolean isComplete() {
-        return false;
-    }
-
-    @Override
-    public String getKey() {
-        return "ATTACK." + armyName;
     }
 
     @Override
@@ -382,24 +247,4 @@ public class DefaultArmyTask implements ArmyTask {
         }
     }
 
-    @Override
-    public String getDebugText() {
-        return "Army (" + armyName + ") " + targetPosition.map(point2d -> point2d.getX() + "," + point2d.getY()).orElse("?") +
-                " (" + armyUnits.size() + ")";
-    }
-
-    @Override
-    public Optional<List<Region>> getWaypoints() {
-        return Optional.of(this.regionWaypoints);
-    }
-
-    @Override
-    public Optional<Point2d> getCentreOfMass() {
-        return centreOfMass;
-    }
-
-    @Override
-    public Optional<Point2d> getTargetPosition() {
-        return targetPosition;
-    }
 }
