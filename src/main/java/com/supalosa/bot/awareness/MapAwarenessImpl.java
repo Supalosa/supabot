@@ -258,8 +258,8 @@ public class MapAwarenessImpl implements MapAwareness {
                         regionIdToEnemyUnits.get(region.regionId()).stream()
                                 .map(unitInPool -> unitInPool.unit().getType())
                                 .collect(Collectors.toUnmodifiableList()));
-                // Enemy threat decays faster if we have visibility.
-                double visibilityDecay = currentVisibility > 0.5 ? 0.75 : 0.99;
+                // Enemy threat decays faster if we have visibility. The more visible, the faster it decays.
+                double visibilityDecay = 0.75 + 0.25 * (1.0 - currentVisibility);
                 double threatValue = previousData.isEmpty() ?
                         currentThreatValue :
                         Math.max(currentThreatValue, previousData.get().enemyThreat() * visibilityDecay - 0.1);

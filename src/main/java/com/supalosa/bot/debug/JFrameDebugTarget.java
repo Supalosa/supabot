@@ -45,6 +45,9 @@ public class JFrameDebugTarget implements DebugTarget {
 
     @Override
     public void onStep(SupaBot agent, AgentData data) {
+        if (!frame.isVisible()) {
+            return;
+        }
         long gameLoop = agent.observation().getGameLoop();
         if (gameLoop < lastFrameUpdate + 22L) {
             return;
