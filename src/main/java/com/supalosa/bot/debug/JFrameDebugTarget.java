@@ -1,7 +1,10 @@
 package com.supalosa.bot.debug;
 
+import com.github.ocraft.s2client.protocol.spatial.Point;
+import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.SupaBot;
+import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
 
 import javax.swing.*;
@@ -16,6 +19,7 @@ public class JFrameDebugTarget implements DebugTarget {
     public static final int WHITE = VisualisationUtils.makeRgb(255, 255, 255);
     public static final int BLACK = VisualisationUtils.makeRgb(0, 0, 0);
     public static final int RED = VisualisationUtils.makeRgb(255, 0, 0);
+    public static final double OUTPUT_SCALE_FACTOR = 2.0;
 
     private SupaBot agent;
 
@@ -51,6 +55,7 @@ public class JFrameDebugTarget implements DebugTarget {
         lastFrameUpdate = gameLoop;
         panel.removeAll();
 
+        int mapHeight = data.mapAnalysis().get().getGrid().getHeight();
         float distanceToBorderMax = 20;
         BufferedImage baseBmp = VisualisationUtils.renderNewGrid(
                 data.mapAnalysis().get().getGrid(),
@@ -94,7 +99,7 @@ public class JFrameDebugTarget implements DebugTarget {
         });
         // scale the bitmap
         AffineTransform transform = new AffineTransform();
-        transform.scale(2.0, 2.0);
+        transform.scale(OUTPUT_SCALE_FACTOR, OUTPUT_SCALE_FACTOR);
         AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
 
         BufferedImage after = new BufferedImage(placementBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
@@ -102,10 +107,75 @@ public class JFrameDebugTarget implements DebugTarget {
 
         BufferedImage after2 = new BufferedImage(regionBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
         QuickDrawPanel placementPanel2 = new QuickDrawPanel(transformOp.filter(regionBmp, after2));
+
+
+        Graphics2D g = (Graphics2D) after2.getGraphics();
+        g.setComposite(AlphaComposite.Src);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        data.fightManager().getAllArmies().forEach(armyTask -> {
+            armyTask.getCentreOfMass().ifPresent(centreOfMass -> {
+                int x = scaleX(centreOfMass.getX());
+                int y = scaleY(centreOfMass.getY(),  mapHeight);
+                g.setColor(Color.GREEN);
+                g.drawOval(x - 4, y - 4, 8, 8);
+                g.setColor(Color.RED);
+                armyTask.getWaypoints().ifPresent(waypoints -> {
+                    if (waypoints.size() > 0) {
+                        Point2d lastPoint = centreOfMass;
+                        for (Region waypoint : waypoints) {
+                            Point2d newPoint = waypoint.centrePoint();
+                            drawArrowLine(g,
+                                    scaleX(lastPoint.getX()), scaleY(lastPoint.getY(), mapHeight),
+                                    scaleX(newPoint.getX()), scaleY(newPoint.getY(), mapHeight));
+                            lastPoint = newPoint;
+                        }
+                        if (armyTask.getTargetPosition().isPresent()) {
+                            Point2d targetPosition = armyTask.getTargetPosition().get();
+                            drawArrowLine(g,
+                                    scaleX(lastPoint.getX()), scaleY(lastPoint.getY(), mapHeight),
+                                    scaleX(targetPosition.getX()), scaleY(targetPosition.getY(), mapHeight));
+                        }
+                    }
+                });
+            });
+            armyTask.getTargetPosition().ifPresent(targetPosition -> {
+                int x = (int)(targetPosition.getX() * OUTPUT_SCALE_FACTOR);
+                int y = (int)((mapHeight - targetPosition.getY()) * OUTPUT_SCALE_FACTOR);
+                g.drawOval(x - 4, y - 4, 8, 8);
+            });
+        });
+
         panel.add(placementPanel);
         panel.add(placementPanel2);
 
         frame.pack();
+    }
+
+    private int scaleX(int originalX) {
+        return (int)(originalX * OUTPUT_SCALE_FACTOR);
+    }
+
+    private int scaleX(float originalX) {
+        return (int)(originalX * OUTPUT_SCALE_FACTOR);
+    }
+
+    private int scaleY(int originalY, int mapHeight) {
+        return (int)((mapHeight - originalY) * OUTPUT_SCALE_FACTOR);
+    }
+
+    private int scaleY(float originalY, int mapHeight) {
+        return (int)((mapHeight - originalY) * OUTPUT_SCALE_FACTOR);
+    }
+
+    // https://stackoverflow.com/a/3094933
+    private void drawArrowLine(Graphics2D graphics, int x1, int y1, int x2, int y2) {
+        graphics.drawLine(x1, y1, x2, y2);
+        double angle = Math.atan2(y2 - y1, x2 - x1);
+        double angle1 = angle - Math.PI/2.05;
+        double angle2 = angle - Math.PI/1.95;
+        final double arrowLength = 5.0;
+        graphics.drawLine(x2, y2, x2 + (int)Math.cos(angle1), y2 + (int)Math.sin(angle1));
+        graphics.drawLine(x2, y2, x2 + (int)Math.cos(angle2), y2 + (int)Math.sin(angle2));
     }
 
     @Override

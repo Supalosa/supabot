@@ -15,4 +15,6 @@ public interface AgentData {
     Optional<AnalysisResults> mapAnalysis();
 
     MapAwareness mapAwareness();
+
+    FightManager fightManager();
 }

@@ -31,4 +31,8 @@ public interface ArmyTask extends Task {
     List<UnitTypeRequest> requestingUnitTypes();
 
     Optional<List<Region>> getWaypoints();
+
+    Optional<Point2d> getCentreOfMass();
+
+    Optional<Point2d> getTargetPosition();
 }

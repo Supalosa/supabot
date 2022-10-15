@@ -284,17 +284,16 @@ public class DefaultArmyTask implements ArmyTask {
 
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
+        // TODO cache this.
         List<UnitTypeRequest> result = new ArrayList<>();
-        if (armyUnits.size() < 20) {
-            result.add(ImmutableUnitTypeRequest.builder()
-                            .unitType(Units.TERRAN_MARINE)
-                            .productionAbility(Abilities.TRAIN_MARINE)
-                            .producingUnitType(Units.TERRAN_BARRACKS)
-                            .amount(1000)
-                            .build()
-                    );
-        }
-        if (armyUnits.size() < 40) {
+        result.add(ImmutableUnitTypeRequest.builder()
+                        .unitType(Units.TERRAN_MARINE)
+                        .productionAbility(Abilities.TRAIN_MARINE)
+                        .producingUnitType(Units.TERRAN_BARRACKS)
+                        .amount(1000)
+                        .build()
+                );
+        if (armyUnits.size() > 40) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_MARAUDER)
                     .productionAbility(Abilities.TRAIN_MARAUDER)
@@ -304,6 +303,9 @@ public class DefaultArmyTask implements ArmyTask {
             );
         }
         if (armyUnits.size() > 10 && numMedivacs < armyUnits.size() * 0.1) {
+            if (numMedivacs < armyUnits.size() * 0.05) {
+                result.clear();
+            }
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_MEDIVAC)
                     .productionAbility(Abilities.TRAIN_MEDIVAC)
@@ -366,9 +368,8 @@ public class DefaultArmyTask implements ArmyTask {
             agent.debug().debugSphereOut(point, 1f, Color.YELLOW);
             agent.debug().debugTextOut(this.armyName, point, Color.WHITE, 8);
         });
-        if (regionWaypoints.size() > 0) {
-            // FIXME default value
-            Point2d startPoint = centreOfMass.orElse(retreatPosition.orElse(Point2d.of(0, 0)));
+        if (centreOfMass.isPresent() && regionWaypoints.size() > 0) {
+            Point2d startPoint = centreOfMass.get();
             Point lastPoint = Point.of(startPoint.getX(), startPoint.getY(), agent.observation().terrainHeight(startPoint)+1f);
             for (Region waypoint : regionWaypoints) {
                 Point2d nextPoint = waypoint.centrePoint();
@@ -390,5 +391,15 @@ public class DefaultArmyTask implements ArmyTask {
     @Override
     public Optional<List<Region>> getWaypoints() {
         return Optional.of(this.regionWaypoints);
+    }
+
+    @Override
+    public Optional<Point2d> getCentreOfMass() {
+        return centreOfMass;
+    }
+
+    @Override
+    public Optional<Point2d> getTargetPosition() {
+        return targetPosition;
     }
 }

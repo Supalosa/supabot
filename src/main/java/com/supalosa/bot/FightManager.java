@@ -207,4 +207,8 @@ public class FightManager {
                         .build())
                 .collect(Collectors.toList());
     }
+
+    public Collection<ArmyTask> getAllArmies() {
+        return Collections.unmodifiableCollection(armyTasks);
+    }
 }

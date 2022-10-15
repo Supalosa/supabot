@@ -940,4 +940,9 @@ public class SupaBot extends S2Agent implements AgentData {
     public MapAwareness mapAwareness() {
         return mapAwareness;
     }
+
+    @Override
+    public FightManager fightManager() {
+        return fightManager;
+    }
 }
