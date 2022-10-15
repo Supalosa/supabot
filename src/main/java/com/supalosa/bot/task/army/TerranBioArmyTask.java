@@ -1,4 +1,4 @@
-package com.supalosa.bot.task;
+package com.supalosa.bot.task.army;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ActionInterface;
@@ -15,20 +15,28 @@ import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
-import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.task.Task;
+import com.supalosa.bot.task.TaskManager;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-public class DefaultArmyTask extends AbstractDefaultArmyTask {
+/**
+ * A permanent bio army that constantly asks for reinforcements.
+ */
+public class TerranBioArmyTask extends AbstractDefaultArmyTask {
 
     private int numMedivacs = 0;
+    private int basePriority;
 
-    public DefaultArmyTask(String armyName) {
+    private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
+    private long desiredCompositionUpdatedAt = 0L;
+
+    public TerranBioArmyTask(String armyName, int basePriority) {
         super(armyName);
+        this.basePriority = basePriority;
     }
 
     @Override
@@ -44,6 +52,50 @@ public class DefaultArmyTask extends AbstractDefaultArmyTask {
                 }
             }
         });
+
+        if (gameLoop > desiredCompositionUpdatedAt + 22L) {
+            desiredCompositionUpdatedAt = gameLoop;
+            updateBioArmyComposition();
+        }
+    }
+
+    private void updateBioArmyComposition() {
+        List<UnitTypeRequest> result = new ArrayList<>();
+        result.add(ImmutableUnitTypeRequest.builder()
+                .unitType(Units.TERRAN_MARINE)
+                .productionAbility(Abilities.TRAIN_MARINE)
+                .producingUnitType(Units.TERRAN_BARRACKS)
+                .amount(1000)
+                .build()
+        );
+        if (armyUnits.size() > 40) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_MARAUDER)
+                    .productionAbility(Abilities.TRAIN_MARAUDER)
+                    .producingUnitType(Units.TERRAN_BARRACKS)
+                    .amount(10)
+                    .build()
+            );
+        }
+        if (armyUnits.size() > 10 && numMedivacs < armyUnits.size() * 0.1) {
+            if (numMedivacs < armyUnits.size() * 0.05) {
+                result.clear();
+            }
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_MEDIVAC)
+                    .productionAbility(Abilities.TRAIN_MEDIVAC)
+                    .producingUnitType(Units.TERRAN_STARPORT)
+                    .amount(10)
+                    .build()
+            );
+        }
+        desiredComposition = result;
+    }
+
+    @Override
+    public boolean isComplete() {
+        // This army is a permanent one.
+        return false;
     }
 
     @Override
@@ -175,37 +227,20 @@ public class DefaultArmyTask extends AbstractDefaultArmyTask {
 
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
-        // TODO cache this.
-        List<UnitTypeRequest> result = new ArrayList<>();
-        result.add(ImmutableUnitTypeRequest.builder()
-                        .unitType(Units.TERRAN_MARINE)
-                        .productionAbility(Abilities.TRAIN_MARINE)
-                        .producingUnitType(Units.TERRAN_BARRACKS)
-                        .amount(1000)
-                        .build()
-                );
-        if (armyUnits.size() > 40) {
-            result.add(ImmutableUnitTypeRequest.builder()
-                    .unitType(Units.TERRAN_MARAUDER)
-                    .productionAbility(Abilities.TRAIN_MARAUDER)
-                    .producingUnitType(Units.TERRAN_BARRACKS)
-                    .amount(10)
-                    .build()
-            );
-        }
-        if (armyUnits.size() > 10 && numMedivacs < armyUnits.size() * 0.1) {
-            if (numMedivacs < armyUnits.size() * 0.05) {
-                result.clear();
-            }
-            result.add(ImmutableUnitTypeRequest.builder()
-                    .unitType(Units.TERRAN_MEDIVAC)
-                    .productionAbility(Abilities.TRAIN_MEDIVAC)
-                    .producingUnitType(Units.TERRAN_STARPORT)
-                    .amount(10)
-                    .build()
-            );
-        }
-        return result;
+        return desiredComposition;
+    }
+
+    @Override
+    public boolean wantsUnit(Unit unit) {
+        return unit.getType() == Units.TERRAN_MARINE ||
+                unit.getType() == Units.TERRAN_MARAUDER ||
+                unit.getType() == Units.TERRAN_MEDIVAC ||
+                unit.getType() == Units.TERRAN_RAVEN;
+    }
+
+    @Override
+    public int getPriority() {
+        return basePriority;
     }
 
     @Override

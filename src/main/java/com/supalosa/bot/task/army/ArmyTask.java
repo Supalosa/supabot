@@ -1,17 +1,16 @@
-package com.supalosa.bot.task;
+package com.supalosa.bot.task.army;
 
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.task.TaskWithUnits;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
-public interface ArmyTask extends Task {
+public interface ArmyTask extends TaskWithUnits {
 
     /**
      * Defines how this army will handle engagements.
@@ -43,26 +42,9 @@ public interface ArmyTask extends Task {
     int getSize();
 
     /**
-     * Adds a unit to this army. It is assumed to already be reserved for the army through the TaskManger.
-     * Returns false if the unit is already in the army.
-     * Note: If a unit is in multiple armies, both armies will end up controlling it.
-     */
-    boolean addUnit(Tag unitTag);
-
-    /**
-     * Returns true if this army has the given unit in it.
-     */
-    boolean hasUnit(Tag unitTag);
-
-    /**
      * Call this when a given unit (which is part of the army) goes idle.
      */
     void onUnitIdle(UnitInPool unitTag);
-
-    /**
-     * Return the desired composition of this army.
-     */
-    List<UnitTypeRequest> requestingUnitTypes();
 
     /**
      * Returns a list of Regions that this army wants to move through (based on the targetPosition), or empty

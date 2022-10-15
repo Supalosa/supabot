@@ -1,10 +1,9 @@
-package com.supalosa.bot.task;
+package com.supalosa.bot.task.army;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ActionInterface;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.AgentData;
@@ -13,6 +12,9 @@ import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.task.Task;
+import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.task.TaskResult;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -163,13 +165,10 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
 
     }
 
-    @Override
-    public abstract List<UnitTypeRequest> requestingUnitTypes();
-
     /**
      * Take all units from the other army. The other army becomes an empty army.
      */
-    public void takeAllFrom(DefaultArmyTask otherArmy) {
+    public void takeAllFrom(TerranBioArmyTask otherArmy) {
         if (otherArmy == this) {
             return;
         }
@@ -183,20 +182,9 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     }
 
     @Override
-    public boolean isComplete() {
-        return false;
-    }
-
-    @Override
     public String getKey() {
         return "ATTACK." + armyName;
     }
-
-    @Override
-    public abstract boolean isSimilarTo(Task otherTask);
-
-    @Override
-    public abstract void debug(S2Agent agent);
 
     @Override
     public String getDebugText() {

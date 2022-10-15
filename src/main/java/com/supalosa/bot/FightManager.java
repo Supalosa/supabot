@@ -16,8 +16,8 @@ import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.task.ArmyTask;
-import com.supalosa.bot.task.DefaultArmyTask;
+import com.supalosa.bot.task.army.ArmyTask;
+import com.supalosa.bot.task.army.TerranBioArmyTask;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 
@@ -28,10 +28,10 @@ import java.util.stream.Collectors;
 public class FightManager {
 
     private final S2Agent agent;
-    private final Set<ArmyTask> armyTasks;
+    private final List<ArmyTask> armyTasks;
 
-    private DefaultArmyTask attackingArmy = new DefaultArmyTask("Attack");
-    private DefaultArmyTask reserveArmy = new DefaultArmyTask("Reserve");
+    private TerranBioArmyTask attackingArmy = new TerranBioArmyTask("Attack", 1);
+    private TerranBioArmyTask reserveArmy = new TerranBioArmyTask("Reserve", 10);
 
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
 
@@ -45,7 +45,9 @@ public class FightManager {
 
     public FightManager(S2Agent agent) {
         this.agent = agent;
-        armyTasks = Set.of(attackingArmy, reserveArmy);
+        armyTasks = new ArrayList<>();
+        armyTasks.add(reserveArmy);
+        armyTasks.add(attackingArmy);
     }
 
     public void setAttackPosition(Optional<Point2d> attackPosition) {
@@ -155,10 +157,6 @@ public class FightManager {
 
     public List<Point2d> getCloakedOrBurrowedUnitClusters() {
         return this.cloakedOrBurrowedUnitClusters;
-    }
-
-    public void addUnit(Unit unit) {
-        reserveArmy.addUnit(unit.getTag());
     }
 
     public boolean hasSeenCloakedOrBurrowedUnits() {

@@ -7,6 +7,7 @@ import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 
 import java.util.*;
@@ -18,10 +19,12 @@ public class TaskManagerImpl implements TaskManager {
 
     private final Map<Tag, Task> unitToTaskMap;
     private final Map<String, Task> taskSet;
+    private List<TaskWithUnits> orderedTasksNeedingUnits;
 
     public TaskManagerImpl() {
         this.unitToTaskMap = new HashMap<>();
         this.taskSet = new HashMap<>();
+        this.orderedTasksNeedingUnits = new ArrayList<>();
     }
 
     @Override
@@ -87,6 +90,11 @@ public class TaskManagerImpl implements TaskManager {
         tasksFinishedThisStep.forEach(task -> {
             taskSet.remove(task.getKey());
         });
+        orderedTasksNeedingUnits = taskSet.values().stream()
+                .filter(task -> task instanceof TaskWithUnits) // TODO: this smells...
+                .map(task -> (TaskWithUnits)task)
+                .sorted(Comparator.comparing(TaskWithUnits::getPriority).reversed()
+        ).collect(Collectors.toList());
         if (agent.observation().getGameLoop() % 1000 == 0) {
             agent.actions().sendChat("TasksActive: " + taskSet.size(), ActionChat.Channel.TEAM);
         }
@@ -127,6 +135,18 @@ public class TaskManagerImpl implements TaskManager {
             UnitInPool unitInPool = agent.observation().getUnit(entry.getKey());
             if (unitInPool != null) {
                 agent.debug().debugSphereOut(unitInPool.unit().getPosition(), 0.5f, Color.YELLOW);
+            }
+        }
+    }
+
+    @Override
+    public void dispatchUnit(Unit unit) {
+        for (TaskWithUnits task : orderedTasksNeedingUnits) {
+            if (task.wantsUnit(unit)) {
+                task.addUnit(unit.getTag());
+                reserveUnit(unit.getTag(), task);
+                System.out.println("DEBUG: Unit " + unit.getType() + " dispatched to task " + task.getDebugText());
+                return;
             }
         }
     }

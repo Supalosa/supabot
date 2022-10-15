@@ -792,14 +792,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (!(unitInPool.unit().getType() instanceof Units)) {
             return;
         }
-        switch ((Units) unitInPool.unit().getType()) {
-            case TERRAN_MARINE:
-            case TERRAN_MARAUDER:
-            case TERRAN_MEDIVAC:
-            case TERRAN_RAVEN:
-                fightManager.addUnit(unitInPool.unit());
-                break;
-        }
+        taskManager.dispatchUnit(unitInPool.unit());
     }
 
     @Override

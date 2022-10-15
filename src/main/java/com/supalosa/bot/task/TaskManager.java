@@ -77,4 +77,9 @@ public interface TaskManager {
     int countSimilarTasks(Task task);
 
     void debug(S2Agent agent);
+
+    /**
+     * Dispatch a unit to the tasks that might want it.
+     */
+    void dispatchUnit(Unit unit);
 }
