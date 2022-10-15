@@ -59,4 +59,21 @@ public interface RegionData {
     default boolean isBlocked() {
         return false;
     }
+
+    /**
+     * Approximate (sampled) visibility percentage for this region.
+     * This is a snapshot of the current visibility.
+     */
+    @Value.Default
+    default double visibilityPercent() {
+        return 0.0;
+    }
+    /**
+     * Approximate (sampled) visibility percentage for this region.
+     * This is value decays slowly so as not to drop to zero as soon as we leave a region.
+     */
+    @Value.Default
+    default double decayingVisibilityPercent() {
+        return 0.0;
+    }
 }

@@ -218,7 +218,7 @@ public class MapAwarenessImpl implements MapAwareness {
 
     private void updateRegionData(AgentData data, S2Agent agent) {
         long gameLoop = agent.observation().getGameLoop();
-        if (data.mapAnalysis().isPresent() && gameLoop > regionDataCalculatedAt + 22L) {
+        if (data.mapAnalysis().isPresent() && gameLoop > regionDataCalculatedAt + 33L) {
             regionDataCalculatedAt = gameLoop;
             AnalysisResults analysisResults = data.mapAnalysis().get();
 
@@ -243,18 +243,29 @@ public class MapAwarenessImpl implements MapAwareness {
             });
             double maxEnemyThreat = 0;
             Map<Integer, Double> regionToEnemyThreat = new HashMap<>();
+            Map<Integer, Double> regionToVisibility = new HashMap<>();
+            Map<Integer, Double> regionToDecayingVisibility = new HashMap<>();
 
             for (Region region : analysisResults.getRegions()) {
                 Optional<RegionData> previousData = Optional.ofNullable(regionData.get(region.regionId()));
+                // Calculation and decay of region visibility.
+                double currentVisibility = calculateVisibilityOfRegion(agent.observation(), region, 0.33);
+                double decayingVisibilityValue = previousData.isEmpty() ?
+                        currentVisibility :
+                        Math.max(currentVisibility, previousData.get().decayingVisibilityPercent() * 0.95 - 0.01);
+                // Calculation and decay of region threat.
                 double currentThreatValue = calculateThreat(
                         regionIdToEnemyUnits.get(region.regionId()).stream()
                                 .map(unitInPool -> unitInPool.unit().getType())
                                 .collect(Collectors.toUnmodifiableList()));
-                // Decay of region threat.
+                // Enemy threat decays faster if we have visibility.
+                double visibilityDecay = currentVisibility > 0.5 ? 0.75 : 0.99;
                 double threatValue = previousData.isEmpty() ?
                         currentThreatValue :
-                        Math.max(currentThreatValue, previousData.get().enemyThreat() * 0.99 - 0.25);
+                        Math.max(currentThreatValue, previousData.get().enemyThreat() * visibilityDecay - 0.1);
                 regionToEnemyThreat.put(region.regionId(), threatValue);
+                regionToVisibility.put(region.regionId(), currentVisibility);
+                regionToDecayingVisibility.put(region.regionId(), decayingVisibilityValue);
                 if (threatValue > maxEnemyThreat) {
                     maxEnemyThreat = threatValue;
                 }
@@ -276,14 +287,20 @@ public class MapAwarenessImpl implements MapAwareness {
                     isRampAndBlocked = mapAnalysisResults.map(analysis -> analysis
                             .getRamp(region.getRampId().get()).calculateIsBlocked(agent.observation())).orElse(false);
                 }
+                double visibilityPercent = regionToVisibility.get(region.regionId());
+                double decayingVisibilityPercent = regionToDecayingVisibility.get(region.regionId());
+                double enemyArmyFactor = 1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat);
+                double killzoneFactor = 1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0);
                 ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
                         .region(region)
-                        .weight(1.0) // hack
+                        .weight(1.0) // TODO what to do with this?
                         .isBlocked(isRampAndBlocked)
-                        .enemyArmyFactor(1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat))
-                        .killzoneFactor(1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0))
+                        .enemyArmyFactor(enemyArmyFactor)
+                        .killzoneFactor(killzoneFactor)
                         .enemyThreat(enemyThreat)
-                        .playerThreat(currentSelfThreat);
+                        .playerThreat(currentSelfThreat)
+                        .visibilityPercent(visibilityPercent)
+                        .decayingVisibilityPercent(decayingVisibilityPercent);
 
                regionData.put(region.regionId(), builder.build());
             });
@@ -298,6 +315,37 @@ public class MapAwarenessImpl implements MapAwareness {
             avoidKillzoneGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.killzoneFactor() < 10.0f ? destinationRegion.killzoneFactor() : null));
         }
+    }
+
+    /**
+     * Calculate the visibility of a given region.
+     *
+     * @param observation Observation interface to use.
+     * @param region Region to calculate.
+     * @param resolution Approximate percentage of tiles to query. 1.0 for all tiles. 0.25 for quarter etc.
+     */
+    private double calculateVisibilityOfRegion(ObservationInterface observation, Region region, double resolution) {
+        if (region.getTiles().size() == 0) {
+            return 0.0;
+        }
+        double gapBetweenTiles = (1.0 / resolution);
+        int visibleTiles = 0;
+        int sampledTiles = 0;
+        Point2d minBound = region.regionBounds().getLeft();
+        Point2d maxBound = region.regionBounds().getRight();
+        for (double x = minBound.getX(); x < maxBound.getX(); x += gapBetweenTiles) {
+            for (double y = minBound.getY(); y < maxBound.getY(); y += gapBetweenTiles) {
+                Point2d point = Point2d.of((int)x, (int)y);
+                // TODO: maybe grid lookup is better for this test.
+                if (region.getTiles().contains(point)) {
+                    if (observation.getVisibility(point) == Visibility.VISIBLE) {
+                        visibleTiles++;
+                    }
+                    ++sampledTiles;
+                }
+            }
+        }
+        return visibleTiles / Math.max(1.0, sampledTiles);
     }
 
     private void analyseCreep(AgentData data, S2Agent agent) {

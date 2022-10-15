@@ -1,6 +1,7 @@
 package com.supalosa.bot.analysis;
 
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import org.apache.commons.lang3.tuple.Pair;
 import org.immutables.value.Value;
 
 import java.util.List;
@@ -18,4 +19,5 @@ public interface Region extends TileSet {
     List<Integer> onHighGroundOfRegions();
     Optional<Integer> getRampId();
     Point2d centrePoint();
+    Pair<Point2d, Point2d> regionBounds();
 }

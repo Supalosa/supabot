@@ -492,15 +492,19 @@ public class Analysis {
 
         Map<Integer, Region> result = new HashMap<>();
         regions.keySet().forEach(regionId -> {
+            List<Point2d> tiles = regions.get(regionId).stream().map(tile -> Point2d.of(tile.x, tile.y))
+                    .collect(Collectors.toList());
             Region newRegion = ImmutableRegion.builder()
                     .regionId(regionId)
-                    .addAllTiles(regions.get(regionId).stream().map(tile -> Point2d.of(tile.x, tile.y))
-                            .collect(Collectors.toList()))
+                    .addAllTiles(tiles)
                     .rampId(Optional.ofNullable(regionIdToRampId.get(regionId)))
                     .connectedRegions(connectedRegions.get(regionId))
                     .centrePoint(centrePoints.get(regionId))
                     .addAllOnHighGroundOfRegions(regionIsOnHighGroundOf.get(regionId))
                     .addAllOnLowGroundOfRegions(regionIsOnLowGroundOf.get(regionId))
+                    .regionBounds(
+                            TileSet.calculateBounds(tiles).orElseThrow(() ->
+                                    new IllegalArgumentException("Region with no tiles.")))
                     .build();
             result.put(regionId, newRegion);
         });
