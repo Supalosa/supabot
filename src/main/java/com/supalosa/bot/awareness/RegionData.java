@@ -40,12 +40,20 @@ public interface RegionData {
     }
 
     /**
-     * A scalar figure indicating the enemy threat of this region.
+     * A scalar figure indicating the enemy threat of this region. It decays slowly over time
+     * (or faster if we have visibility on the region)
      */
     @Value.Default
     default double enemyThreat() {
         return 0.0;
     }
+
+    /**
+     * A scalar figure indicating how much enemy threat is _near_ this region. Named as such because
+     * the threat value diffuses through the graph.
+     */
+    @Value.Default
+    default double diffuseEnemyThreat() { return 0.0; }
 
     /**
      * A scalar figure indicating the player's threat in this region.
@@ -68,6 +76,7 @@ public interface RegionData {
     default double visibilityPercent() {
         return 0.0;
     }
+
     /**
      * Approximate (sampled) visibility percentage for this region.
      * This is value decays slowly so as not to drop to zero as soon as we leave a region.

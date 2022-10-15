@@ -94,7 +94,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 return avoidArmyGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
             case AVOID_KILL_ZONE:
                 return avoidKillzoneGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
-            case NONE:
+            case NORMAL:
             default:
                 return normalGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
         }
@@ -278,9 +278,18 @@ public class MapAwarenessImpl implements MapAwareness {
                                 .map(unitInPool -> unitInPool.unit().getType())
                                 .collect(Collectors.toUnmodifiableList()));
                 double enemyThreat = regionToEnemyThreat.get(region.regionId());
+                // Killzone threat is the sum of threat on regions on high ground of this one.
                 Optional<Double> killzoneThreat = region.onLowGroundOfRegions().stream().map(highGroundRegionId ->
                    regionToEnemyThreat.get(highGroundRegionId)
                 ).reduce(Double::sum);
+                // Diffuse threat is the sum of the threat of all other regions, modulated by the distance to those
+                // regions. To be honest there's probably a JGraphT algorithm for this which would be better.
+                Optional<Double> diffuseThreat = regionToEnemyThreat.entrySet().stream().map(entry -> {
+                    int otherRegionId = entry.getKey();
+                    double threat = entry.getValue();
+                    double distance = region.centrePoint().distance(analysisResults.getRegion(otherRegionId).centrePoint());
+                    return 10.0f / Math.max(1.0, distance) * threat;
+                }).reduce(Double::sum);
                 // For ramps only, detect if they are blocked.
                 boolean isRampAndBlocked = false;
                 if (mapAnalysisResults.isPresent() && region.getRampId().isPresent()) {
@@ -291,6 +300,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 double decayingVisibilityPercent = regionToDecayingVisibility.get(region.regionId());
                 double enemyArmyFactor = 1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat);
                 double killzoneFactor = 1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0);
+
                 ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
                         .region(region)
                         .weight(1.0) // TODO what to do with this?
@@ -300,7 +310,8 @@ public class MapAwarenessImpl implements MapAwareness {
                         .enemyThreat(enemyThreat)
                         .playerThreat(currentSelfThreat)
                         .visibilityPercent(visibilityPercent)
-                        .decayingVisibilityPercent(decayingVisibilityPercent);
+                        .decayingVisibilityPercent(decayingVisibilityPercent)
+                        .diffuseEnemyThreat(diffuseThreat.orElse(0.0));
 
                regionData.put(region.regionId(), builder.build());
             });
@@ -308,9 +319,9 @@ public class MapAwarenessImpl implements MapAwareness {
             normalGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.weight()));
 
-            // Edges are weighted by how much army is in the destination.
+            // Edges are weighted by the diffuse enemy threat.
             avoidArmyGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
-                    (sourceRegion, destinationRegion) -> destinationRegion.enemyArmyFactor()));
+                    (sourceRegion, destinationRegion) -> destinationRegion.diffuseEnemyThreat()));
 
             avoidKillzoneGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.killzoneFactor() < 10.0f ? destinationRegion.killzoneFactor() : null));

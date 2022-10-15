@@ -21,6 +21,8 @@ public class TaskManagerImpl implements TaskManager {
     private final Map<String, Task> taskSet;
     private List<TaskWithUnits> orderedTasksNeedingUnits;
 
+    private long unitToTaskMapCleanedAt = 0L;
+
     public TaskManagerImpl() {
         this.unitToTaskMap = new HashMap<>();
         this.taskSet = new HashMap<>();
@@ -73,18 +75,18 @@ public class TaskManagerImpl implements TaskManager {
     @Override
     public void onStep(AgentData data, S2Agent agent) {
         List<Task> tasksFinishedThisStep = new ArrayList<>();
+        Set<Tag> unitsReleasedThisStep = new HashSet<>();
         taskSet.forEach((key, task) -> {
             if (!task.isComplete()) {
                 task.onStep(this, data, agent);
             } else {
                 tasksFinishedThisStep.add(task);
-                Set<Tag> toUnset = new HashSet<>();
                 unitToTaskMap.entrySet().forEach(entry -> {
                    if (entry.getValue() == task) {
-                       toUnset.add(entry.getKey());
+                       unitsReleasedThisStep.add(entry.getKey());
                    }
                 });
-                toUnset.forEach(tag -> unitToTaskMap.remove(tag));
+                unitsReleasedThisStep.forEach(tag -> unitToTaskMap.remove(tag));
             }
         });
         tasksFinishedThisStep.forEach(task -> {
@@ -95,10 +97,24 @@ public class TaskManagerImpl implements TaskManager {
                 .map(task -> (TaskWithUnits)task)
                 .sorted(Comparator.comparing(TaskWithUnits::getPriority).reversed()
         ).collect(Collectors.toList());
-        if (agent.observation().getGameLoop() % 1000 == 0) {
-            agent.actions().sendChat("TasksActive: " + taskSet.size(), ActionChat.Channel.TEAM);
+        if (unitsReleasedThisStep.size() > 0) {
+            unitsReleasedThisStep.forEach(tag -> {
+                UnitInPool unit = agent.observation().getUnit(tag);
+                if (unit != null) {
+                    dispatchUnit(unit.unit());
+                }
+            });
         }
-
+        if (agent.observation().getGameLoop() > unitToTaskMapCleanedAt + 22L) {
+            unitToTaskMapCleanedAt = agent.observation().getGameLoop();
+            Set<Tag> missingUnits = new HashSet<>();
+            unitToTaskMap.keySet().forEach(tag -> {
+                if (agent.observation().getUnit(tag) == null) {
+                    missingUnits.add(tag);
+                }
+            });
+            missingUnits.forEach(missingUnitTag -> unitToTaskMap.remove(missingUnitTag));
+        }
     }
 
     @Override
@@ -142,10 +158,9 @@ public class TaskManagerImpl implements TaskManager {
     @Override
     public void dispatchUnit(Unit unit) {
         for (TaskWithUnits task : orderedTasksNeedingUnits) {
-            if (task.wantsUnit(unit)) {
+            if (!task.isComplete() && task.wantsUnit(unit)) {
                 task.addUnit(unit.getTag());
                 reserveUnit(unit.getTag(), task);
-                System.out.println("DEBUG: Unit " + unit.getType() + " dispatched to task " + task.getDebugText());
                 return;
             }
         }

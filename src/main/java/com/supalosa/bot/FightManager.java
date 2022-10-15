@@ -20,6 +20,7 @@ import com.supalosa.bot.task.army.ArmyTask;
 import com.supalosa.bot.task.army.TerranBioArmyTask;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.task.army.TerranBioHarrassArmyTask;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,27 +52,43 @@ public class FightManager {
     }
 
     public void setAttackPosition(Optional<Point2d> attackPosition) {
-        this.attackingArmy.setTargetPosition(attackPosition);
+        armyTasks.forEach(armyTask -> {
+            if (armyTask != reserveArmy) {
+                armyTask.setTargetPosition(attackPosition);
+            };
+        });
     }
 
     public void setDefencePosition(Optional<Point2d> defencePosition) {
         this.reserveArmy.setTargetPosition(defencePosition);
-        this.reserveArmy.setRetreatPosition(defencePosition);
-        this.attackingArmy.setRetreatPosition(defencePosition);
+        armyTasks.forEach(armyTask -> {
+            if (armyTask != reserveArmy) {
+                armyTask.setRetreatPosition(defencePosition);
+            };
+        });
     }
 
     private boolean addedTasks = false;
+
     public void onStep(TaskManager taskManager, AgentData data) {
+        // hack, should be an ongamestart function
         if (!addedTasks) {
             addedTasks = true;
             taskManager.addTask(attackingArmy, 1);
             taskManager.addTask(reserveArmy, 1);
         }
-        MapAwareness mapAwareness = data.mapAwareness();
-        AtomicBoolean doAttack = new AtomicBoolean(false);
+
+        // hack, maybe?
         if ((reserveArmy.getSize()) >= getTargetMarines()) {
             attackingArmy.takeAllFrom(reserveArmy);
-            doAttack.set(true);
+        }
+
+        if (agent.observation().getArmyCount() > 60) {
+            // Start a harrass force.
+            ArmyTask harrassTask = new TerranBioHarrassArmyTask("Harrass", 100);
+            if (taskManager.addTask(harrassTask, 1)) {
+                harrassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
+            }
         }
 
         long gameLoop = agent.observation().getGameLoop();
@@ -164,12 +181,11 @@ public class FightManager {
     }
 
     public void onUnitIdle(UnitInPool unit) {
-        // TODO dispatch
-        if (attackingArmy.hasUnit(unit.getTag())) {
-            attackingArmy.onUnitIdle(unit);
-        } else if (reserveArmy.hasUnit(unit.getTag())) {
-            reserveArmy.onUnitIdle(unit);
-        }
+        armyTasks.forEach(armyTask -> {
+            if (armyTask.hasUnit(unit.getTag())) {
+                armyTask.onUnitIdle(unit);
+            }
+        });
     }
 
     public void debug(S2Agent agent) {

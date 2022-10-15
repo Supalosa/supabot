@@ -4,15 +4,15 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ActionInterface;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.analysis.Region;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
-import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.TaskResult;
 
@@ -28,7 +28,6 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     protected Optional<Point2d> retreatPosition = Optional.empty();
     protected Optional<Point2d> centreOfMass = Optional.empty();
     protected boolean isRegrouping = false;
-    protected MapAwareness.PathRules pathingRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
     protected Optional<Region> currentRegion = Optional.empty();
     protected Optional<Region> targetRegion = Optional.empty();
     protected List<Region> regionWaypoints = new ArrayList<>();
@@ -37,6 +36,8 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     protected long waypointsCalculatedAt = 0L;
     protected long centreOfMassLastUpdated = 0L;
     protected MicroState microState = MicroState.BALANCED;
+    protected Map<UnitType, Integer> currentComposition = new HashMap<>();
+    protected MapAwareness.PathRules pathRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
 
     public AbstractDefaultArmyTask(String armyName) {
         this.armyName = armyName;
@@ -60,10 +61,14 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     @Override
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         List<Point2d> armyPositions = new ArrayList<>();
+        currentComposition.clear();
         armyUnits = armyUnits.stream().filter(tag -> {
                     UnitInPool unit = agent.observation().getUnit(tag);
                     if (unit != null) {
                         armyPositions.add(unit.unit().getPosition().toPoint2d());
+                        currentComposition.put(
+                                unit.unit().getType(),
+                                currentComposition.getOrDefault(unit.unit().getType(), 0) + 1);
                     }
                     return (unit != null && unit.isAlive());
                 })
@@ -85,17 +90,30 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
         }
     }
 
+    protected int getAmountOfUnit(UnitType type) {
+        return currentComposition.getOrDefault(type, 0);
+    }
+
+    /**
+     * Default implementation of wantsUnit that looks at the current and desired composition.
+     */
+    @Override
+    public boolean wantsUnit(Unit unit) {
+        return requestingUnitTypes().stream().anyMatch(request ->
+                request.unitType().equals(unit.getType()) && getAmountOfUnit(unit.getType()) < request.amount());
+    }
+
     private void calculateNewPath(AgentData data) {
         // Target has changed, clear pathfinding.
         if (!waypointsCalculatedAgainst.equals(targetRegion)) {
             waypointsCalculatedAgainst = Optional.empty();
             regionWaypoints.clear();
         }
-        // Calculate path every time - TODO probably don't need to.
+        // Calculate path every time. TODO: probably don't need to do this, cut down in the future.
         if (currentRegion.isPresent() && targetRegion.isPresent() && !currentRegion.equals(targetRegion)) {
             Optional<List<Region>> maybePath = data
                     .mapAwareness()
-                    .generatePath(currentRegion.get(), targetRegion.get(), pathingRules);
+                    .generatePath(currentRegion.get(), targetRegion.get(), pathRules);
             maybePath.ifPresent(path -> {
                 regionWaypoints = path;
                 waypointsCalculatedFrom = currentRegion;
@@ -163,6 +181,11 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     @Override
     public void onUnitIdle(UnitInPool unitTag) {
 
+    }
+
+    @Override
+    public void setPathRules(MapAwareness.PathRules pathRules) {
+        this.pathRules = pathRules;
     }
 
     /**

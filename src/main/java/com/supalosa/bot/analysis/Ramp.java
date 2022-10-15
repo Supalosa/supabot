@@ -41,6 +41,11 @@ public class Ramp implements TileSet {
         return getRampTiles();
     }
 
+    @Override
+    public Optional<Set<Point2d>> getBorderTiles() {
+        return Optional.empty();
+    }
+
     public Set<Point2d> getTopOfRampTiles() {
         return topOfRampTiles;
     }

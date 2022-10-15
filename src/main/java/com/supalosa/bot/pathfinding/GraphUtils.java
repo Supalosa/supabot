@@ -3,13 +3,10 @@ package com.supalosa.bot.pathfinding;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
-import org.jgrapht.Graph;
 import org.jgrapht.graph.DefaultWeightedEdge;
-import org.jgrapht.graph.SimpleWeightedGraph;
 
 import java.util.Map;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 public class GraphUtils {
 
@@ -38,6 +35,7 @@ public class GraphUtils {
                 //System.out.println("Weight = " + g.getEdgeWeight(g.getEdge(region, otherRegion)));
             });
         });
+
 
         return g;
     }

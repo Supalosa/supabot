@@ -38,20 +38,30 @@ public class VisualisationUtils {
         return image;
     }
 
-    public static BufferedImage addToRenderedGrid(BufferedImage image,
-                                                      TileSet tileSet, Function<Integer, Integer> valueAndBlending) {
-        for(Point2d point2d : tileSet.getTiles()) {
+    public static BufferedImage renderTileSet(BufferedImage image,
+                                              TileSet tileSet,
+                                              Function<Integer, Integer> valueAndBlending,
+                                              Function<Integer, Integer> valueAndBlendingForBorder) {
+        for (Point2d point2d : tileSet.getTiles()) {
             int x = (int)point2d.getX();
             int y = getInvertedY((int)point2d.getY(), image.getHeight());
             int newValue = valueAndBlending.apply(image.getRGB(x, y));
             image.setRGB(x, y, newValue);
         }
+        if (tileSet.getBorderTiles().isPresent()) {
+            for (Point2d point2d : tileSet.getBorderTiles().get()) {
+                int x = (int)point2d.getX();
+                int y = getInvertedY((int)point2d.getY(), image.getHeight());
+                int newValue = valueAndBlendingForBorder.apply(image.getRGB(x, y));
+                image.setRGB(x, y, newValue);
+            }
+        }
         return image;
     }
 
-    public static <T> BufferedImage addToRenderedGrid(BufferedImage image,
-                                                      Grid<T> grid, Function<T, Integer> valueToRgb,
-                                                      BiFunction<Integer, Integer, Integer> blending) {
+    public static <T> BufferedImage renderTileSet(BufferedImage image,
+                                                  Grid<T> grid, Function<T, Integer> valueToRgb,
+                                                  BiFunction<Integer, Integer, Integer> blending) {
         for (int x = 0; x < grid.getWidth(); ++x) {
             for (int gameY = 0; gameY < grid.getHeight(); ++gameY) {
                 int y = getInvertedY(gameY, grid.getHeight());

@@ -9,6 +9,7 @@ import java.util.Set;
 
 public interface TileSet {
     Set<Point2d> getTiles();
+    Optional<Set<Point2d>> getBorderTiles();
 
     static Optional<Pair<Point2d, Point2d>> calculateBounds(List<Point2d> tiles) {
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;

@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.task.TaskWithUnits;
 
 import java.util.List;
@@ -25,6 +26,11 @@ public interface ArmyTask extends TaskWithUnits {
         // Retreat without trying to fight back.
         FULL_RETREAT,
     }
+
+    /**
+     * Set which one of the {@code PathRules} the army will take to its path.
+     */
+    void setPathRules(MapAwareness.PathRules pathRules);
 
     /**
      * Sets the target position that this army is trying to move towards.

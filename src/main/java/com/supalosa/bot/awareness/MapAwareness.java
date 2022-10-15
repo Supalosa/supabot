@@ -18,7 +18,7 @@ public interface MapAwareness {
         /**
          * Path directly to enemy base.
          */
-        NONE,
+        NORMAL,
         /**
          * Path by avoiding the enemy army.
          */

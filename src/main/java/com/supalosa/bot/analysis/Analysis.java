@@ -7,6 +7,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.SetMultimap;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
+import org.apache.logging.log4j.util.TriConsumer;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -404,6 +405,7 @@ public class Analysis {
         });
         // Add ramps as their own regions.
         Multimap<Integer, Tile> regions = ArrayListMultimap.create();
+        Multimap<Integer, Tile> allBorderTiles = ArrayListMultimap.create();
         Map<Integer, Integer> regionIdToRampId = new HashMap<>();
         Map<Integer, Integer> regionIdToCumulativeHeight = new HashMap<>();
         mapOfRamps.forEach((rampId, ramp) -> {
@@ -417,11 +419,13 @@ public class Analysis {
         });
         Set<Tile> alreadyEnqueued = new HashSet<>();
         SetMultimap<Integer, Integer> connectedRegions = HashMultimap.create();
-        final BiConsumer<Integer, Tile> maybeEnqueue = (regionId, tile) -> {
+        final TriConsumer<Integer, Tile, Tile> maybeEnqueue = (regionId, originTile, tile) -> {
             if (tile.regionId != -1 && tile.regionId != regionId) {
                 // Found a connection.
                 connectedRegions.put(tile.regionId, regionId);
                 connectedRegions.put(regionId, tile.regionId);
+                allBorderTiles.put(originTile.regionId, originTile);
+                allBorderTiles.put(tile.regionId, tile);
             }
             if (alreadyEnqueued.contains(tile)) {
                 return;
@@ -441,14 +445,14 @@ public class Analysis {
             regions.put(head.regionId, head);
             regionIdToCumulativeHeight.put(head.regionId,
                     regionIdToCumulativeHeight.getOrDefault(head.regionId, 0) + head.terrain);
-            maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y - 1));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x, head.y - 1));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y - 1));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x - 1, head.y + 1));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x, head.y + 1));
-            maybeEnqueue.accept(head.regionId, grid.get(head.x + 1, head.y + 1));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x - 1, head.y - 1));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x, head.y - 1));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x + 1, head.y - 1));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x - 1, head.y));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x + 1, head.y));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x - 1, head.y + 1));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x, head.y + 1));
+            maybeEnqueue.accept(head.regionId, head, grid.get(head.x + 1, head.y + 1));
         }
         Map<Integer, Integer> regionIdToAverageHeight = new HashMap<>();
         regionIdToCumulativeHeight.forEach((regionId, cumulativeHeight) -> {
@@ -494,14 +498,17 @@ public class Analysis {
         regions.keySet().forEach(regionId -> {
             List<Point2d> tiles = regions.get(regionId).stream().map(tile -> Point2d.of(tile.x, tile.y))
                     .collect(Collectors.toList());
+            Set<Point2d> borderTiles = allBorderTiles.get(regionId).stream().map(tile -> Point2d.of(tile.x, tile.y))
+                    .collect(Collectors.toSet());
             Region newRegion = ImmutableRegion.builder()
                     .regionId(regionId)
-                    .addAllTiles(tiles)
+                    .tiles(tiles)
                     .rampId(Optional.ofNullable(regionIdToRampId.get(regionId)))
                     .connectedRegions(connectedRegions.get(regionId))
                     .centrePoint(centrePoints.get(regionId))
                     .addAllOnHighGroundOfRegions(regionIsOnHighGroundOf.get(regionId))
                     .addAllOnLowGroundOfRegions(regionIsOnLowGroundOf.get(regionId))
+                    .borderTiles(borderTiles)
                     .regionBounds(
                             TileSet.calculateBounds(tiles).orElseThrow(() ->
                                     new IllegalArgumentException("Region with no tiles.")))

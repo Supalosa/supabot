@@ -1,6 +1,5 @@
 package com.supalosa.bot.debug;
 
-import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.SupaBot;
@@ -78,7 +77,7 @@ public class JFrameDebugTarget implements DebugTarget {
         BufferedImage regionBmp = new BufferedImage(baseBmp.getColorModel(), baseBmp.copyData(null), false, null);
 
         data.structurePlacementCalculator().ifPresent(spc -> {
-            VisualisationUtils.addToRenderedGrid(
+            VisualisationUtils.renderTileSet(
                     placementBmp,
                     spc.getMutableFreePlacementGrid(),
                     placeable -> placeable ? WHITE : RED,
@@ -86,7 +85,7 @@ public class JFrameDebugTarget implements DebugTarget {
         });
         double baseThreat = 50;
         data.mapAwareness().getAllRegionData().forEach(regionData -> {
-            VisualisationUtils.addToRenderedGrid(
+            VisualisationUtils.renderTileSet(
                     regionBmp,
                     regionData.region(),
                     (_prevVal) -> {
@@ -99,21 +98,35 @@ public class JFrameDebugTarget implements DebugTarget {
                         double blue = (255 - (int) (128 * regionData.playerThreat() / baseThreat)
                                         - (int) (127 * regionData.enemyThreat() / baseThreat)) * visibilityFactor;
                         return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
+                    },
+                    (_prevVal) -> {
+                        double red = 255;
+                        double green = (255 - (int) (255 * regionData.diffuseEnemyThreat() / baseThreat));
+                        double blue = (255 - (int) (255 * regionData.diffuseEnemyThreat() / baseThreat));
+                        return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     });
+            /*
+
+            if (regionData.diffuseEnemyThreat() > 0) {
+                int x = scaleX(regionData.region().centrePoint().getX());
+                int y = scaleY(regionData.region().centrePoint().getY(),  mapHeight);
+                drawCross(g, x, y + 10, (int) (regionData.diffuseEnemyThreat()));
+            }
+             */
         });
         // scale the bitmap
         AffineTransform transform = new AffineTransform();
         transform.scale(OUTPUT_SCALE_FACTOR, OUTPUT_SCALE_FACTOR);
         AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
 
-        BufferedImage after = new BufferedImage(placementBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
-        QuickDrawPanel placementPanel = new QuickDrawPanel(transformOp.filter(placementBmp, after));
+        BufferedImage placementScaled = new BufferedImage(placementBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        QuickDrawPanel placementPanel = new QuickDrawPanel(transformOp.filter(placementBmp, placementScaled));
 
-        BufferedImage after2 = new BufferedImage(regionBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
-        QuickDrawPanel placementPanel2 = new QuickDrawPanel(transformOp.filter(regionBmp, after2));
+        BufferedImage pathingScaled = new BufferedImage(regionBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        QuickDrawPanel placementPanel2 = new QuickDrawPanel(transformOp.filter(regionBmp, pathingScaled));
 
 
-        Graphics2D g = (Graphics2D) after2.getGraphics();
+        Graphics2D g = (Graphics2D) pathingScaled.getGraphics();
         g.setComposite(AlphaComposite.Src);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
