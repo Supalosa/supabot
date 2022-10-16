@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.task.TaskWithUnits;
 
@@ -48,4 +49,9 @@ public interface ArmyTask extends TaskWithUnits {
      * Returns the position that this army is trying to move to.
      */
     Optional<Point2d> getTargetPosition();
+
+    /**
+     * Predict how fight against a certain army will go.
+     */
+    Optional<FightPerformance> predictFightAgainst(Army army);
 }

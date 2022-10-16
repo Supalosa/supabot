@@ -32,7 +32,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     /**
      * Defines how this army will handle engagements.
      */
-    enum AggressionLevel {
+    public enum AggressionLevel {
         // Full aggression towards the enemy. Never retreats.
         FULL_AGGRESSION,
 
@@ -74,6 +74,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     private long cumulativeThreatAndPowerCalculatedAt = 0L;
 
     private static final long NORMAL_UPDATE_INTERVAL = 11;
+    private static final long FAST_UPDATE_INTERVAL = 2;
 
     protected final ThreatCalculator threatCalculator;
 
@@ -294,7 +295,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                     enemyArmy.get(),
                     previousComposition,
                     currentComposition);
-            boolean shouldRetreat = (currentFightPerformance == FightPerformance.LOSING);
+            boolean shouldRetreat = (currentFightPerformance == FightPerformance.BADLY_LOSING);
             boolean isWinning = (currentFightPerformance == FightPerformance.WINNING);
             boolean shouldRegroup = shouldRegroup(agent.observation());
             switch (aggressionLevel) {
@@ -330,16 +331,9 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         if (enemyArmy.isPresent() &&
                 centreOfMass.isPresent() &&
                 enemyArmy.get().position().distance(centreOfMass.get()) < 20.0) {
-            return 11;
+            return FAST_UPDATE_INTERVAL;
         }
         return NORMAL_UPDATE_INTERVAL;
-    }
-
-    protected enum FightPerformance {
-        WINNING,
-        STABLE,
-        SLIGHTLY_LOSING,
-        LOSING,
     }
 
     protected FightPerformance getFightPerformance() {
@@ -378,12 +372,12 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             }
             return FightPerformance.WINNING;
         } else if (currentEnemyThreat > currentPower && relativeDelta < -(currentPower)) {
-            if (currentFightPerformance != FightPerformance.LOSING) {
+            if (currentFightPerformance != FightPerformance.BADLY_LOSING) {
                 System.out.println(armyName + " is Badly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
-            return FightPerformance.LOSING;
+            return FightPerformance.BADLY_LOSING;
         } else if (currentEnemyThreat > currentPower && relativeDelta < 0) {
-            if (currentFightPerformance != FightPerformance.LOSING) {
+            if (currentFightPerformance != FightPerformance.BADLY_LOSING) {
                 System.out.println(armyName + " is Slightly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.SLIGHTLY_LOSING;
@@ -464,7 +458,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 retreatPoint2d = head.centrePoint();
             }
             Point2d finalRetreatPoint2d = retreatPoint2d;
-            if (aggressionLevel == AggressionLevel.FULL_RETREAT || currentFightPerformance == FightPerformance.LOSING) {
+            if (aggressionLevel == AggressionLevel.FULL_RETREAT || currentFightPerformance == FightPerformance.BADLY_LOSING) {
                 // Fully run away
                 retreatPosition.ifPresent(point2d ->
                         actionInterface.unitCommand(armyUnits, Abilities.MOVE, finalRetreatPoint2d, false));
@@ -483,7 +477,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             }
         }
         // Temporary logic to go back into the ATTACKING state.
-        if (maybeEnemyArmy.isEmpty() || maybeEnemyArmy.get().size() * 10 < armyUnits.size()) {
+        if (maybeEnemyArmy.isEmpty() || predictFightAgainst(maybeEnemyArmy.get()).orElse(FightPerformance.STABLE) == FightPerformance.WINNING) {
             System.out.println(armyName + " Retreat -> Attack");
             return AggressionState.ATTACKING;
         } else {
@@ -530,5 +524,20 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
 
     public void setAggressionLevel(AggressionLevel aggressionLevel) {
         this.aggressionLevel = aggressionLevel;
+    }
+
+    @Override
+    public Optional<FightPerformance> predictFightAgainst(Army army) {
+        double currentEnemyThreat = army.threat();
+        double currentPower = threatCalculator.calculatePower(currentComposition);
+        if (currentPower > currentEnemyThreat * 1.25) {
+            return Optional.of(FightPerformance.WINNING);
+        } else if (currentPower > currentEnemyThreat) {
+            return Optional.of(FightPerformance.STABLE);
+        } else if (currentPower > currentEnemyThreat * 0.75) {
+            return Optional.of(FightPerformance.SLIGHTLY_LOSING);
+        } else {
+            return Optional.of(FightPerformance.BADLY_LOSING);
+        }
     }
 }

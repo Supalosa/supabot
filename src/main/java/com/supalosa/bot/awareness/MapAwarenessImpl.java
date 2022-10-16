@@ -12,7 +12,6 @@ import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
-import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -26,7 +25,6 @@ import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.pathfinding.GraphUtils;
 import com.supalosa.bot.pathfinding.RegionGraph;
 import com.supalosa.bot.utils.UnitFilter;
-import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -39,8 +37,7 @@ public class MapAwarenessImpl implements MapAwareness {
     private final List<Point2d> knownEnemyBases;
     private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
     private Set<Point2d> unscoutedLocations = new HashSet<>();
-    private Set<Tag> scoutingWith = new HashSet<>();
-    private long scoutResetLoopTime = 0;
+    private long unscoutedLocationsNextResetAt = 0L;
     private final Map<Expansion, Long> expansionLastAttempted = new HashMap<>();
     LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
     private Optional<List<Expansion>> expansionLocations = Optional.empty();
@@ -72,6 +69,7 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<AnalysisResults> mapAnalysisResults = Optional.empty();
 
     private ThreatCalculator threatCalculator;
+    private long enemyBasesUpdatedAt = 0L;
 
     public MapAwarenessImpl(ThreatCalculator threatCalculator) {
         this.startPosition = Optional.empty();
@@ -121,7 +119,7 @@ public class MapAwarenessImpl implements MapAwareness {
 
     @Override
     public List<Point2d> getKnownEnemyBases() {
-        throw new NotImplementedException("Not ready yet");
+        return knownEnemyBases;
     }
 
     /**
@@ -159,7 +157,7 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public void onStep(AgentData data, S2Agent agent) {
         manageScouting(data, agent.observation(), agent.actions(), agent.query());
-        updateValidExpansions(agent.observation(), agent.query());
+        updateExpansionsAndBases(agent.observation(), agent.query());
         updateMyDefendableStructures(data, agent.observation());
 
         analyseCreep(data, agent);
@@ -216,8 +214,8 @@ public class MapAwarenessImpl implements MapAwareness {
         lockedScoutTarget = lockedScoutTarget.filter(point2d ->
                 agent.observation().getVisibility(point2d) != Visibility.VISIBLE);
 
-        this.maybeEnemyPositionNearEnemy = findEnemyPosition(agent.observation(), true);
-        this.maybeEnemyPositionNearBase = findEnemyPosition(agent.observation(), false);
+        this.maybeEnemyPositionNearEnemy = findEnemyPositionNearPoint(agent.observation(), true);
+        this.maybeEnemyPositionNearBase = findEnemyPositionNearPoint(agent.observation(), false);
     }
 
     private void updateRegionData(AgentData data, S2Agent agent) {
@@ -242,6 +240,14 @@ public class MapAwarenessImpl implements MapAwareness {
                         } else if (isSelf) {
                             regionIdToSelfUnits.put(tile.regionId, unit);
                         }
+                    }
+                });
+            });
+            Set<Integer> regionIdsWithEnemyBases = new HashSet<>();
+            knownEnemyBases.forEach(point2d -> {
+                analysisResults.getTile((int)point2d.getX(), (int)point2d.getY()).ifPresent(tile -> {
+                    if (tile.regionId > 0) {
+                        regionIdsWithEnemyBases.add(tile.regionId);
                     }
                 });
             });
@@ -313,7 +319,8 @@ public class MapAwarenessImpl implements MapAwareness {
                         .playerThreat(currentSelfThreat)
                         .visibilityPercent(visibilityPercent)
                         .decayingVisibilityPercent(decayingVisibilityPercent)
-                        .diffuseEnemyThreat(diffuseThreat.orElse(0.0));
+                        .diffuseEnemyThreat(diffuseThreat.orElse(0.0))
+                        .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()));
 
                regionData.put(region.regionId(), builder.build());
             });
@@ -460,7 +467,8 @@ public class MapAwarenessImpl implements MapAwareness {
             Point point = entry.getKey();
             ImmutableArmy army = entry.getValue();
             double distance = point2d.distance(point.toPoint2d());
-            if (distance < closestDistance) {
+            // TODO configurable distance.
+            if (distance < 25f && distance < closestDistance) {
                 closestDistance = distance;
                 closest = point;
             }
@@ -473,7 +481,7 @@ public class MapAwarenessImpl implements MapAwareness {
         return maybeLargestEnemyArmy.map(Function.identity());
     }
 
-    private void updateValidExpansions(ObservationInterface observationInterface, QueryInterface queryInterface) {
+    private void updateExpansionsAndBases(ObservationInterface observationInterface, QueryInterface queryInterface) {
         long gameLoop = observationInterface.getGameLoop();
         if (this.expansionLocations.isPresent() && gameLoop > expansionsValidatedAt + 44L) {
             expansionsValidatedAt = gameLoop;
@@ -501,18 +509,39 @@ public class MapAwarenessImpl implements MapAwareness {
                     }
                 }
             }
+            knownEnemyBases.clear();
+            expansionLocations.ifPresent(expansions -> {
+                expansions.forEach(expansion -> {
+                    List<UnitInPool> units = observationInterface.getUnits(
+                            UnitFilter.builder()
+                                    .unitTypes(Constants.ALL_TOWN_HALL_TYPES)
+                                    .alliance(Alliance.ENEMY)
+                                    .inRangeOf(expansion.position().toPoint2d())
+                                    .range(2.5f)
+                                    .build());
+                    if (units.size() > 0) {
+                        knownEnemyBases.add(expansion.position().toPoint2d());
+                    }
+                });
+            });
         }
     }
 
     // Finds a worthwhile enemy position to move units towards.
-    private Optional<Point2d> findEnemyPosition(ObservationInterface observationInterface, boolean nearEnemyBase) {
-        Point startLocation = observationInterface.getStartLocation();
-        Comparator<UnitInPool> comparator =
-                Comparator.comparing(unit -> unit.unit().getPosition().distance(startLocation));
+    private Optional<Point2d> findEnemyPositionNearPoint(ObservationInterface observationInterface, boolean nearEnemyBase) {
         if (nearEnemyBase && knownEnemyStartLocation.isPresent()) {
-            comparator =
-                    Comparator.comparing(unit -> unit.unit().getPosition().toPoint2d().distance(knownEnemyStartLocation.get()));
+            return findEnemyPositionNearPoint(observationInterface, knownEnemyStartLocation.get());
+        } else if (startPosition.isPresent()) {
+            return findEnemyPositionNearPoint(observationInterface, startPosition.get());
+        } else {
+            throw new IllegalStateException("findEnemyPosition called before our start position is known.");
         }
+    }
+
+    @Override
+    public Optional<Point2d> findEnemyPositionNearPoint(ObservationInterface observationInterface, Point2d point) {
+        Comparator<UnitInPool> comparator =
+                Comparator.comparing(unit -> unit.unit().getPosition().toPoint2d().distance(point));
         List<UnitInPool> enemyUnits = observationInterface.getUnits(Alliance.ENEMY);
         if (enemyUnits.size() > 0) {
             // Move towards the closest to our base (for now)
@@ -606,13 +635,16 @@ public class MapAwarenessImpl implements MapAwareness {
                 data.structurePlacementCalculator().ifPresent(spc -> spc.onExpansionsCalculated(expansionLocations.get()));
             }
         }
-        if (observationInterface.getGameLoop() > scoutResetLoopTime) {
+        if (observationInterface.getGameLoop() > unscoutedLocationsNextResetAt) {
             observationInterface.getGameInfo().getStartRaw().ifPresent(startRaw -> {
                 unscoutedLocations = new HashSet<>(startRaw.getStartLocations());
             });
+            // TODO: there is an accidental race here to get the scout out before expansionLocations gets calculated
+            // and this block gets called - this is lucky (as it means the scout goes directly to enemy base) but bad
+            // design
             expansionLocations.ifPresent(locations ->
                     locations.forEach(expansion -> unscoutedLocations.add(expansion.position().toPoint2d())));
-            scoutResetLoopTime = observationInterface.getGameLoop() + 22 * 180;
+            unscoutedLocationsNextResetAt = observationInterface.getGameLoop() + 22 * 180;
         }
         if (unscoutedLocations.size() > 0) {
             unscoutedLocations = unscoutedLocations.stream()

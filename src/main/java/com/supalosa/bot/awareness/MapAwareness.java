@@ -1,6 +1,7 @@
 package com.supalosa.bot.awareness;
 
 import com.github.ocraft.s2client.bot.S2Agent;
+import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
@@ -88,6 +89,8 @@ public interface MapAwareness {
     Optional<Army> getMaybeEnemyArmy(Point2d point2d);
 
     Optional<Army> getLargestEnemyArmy();
+
+    Optional<Point2d> findEnemyPositionNearPoint(ObservationInterface observationInterface, Point2d point);
 
     void debug(S2Agent supaBot);
 

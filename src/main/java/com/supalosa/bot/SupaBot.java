@@ -58,7 +58,8 @@ public class SupaBot extends S2Agent implements AgentData {
                     return count;
                 }
             });
-    private boolean isDebug;
+    private boolean isDebug = false;
+    private boolean isSlow = false;
     private Optional<AnalysisResults> mapAnalysis = Optional.empty();
     private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
     private Map<UnitType, UnitTypeData> unitTypeData = null;
@@ -265,20 +266,31 @@ public class SupaBot extends S2Agent implements AgentData {
 
         List<ChatReceived> chat = observation().getChatMessages();
         for (ChatReceived chatReceived : chat) {
+            if (chatReceived.getPlayerId() != observation().getPlayerId()) {
+                continue;
+            }
             if (chatReceived.getMessage().contains("debug")) {
                 this.isDebug = !isDebug;
                 // send one more debug command to flush the buffer.
                 debug().sendDebug();
                 actions().sendChat("Debug: " + isDebug, ActionChat.Channel.TEAM);
             }
+
+            if (chatReceived.getMessage().contains("slow")) {
+                this.isDebug = true;
+                this.isSlow = !this.isSlow;
+                actions().sendChat("Slow: " + isSlow, ActionChat.Channel.TEAM);
+            }
         }
 
         debugTarget.onStep(this, this);
         if (isDebug) {
-            try {
-                Thread.sleep(80);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            if (isSlow) {
+                try {
+                    Thread.sleep(80);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
             if (this.taskManager != null) {
                 this.taskManager.debug(this);

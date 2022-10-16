@@ -15,14 +15,10 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.task.TaskWithUnits;
-import com.supalosa.bot.task.army.ArmyTask;
-import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
-import com.supalosa.bot.task.army.TerranBioArmyTask;
+import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.task.army.*;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
-import com.supalosa.bot.task.army.TerranBioHarrassArmyTask;
-import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -56,15 +52,22 @@ public class FightManager {
 
     private void setAttackPosition(Optional<Point2d> attackPosition) {
         armyTasks.forEach(armyTask -> {
-            if (armyTask != reserveArmy) {
+            if (armyTask != reserveArmy && !(armyTask instanceof TerranBioHarassArmyTask)) {
                 armyTask.setTargetPosition(attackPosition);
+            };
+        });
+    }
+
+    private void setHarassPosition(Optional<Point2d> harassPosition) {
+        armyTasks.forEach(armyTask -> {
+            if (armyTask instanceof TerranBioHarassArmyTask) {
+                armyTask.setTargetPosition(harassPosition);
             };
         });
     }
 
     private void setDefencePosition(Optional<Point2d> defencePosition) {
         this.reserveArmy.setTargetPosition(defencePosition);
-        // TODO try to remember why we did this for reserveArmy.
         armyTasks.forEach(armyTask -> {
                 armyTask.setRetreatPosition(defencePosition);
         });
@@ -75,11 +78,12 @@ public class FightManager {
     // these will be moved to a playstyle-specific class
     private void onStepTerranBio(TaskManager taskManager, AgentData data) {
         if (agent.observation().getArmyCount() > 60) {
-            // Start a harrass force.
-            ArmyTask harrassTask = new TerranBioHarrassArmyTask("Harrass", 100);
-            if (taskManager.addTask(harrassTask, 1)) {
-                harrassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
-                armyTasks.add(harrassTask);
+            // Start a harass force.
+            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harrass", 100);
+            if (taskManager.addTask(harassTask, 1)) {
+                harassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
+                harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);
+                armyTasks.add(harassTask);
             }
         }
     }
@@ -139,13 +143,42 @@ public class FightManager {
      */
     private void updateTargetingLogic(AgentData data) {
         // Select attack position.
+        Optional<Point2d> attackPosition;
         if (data.mapAwareness().getLargestEnemyArmy().isEmpty()) {
-            this.setAttackPosition(data.mapAwareness().getMaybeEnemyPositionNearEnemy());
+            attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemy();
         } else {
             // TODO: defend if my regions are under threat.
-            this.setAttackPosition(data.mapAwareness().getMaybeEnemyPositionNearEnemy());
+            attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemy();
         }
-        // Select defence position.
+        this.setAttackPosition(attackPosition);
+        // Select harass position with the lowest diffuse threat that is not close to the attack position.
+        final double MIN_DISTANCE_FROM_ATTACK_POSITION = 25f;
+        double minThreat = Double.MAX_VALUE;
+        RegionData minRegion = null;
+        for (RegionData regionData : data.mapAwareness().getAllRegionData()) {
+            if (attackPosition.isPresent() &&
+                    regionData.region().centrePoint().distance(attackPosition.get()) > MIN_DISTANCE_FROM_ATTACK_POSITION) {
+                if (regionData.hasEnemyBase()) {
+                    if (regionData.diffuseEnemyThreat() < minThreat) {
+                        minRegion = regionData;
+                        minThreat = regionData.diffuseEnemyThreat();
+                    }
+                }
+            }
+        }
+        Optional<Point2d> harassPosition = Optional.empty();
+        if (minRegion != null) {
+            harassPosition = Optional.of(minRegion.region().centrePoint());
+        }
+        this.setHarassPosition(harassPosition);
+        Optional<Point2d> finalHarassPosition = harassPosition;
+        data.mapAwareness().getLargestEnemyArmy().ifPresent(enemyArmy -> {
+            attackingArmy.predictFightAgainst(enemyArmy).ifPresent(predictedOutcome -> {
+                if (finalHarassPosition.isPresent() && predictedOutcome != FightPerformance.WINNING) {
+                    this.setAttackPosition(finalHarassPosition);
+                }
+            });
+        });
         Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearBase();
         if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
             // Enemy detected near our base, attack them.

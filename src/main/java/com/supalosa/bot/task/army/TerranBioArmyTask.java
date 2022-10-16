@@ -65,7 +65,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 .unitType(Units.TERRAN_MARINE)
                 .productionAbility(Abilities.TRAIN_MARINE)
                 .producingUnitType(Units.TERRAN_BARRACKS)
-                .amount(1000)
+                .amount(100)
                 .build()
         );
         if (armyUnits.size() > 10) {
@@ -180,16 +180,6 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
         return desiredComposition;
-    }
-
-    @Override
-    public boolean wantsUnit(Unit unit) {
-        // This unit will take any bio-army unit.
-        // Note, should set its priority lower than other tasks so it doesn't hog them all.
-        return unit.getType() == Units.TERRAN_MARINE ||
-                unit.getType() == Units.TERRAN_MARAUDER ||
-                unit.getType() == Units.TERRAN_MEDIVAC ||
-                unit.getType() == Units.TERRAN_RAVEN;
     }
 
     @Override

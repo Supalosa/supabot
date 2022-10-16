@@ -143,7 +143,11 @@ public class JFrameDebugTarget implements DebugTarget {
             int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
             Font lastFont = g.getFont();
             g.setFont(lastFont.deriveFont(10.0f));
-            g.drawString(Integer.toString(regionData.region().regionId()), x, y);
+            String regionText = Integer.toString(regionData.region().regionId());
+            if (regionData.hasEnemyBase()) {
+                regionText += "B";
+            }
+            g.drawString(regionText, x, y);
             g.setFont(lastFont);
         });
 

@@ -85,4 +85,9 @@ public interface RegionData {
     default double decayingVisibilityPercent() {
         return 0.0;
     }
+
+    @Value.Default
+    default boolean hasEnemyBase() {
+        return false;
+    }
 }
