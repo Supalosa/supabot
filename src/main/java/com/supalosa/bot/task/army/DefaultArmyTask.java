@@ -272,10 +272,10 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             switch (aggressionLevel) {
                 case BALANCED:
                     if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
-                        System.out.println(armyName + ": Forced Retreat (Losing)");
+                        // System.out.println(armyName + ": Forced Retreat (Losing)");
                         aggressionState = AggressionState.RETREATING;
                     } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
-                        System.out.println(armyName + ": Forced Regroup (Dispersed)");
+                        // System.out.println(armyName + ": Forced Regroup (Dispersed)");
                         aggressionState = AggressionState.REGROUPING;
                     }
                     break;
@@ -284,13 +284,13 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                     break;
                 case FULL_RETREAT:
                     if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
-                        System.out.println(armyName + ": Forced Retreat (Losing)");
+                        // System.out.println(armyName + ": Forced Retreat (Losing)");
                         aggressionState = AggressionState.RETREATING;
                     } else if (!isWinning && aggressionState != AggressionState.RETREATING) {
-                        System.out.println(armyName + ": Forced Retreat (Not winning)");
+                        // System.out.println(armyName + ": Forced Retreat (Not winning)");
                         aggressionState = AggressionState.RETREATING;
                     } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
-                        System.out.println(armyName + ": Forced Regroup (Dispersed)");
+                        // System.out.println(armyName + ": Forced Regroup (Dispersed)");
                         aggressionState = AggressionState.REGROUPING;
                     }
                     break;
@@ -340,24 +340,24 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         double relativeDelta = cumulativePowerDelta - cumulativeThreatDelta;
         if (currentPower > currentEnemyThreat && relativeDelta > 0) {
             if (currentFightPerformance != FightPerformance.WINNING) {
-                System.out.println(armyName + " is Winning [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
+                // System.out.println(armyName + " is Winning [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.WINNING;
         } else if (currentEnemyThreat > currentPower && relativeDelta < -(currentPower)) {
             if (currentFightPerformance != FightPerformance.BADLY_LOSING) {
-                System.out.println(armyName + " is Badly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: "
-                        + cumulativeThreatDelta + "]");
+                // System.out.println(armyName + " is Badly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: "
+                //        + cumulativeThreatDelta + "]");
             }
             return FightPerformance.BADLY_LOSING;
         } else if (currentEnemyThreat > currentPower && relativeDelta < 0) {
             if (currentFightPerformance != FightPerformance.BADLY_LOSING) {
-                System.out.println(armyName + " is Slightly Losing [ourDelta: " + cumulativePowerDelta + ", " +
-                        "theirDelta: " + cumulativeThreatDelta + "]");
+                // System.out.println(armyName + " is Slightly Losing [ourDelta: " + cumulativePowerDelta + ", " +
+                //        "theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.SLIGHTLY_LOSING;
         } else {
             if (currentFightPerformance != FightPerformance.STABLE) {
-                System.out.println(armyName + " is Stable [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
+                // System.out.println(armyName + " is Stable [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.STABLE;
         }
@@ -392,7 +392,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         ObservationInterface observationInterface = agent.observation();
         ActionInterface actionInterface = agent.actions();
         if (armyUnits.size() > 0 && (centreOfMass.isEmpty() || !shouldRegroup(observationInterface))) {
-            System.out.println(armyName + " Regroup -> Attack");
+            // System.out.println(armyName + " Regroup -> Attack");
             return AggressionState.ATTACKING;
         } else if (armyUnits.size() > 0) {
             Pair<List<Unit>, List<Unit>> splitUnits = calculateUnitProximityToPoint(
@@ -456,7 +456,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         }
         // Temporary logic to go back into the ATTACKING state.
         if (maybeEnemyArmy.isEmpty() || predictFightAgainst(maybeEnemyArmy.get()) == FightPerformance.WINNING) {
-            System.out.println(armyName + " Retreat -> Attack");
+            // System.out.println(armyName + " Retreat -> Attack");
             return AggressionState.ATTACKING;
         } else {
             return AggressionState.RETREATING;

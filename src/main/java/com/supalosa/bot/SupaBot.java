@@ -64,8 +64,6 @@ public class SupaBot extends S2Agent implements AgentData {
     private Optional<AnalysisResults> mapAnalysis = Optional.empty();
     private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
     private Map<UnitType, UnitTypeData> unitTypeData = null;
-    // HACK until threat built
-    private boolean crisisMode = false;
     private long lastRebalanceAt = 0L;
     private Long lastExpansionTime = 0L;
 
@@ -291,21 +289,6 @@ public class SupaBot extends S2Agent implements AgentData {
             notDispatched.forEach((task, supplyTrigger) -> singletonTasksToDispatch.put(supplyTrigger, task));
         }
 
-        // HACK - crisis mode (which affects whether marines are built or not)
-        if (observation().getFoodUsed() < 24) {
-            Point start = observation().getStartLocation();
-            long unitsNearBase = observation().getUnits(Alliance.ENEMY).stream().filter(unitInPool ->
-                    unitInPool.unit().getPosition().distance(start) < 30
-            ).count();
-            boolean wasCrisis = crisisMode;
-            crisisMode = unitsNearBase > 10;
-            if (!wasCrisis && crisisMode) {
-                actions().sendChat("Crisis mode", ActionChat.Channel.TEAM);
-            } else if (wasCrisis && !crisisMode) {
-                actions().sendChat("No longer in crisis mode", ActionChat.Channel.TEAM);
-            }
-        }
-
         List<ChatReceived> chat = observation().getChatMessages();
         for (ChatReceived chatReceived : chat) {
             if (chatReceived.getPlayerId() != observation().getPlayerId()) {
@@ -451,9 +434,9 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     private boolean needsCommandCentre() {
-        // Expand every 18 workers.
-        final int[] expansionNumWorkers = new int[]{0, 18, 36, 54, 72, 90};
-        int currentSupply = observation().getFoodWorkers();
+        // Expand every 16 workers.
+        final int[] expansionNumWorkers = new int[]{0, 16, 32, 48, 64, 72};
+        int currentWorkers = observation().getFoodWorkers();
         int numCcs = countMiningBases();
         int index = Math.min(expansionNumWorkers.length - 1, Math.max(0, numCcs));
         int nextExpansionAt = expansionNumWorkers[index];
@@ -463,14 +446,10 @@ public class SupaBot extends S2Agent implements AgentData {
         if (getNumBuildingStructure(Abilities.BUILD_COMMAND_CENTER) > 0) {
             return false;
         }
-        // TEMP hack until threat system is built
-        if (crisisMode) {
-            return false;
-        }
         if (this.mapAwareness.getValidExpansionLocations().isEmpty()) {
             return false;
         }
-        return currentSupply >= nextExpansionAt;
+        return currentWorkers >= nextExpansionAt;
     }
 
     private int countMiningBases() {
@@ -696,6 +675,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 int delta = refinery.getIdealHarvesters().get() - refinery.getAssignedHarvesters().get();
                 List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
                                 unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                                        unitInPool.unit().getType() == Units.TERRAN_SCV &&
                                         UnitInPool.isCarryingMinerals().test(unitInPool) &&
                                         unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
                         .stream().map(UnitInPool::unit).collect(Collectors.toList());
@@ -751,6 +731,10 @@ public class SupaBot extends S2Agent implements AgentData {
     private boolean _tryBuildStructure(Ability abilityTypeForStructure, UnitType unitTypeForStructure,
                                        UnitType unitType, int maxParallel, Optional<Point2d> specificPosition,
                                        Optional<Unit> specificTarget) {
+        // hack
+        if (needsCommandCentre() && (unitTypeForStructure != Units.TERRAN_COMMAND_CENTER)) {
+            return false;
+        }
         BuildStructureTask maybeTask = new BuildStructureTask(
                 abilityTypeForStructure,
                 unitTypeForStructure,
@@ -796,6 +780,18 @@ public class SupaBot extends S2Agent implements AgentData {
     public void onUnitCreated(UnitInPool unitInPool) {
         if (!(unitInPool.unit().getType() instanceof Units)) {
             return;
+        }
+        // First barracks gets rallied behind it. This defends against 12 pools etc.
+        if (unitInPool.unit().getType() == Units.TERRAN_BARRACKS) {
+            if (countUnitType(Units.TERRAN_BARRACKS) <= 1) {
+                structurePlacementCalculator.ifPresent(spc -> {
+                    // Defend from behind the barracks, or else the position of the barracks.
+                    spc.getMainRamp()
+                        .flatMap(ramp -> ramp.projection(5.0f)).ifPresent(projection -> {
+                            actions().unitCommand(unitInPool.getTag(), Abilities.RALLY_BUILDING, projection, false);
+                        });
+                });
+            }
         }
         taskManager.dispatchUnit(unitInPool.unit());
     }

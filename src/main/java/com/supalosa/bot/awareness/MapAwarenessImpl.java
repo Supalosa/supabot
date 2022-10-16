@@ -171,6 +171,7 @@ public class MapAwarenessImpl implements MapAwareness {
                             .unitTypes(Constants.ARMY_UNIT_TYPES)
                             .build());
             Map<Point,List<UnitInPool>> clusters = Expansions.cluster(enemyArmy, 10f);
+
             // Army threat decays slowly
             if (maybeLargestEnemyArmy.isPresent() && agent.observation().getVisibility(maybeLargestEnemyArmy.get().position()) == Visibility.VISIBLE) {
                 maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
@@ -191,16 +192,18 @@ public class MapAwarenessImpl implements MapAwareness {
                     List<UnitInPool> units = entry.getValue();
                     Collection<UnitType> composition = getComposition(units);
                     double threat = threatCalculator.calculateThreat(composition);
-                    enemyClusters.put(point, ImmutableArmy.builder()
-                            .position(point.toPoint2d())
-                            .size(units.size())
-                            .composition(composition)
-                            .threat(threat)
-                            .build());
-                    int size = units.size();
-                    if (size > biggestArmySize) {
-                        biggestArmySize = size;
-                        biggestArmy = point;
+                    if (threat > 5.0f) {
+                        enemyClusters.put(point, ImmutableArmy.builder()
+                                .position(point.toPoint2d())
+                                .size(units.size())
+                                .composition(composition)
+                                .threat(threat)
+                                .build());
+                        int size = units.size();
+                        if (size > biggestArmySize) {
+                            biggestArmySize = size;
+                            biggestArmy = point;
+                        }
                     }
                 }
                 if (biggestArmy != null) {

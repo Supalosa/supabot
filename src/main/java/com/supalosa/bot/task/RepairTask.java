@@ -85,7 +85,7 @@ public class RepairTask implements Task {
                             .inRangeOf(unitToRepair.unit().getPosition().toPoint2d())
                             .range(unitToRepair.unit().getRadius() + 3f)
                             .build());
-            targetRepairers = Math.max(1, unitsNearby.size());
+            targetRepairers = Math.max(1, Math.min((int)(unitToRepair.unit().getRadius()+2), unitsNearby.size()));
         }
         assignedRepairers = repairers.stream().map(unit -> unit.getTag()).collect(Collectors.toList());
         if (repairers.size() > 0) {

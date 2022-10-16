@@ -19,10 +19,17 @@ public class RegionGraph extends SimpleWeightedGraph<Region, DefaultWeightedEdge
         AStarShortestPath<Region, DefaultWeightedEdge> pathfinder = new AStarShortestPath<>(
                 this, (sourceVertex, targetVertex) -> sourceVertex.centrePoint().distance(targetVertex.centrePoint()));
 
-        GraphPath<Region, DefaultWeightedEdge> path = pathfinder.getPath(startRegion, endRegion);
-        if (path == null || path.getEndVertex() == null || !path.getEndVertex().equals(endRegion)) {
+        try {
+            GraphPath<Region, DefaultWeightedEdge> path = pathfinder.getPath(startRegion, endRegion);
+            if (path == null || path.getEndVertex() == null || !path.getEndVertex().equals(endRegion)) {
+                return Optional.empty();
+            }
+            return Optional.of(new ArrayList<>(path.getVertexList()));
+        } catch (Exception ex) {
+            System.err.println("ERROR in pathfinder");
+            ex.printStackTrace();
+            System.out.println(this.toString());
             return Optional.empty();
         }
-        return Optional.of(new ArrayList<>(path.getVertexList()));
     }
 }

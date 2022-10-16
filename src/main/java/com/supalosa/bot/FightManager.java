@@ -202,7 +202,7 @@ public class FightManager {
             Optional<Army> attackingEnemyArmy = data.mapAwareness().getMaybeEnemyArmy(nearestEnemy.get());
             if (attackingEnemyArmy.isPresent()) {
                 FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(attackingEnemyArmy.get());
-                if (predictedOutcome == FightPerformance.SLIGHTLY_LOSING || predictedOutcome == FightPerformance.BADLY_LOSING) {
+                if (predictedOutcome == FightPerformance.BADLY_LOSING) {
                     // Defending army needs help.
                     this.setAttackPosition(nearestEnemy);
                 }
