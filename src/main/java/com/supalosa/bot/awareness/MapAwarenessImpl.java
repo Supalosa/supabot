@@ -345,7 +345,7 @@ public class MapAwarenessImpl implements MapAwareness {
             Region head = openSet.poll();
             closedSet.add(head.regionId());
             double distance = distanceToRegion.getOrDefault(head.regionId(), 0.0);
-            double distanceFactor = 1.0 / Math.max(1.0, distance);
+            double distanceFactor = 5.0 / Math.max(1.0, distance);
             diffuseThreat += regionToEnemyThreat.getOrDefault(head.regionId(), 0.0) * distanceFactor;
             head.connectedRegions().forEach(connectedRegionId -> {
                 if (closedSet.contains(connectedRegionId)) {

@@ -6,6 +6,7 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
@@ -22,6 +23,7 @@ public class TaskManagerImpl implements TaskManager {
     private List<TaskWithUnits> orderedTasksNeedingUnits;
 
     private long unitToTaskMapCleanedAt = 0L;
+    private long unassignedUnitsDispatchedAt = 0L;
 
     public TaskManagerImpl() {
         this.unitToTaskMap = new HashMap<>();
@@ -105,8 +107,18 @@ public class TaskManagerImpl implements TaskManager {
                 }
             });
         }
-        if (agent.observation().getGameLoop() > unitToTaskMapCleanedAt + 22L) {
-            unitToTaskMapCleanedAt = agent.observation().getGameLoop();
+        long gameLoop = agent.observation().getGameLoop();
+        if (gameLoop > unassignedUnitsDispatchedAt + 66L) {
+            // Periodically assign unallocated units to tasks.
+            unassignedUnitsDispatchedAt = gameLoop;
+            agent.observation().getUnits(Alliance.SELF).forEach(unitInPool -> {
+                if (!unitToTaskMap.containsKey(unitInPool.getTag())) {
+                    dispatchUnit(unitInPool.unit());
+                }
+            });
+        }
+        if (gameLoop > unitToTaskMapCleanedAt + 22L) {
+            unitToTaskMapCleanedAt = gameLoop;
             Set<Tag> missingUnits = new HashSet<>();
             unitToTaskMap.keySet().forEach(tag -> {
                 if (agent.observation().getUnit(tag) == null) {

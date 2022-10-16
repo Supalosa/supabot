@@ -16,11 +16,14 @@ import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.task.army.ArmyTask;
+import com.supalosa.bot.task.army.SiegeTankMuleBombTask;
 import com.supalosa.bot.task.army.TerranBioArmyTask;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.army.TerranBioHarrassArmyTask;
+import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -44,6 +47,8 @@ public class FightManager {
     private boolean hasSeenCloakedOrBurrowedUnits = false;
     private long lastDefenceCommand = 0L;
 
+    private long positionalLogicUpdatedAt = 0L;
+
     public FightManager(S2Agent agent) {
         this.agent = agent;
         armyTasks = new ArrayList<>();
@@ -51,7 +56,7 @@ public class FightManager {
         armyTasks.add(attackingArmy);
     }
 
-    public void setAttackPosition(Optional<Point2d> attackPosition) {
+    private void setAttackPosition(Optional<Point2d> attackPosition) {
         armyTasks.forEach(armyTask -> {
             if (armyTask != reserveArmy) {
                 armyTask.setTargetPosition(attackPosition);
@@ -59,7 +64,7 @@ public class FightManager {
         });
     }
 
-    public void setDefencePosition(Optional<Point2d> defencePosition) {
+    private void setDefencePosition(Optional<Point2d> defencePosition) {
         this.reserveArmy.setTargetPosition(defencePosition);
         // TODO try to remember why we did this for reserveArmy.
         armyTasks.forEach(armyTask -> {
@@ -68,6 +73,33 @@ public class FightManager {
     }
 
     private boolean addedTasks = false;
+
+    // these will be moved to a playstyle-specific class
+    private void onStepTerranBio(TaskManager taskManager, AgentData data) {
+
+
+        if (agent.observation().getArmyCount() > 60) {
+            // Start a harrass force.
+            ArmyTask harrassTask = new TerranBioHarrassArmyTask("Harrass", 100);
+            if (taskManager.addTask(harrassTask, 1)) {
+                harrassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
+                armyTasks.add(harrassTask);
+            }
+        }
+        List<UnitInPool> enemySiegeTanks = agent.observation().getUnits(
+                UnitFilter.builder()
+                        .alliance(Alliance.ENEMY)
+                        .unitType(Units.TERRAN_SIEGE_TANK_SIEGED).build());
+        if (!enemySiegeTanks.isEmpty()) {
+            // Start a harrass force.
+            ArmyTask siegeTankMuleBombTask = new SiegeTankMuleBombTask("MuleBomb", new TerranBioThreatCalculator());
+            if (taskManager.addTask(siegeTankMuleBombTask, 1)) {
+                siegeTankMuleBombTask.setPathRules(MapAwareness.PathRules.NORMAL);
+                armyTasks.add(siegeTankMuleBombTask);
+            }
+        }
+    }
+
 
     public void onStep(TaskManager taskManager, AgentData data) {
         // hack, should be an ongamestart function
@@ -82,14 +114,7 @@ public class FightManager {
             attackingArmy.takeAllFrom(reserveArmy);
         }
 
-        if (agent.observation().getArmyCount() > 60) {
-            // Start a harrass force.
-            ArmyTask harrassTask = new TerranBioHarrassArmyTask("Harrass", 100);
-            if (taskManager.addTask(harrassTask, 1)) {
-                harrassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
-                armyTasks.add(harrassTask);
-            }
-        }
+        onStepTerranBio(taskManager, data);
 
         // Remove complete tasks.
         List<ArmyTask> validArmyTasks = armyTasks.stream().filter(armyTask -> !armyTask.isComplete()).collect(Collectors.toList());
@@ -97,6 +122,11 @@ public class FightManager {
         armyTasks.addAll(validArmyTasks);
 
         long gameLoop = agent.observation().getGameLoop();
+
+        if (gameLoop > positionalLogicUpdatedAt + 33L) {
+            positionalLogicUpdatedAt = gameLoop;
+            updateTargetingLogic(data);
+        }
 
         agent.observation().getUnits(Alliance.SELF).stream().forEach(unit -> {
             float health = unit.unit().getHealth().orElse(0.0f);
@@ -117,6 +147,34 @@ public class FightManager {
         if (gameLoop > lastCloakOrBurrowedUpdate + CLOAK_OR_BURROW_UPDATE_INTERVAL) {
             updateCloakOrBurrowed();
             lastCloakOrBurrowedUpdate = gameLoop;
+        }
+    }
+
+    /**
+     * Make decisions on where to attack and defend.
+     */
+    private void updateTargetingLogic(AgentData data) {
+        // Select attack position.
+        if (data.mapAwareness().getLargestEnemyArmy().isEmpty()) {
+            this.setAttackPosition(data.mapAwareness().getMaybeEnemyPositionNearEnemy());
+        } else {
+            // TODO: defend if my regions are under threat.
+            this.setAttackPosition(data.mapAwareness().getMaybeEnemyPositionNearEnemy());
+        }
+        // Select defence position.
+        Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearBase();
+        if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
+            // Enemy detected near our base, attack them.
+            this.setDefencePosition(nearestEnemy);
+        } else {
+            data.structurePlacementCalculator().ifPresent(spc -> {
+                // Defend from behind the barracks, or else the position of the barracks.
+                Optional<Point2d> defencePosition = spc
+                        .getMainRamp()
+                        .map(ramp -> ramp.projection(5.0f))
+                        .orElse(spc.getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d()));
+                this.setDefencePosition(defencePosition);
+            });
         }
     }
 
@@ -194,15 +252,6 @@ public class FightManager {
     }
 
     public void debug(S2Agent agent) {
-    }
-
-    public boolean predictWinAgainst(Army army) {
-        // secret sauce.
-        return (attackingArmy.getSize() > army.threat());
-    }
-    public boolean predictDefensiveWinAgainst(Army army) {
-        // secret sauce.
-        return (reserveArmy.getSize() > army.threat());
     }
 
     public List<UnitTypeRequest> getRequestedUnitTypes() {

@@ -226,29 +226,7 @@ public class SupaBot extends S2Agent implements AgentData {
 
         mineGas();
         taskManager.onStep(this, this);
-
-        if (mapAwareness.getLargestEnemyArmy().isEmpty()) {
-            fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
-        } else {
-            Army enemyArmy = mapAwareness.getLargestEnemyArmy().get();
-            if (fightManager.predictWinAgainst(enemyArmy)) {
-                if (enemyArmy.threat() > 10f) {
-                    fightManager.setAttackPosition(Optional.of(enemyArmy.position()));
-                } else {
-                    fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
-                }
-            } else {
-                fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearBase());
-            }
-        }
         fightManager.onStep(taskManager, this);
-
-        Optional<UnitInPool> randomCc = getRandomUnit(Units.TERRAN_COMMAND_CENTER);
-        if (randomCc.isPresent()) {
-            fightManager.setDefencePosition(randomCc.map(unitInPool -> unitInPool.unit().getPosition().toPoint2d()));
-        } else {
-            fightManager.setDefencePosition(Optional.empty());
-        }
 
         // Open or close the ramp.
         structurePlacementCalculator.ifPresent(spc -> {
@@ -280,31 +258,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 spc.getSecondSupplyDepotLocation().ifPresent(
                         spl -> drawDebugSquare(spl.getX() - 1.0f, spl.getY() - 1.0f, 2.0f, 2.0f, Color.GREEN));
             }
-            // Defend from behind the barracks, or else the position of the barracks.
-            Optional<Point2d> defencePosition = spc
-                    .getMainRamp()
-                    .map(ramp -> ramp.projection(5.0f))
-                    .orElse(spc.getFirstBarracksLocation(observation().getStartLocation().toPoint2d()));
-            fightManager.setDefencePosition(defencePosition);
         });
-
-        Optional<Point2d> nearestEnemy = mapAwareness.getMaybeEnemyPositionNearBase();
-        if (nearestEnemy.isPresent() && mapAwareness.shouldDefendLocation(nearestEnemy.get())) {
-            if (mapAwareness.getMaybeEnemyArmy(nearestEnemy.get()).isPresent()) {
-                Army enemyArmy = mapAwareness.getMaybeEnemyArmy(nearestEnemy.get()).get();
-                if (enemyArmy.position().distance(nearestEnemy.get()) < 10f) {
-                    // enemy army is near base and we expect to win.
-                    if (fightManager.predictDefensiveWinAgainst(enemyArmy)) {
-                        fightManager.setDefencePosition(nearestEnemy);
-                    } else {
-                        // do nothing - the defence position defaults to the high ground.
-                    }
-                }
-            } else {
-                // Don't know where the enemy army is - just defend against what's nearby.
-                fightManager.setDefencePosition(nearestEnemy);
-            }
-        }
 
         // Dispatch one-off tasks.
         if (singletonTasksToDispatch.size() > 0) {
