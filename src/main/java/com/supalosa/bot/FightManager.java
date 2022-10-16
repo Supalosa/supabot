@@ -297,6 +297,7 @@ public class FightManager {
 
     public List<UnitTypeRequest> getRequestedUnitTypes() {
         Map<UnitType, Integer> requestedAmount = new HashMap<>();
+        Map<UnitType, Optional<UnitType>> alternateForm = new HashMap<>();
         Map<UnitType, UnitType> producingUnitType = new HashMap<>();
         Map<UnitType, Ability> productionAbility = new HashMap<>();
         armyTasks.forEach(armyTask -> {
@@ -305,6 +306,7 @@ public class FightManager {
                         requestedAmount.getOrDefault(unitTypeRequest.unitType(), 0) + unitTypeRequest.amount());
                 producingUnitType.put(unitTypeRequest.unitType(), unitTypeRequest.producingUnitType());
                 productionAbility.put(unitTypeRequest.unitType(), unitTypeRequest.productionAbility());
+                alternateForm.put(unitTypeRequest.unitType(), unitTypeRequest.alternateForm());
             });
         });
         return requestedAmount.entrySet().stream()
@@ -313,6 +315,7 @@ public class FightManager {
                         .amount(entry.getValue())
                         .producingUnitType(producingUnitType.get(entry.getKey()))
                         .productionAbility(productionAbility.get(entry.getKey()))
+                        .alternateForm(alternateForm.get(entry.getKey()))
                         .build())
                 .collect(Collectors.toList());
     }

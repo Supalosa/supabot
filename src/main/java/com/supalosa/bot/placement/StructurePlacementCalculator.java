@@ -418,6 +418,7 @@ public class StructurePlacementCalculator {
                                 getRandomInteger(-testedRadius, testedRadius),
                                 getRandomInteger(-testedRadius, testedRadius)));
             }
+            candidate = Point2d.of(Math.max(0f, candidate.getX()), Math.max(0f, candidate.getY()));
             if (canPlaceAt(candidate, structureWidth, structureWidth)) {
                 return Optional.of(candidate);
             }
@@ -439,7 +440,7 @@ public class StructurePlacementCalculator {
         return suggestLocationForFreePlacement(position, searchRadius,
                 (int)newFootprint.getX(),
                 (int)newFootprint.getY()).map(outputPosition ->
-                outputPosition.add(outputOffset));
+                outputPosition/*.add(outputOffset)*/);
     }
 
     private boolean canPlaceAt(Point2d origin, int width, int height) {

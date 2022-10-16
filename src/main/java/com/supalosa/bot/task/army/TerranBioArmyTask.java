@@ -8,9 +8,11 @@ import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.analysis.Region;
@@ -19,6 +21,7 @@ import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -79,6 +82,15 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .amount(40)
                     .build()
             );
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_WIDOWMINE)
+                    .alternateForm(Units.TERRAN_WIDOWMINE_BURROWED)
+                    .productionAbility(Abilities.TRAIN_WIDOWMINE)
+                    .producingUnitType(Units.TERRAN_FACTORY)
+                    .needsTechLab(true)
+                    .amount(10)
+                    .build()
+            );
         }
         if (armyUnits.size() > 10 && numMedivacs < armyUnits.size() * 0.1) {
             result.add(ImmutableUnitTypeRequest.builder()
@@ -110,6 +122,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
         ObservationInterface observationInterface = agent.observation();
         ActionInterface actionInterface = agent.actions();
+
         if (parentState == AggressionState.ATTACKING && armyUnits.size() > 0) {
             Optional<Point2d> positionToAttackMove = suggestedAttackMovePosition;
             // Stutter step towards/away from enemy.
@@ -144,9 +157,62 @@ public class TerranBioArmyTask extends DefaultArmyTask {
             }
             if (maybeEnemyArmy.isPresent()) {
                 calculateStimPack(observationInterface, actionInterface, maybeEnemyArmy, armyUnits);
+                calculateWidowMines(centreOfMass, maybeEnemyArmy, observationInterface, actionInterface);
+            } else {
+                if (getAmountOfUnit(Units.TERRAN_WIDOWMINE_BURROWED) > 0) {
+                    actionInterface.unitCommand(armyUnits, Abilities.BURROW_UP_WIDOWMINE, false);
+                }
             }
         }
         return parentState;
+    }
+
+    @Override
+    protected AggressionState retreatCommand(S2Agent agent,
+                                            AgentData data,
+                                            Optional<Point2d> centreOfMass,
+                                            Optional<Point2d> suggestedAttackMovePosition,
+                                            Optional<Point2d> suggestedRetreatMovePosition,
+                                            Optional<Army> maybeEnemyArmy) {
+        AggressionState parentState = super.retreatCommand(agent, data, centreOfMass,
+                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
+
+        ObservationInterface observationInterface = agent.observation();
+        ActionInterface actionInterface = agent.actions();
+        // Burrow widow mines to cover the retreat.
+        calculateWidowMines(centreOfMass, maybeEnemyArmy, observationInterface, actionInterface);
+        return parentState;
+    }
+
+    private void calculateWidowMines(Optional<Point2d> centreOfMass, Optional<Army> maybeEnemyArmy,
+                                     ObservationInterface observationInterface, ActionInterface actionInterface) {
+        if (centreOfMass.isPresent() && maybeEnemyArmy.isPresent() && (getAmountOfUnit(Units.TERRAN_WIDOWMINE) > 0 || getAmountOfUnit(Units.TERRAN_WIDOWMINE_BURROWED) > 0)) {
+            armyUnits.forEach(tag -> {
+                UnitInPool unitInPool = observationInterface.getUnit(tag);
+                if (unitInPool.unit().getType() != Units.TERRAN_WIDOWMINE && unitInPool.unit().getType() != Units.TERRAN_WIDOWMINE_BURROWED) {
+                    return;
+                }
+                Point2d position = unitInPool.unit().getPosition().toPoint2d();
+                List<UnitInPool> nearEnemies = observationInterface.getUnits(
+                        UnitFilter.builder()
+                                .alliance(Alliance.ENEMY)
+                                .unitTypes(Constants.ARMY_UNIT_TYPES)
+                                .inRangeOf(position)
+                                .range(15f)
+                                .build());
+                boolean anyInRange = false;
+                for (UnitInPool nearEnemy : nearEnemies) {
+                    if (nearEnemy.unit().getPosition().toPoint2d().distance(position) < 10f) {
+                        anyInRange = true;
+                    }
+                }
+                if (anyInRange) {
+                    actionInterface.unitCommand(tag, Abilities.BURROW_DOWN_WIDOWMINE, false);
+                } else if (nearEnemies.size() == 0) {
+                    actionInterface.unitCommand(tag, Abilities.BURROW_UP_WIDOWMINE, false);
+                }
+            });
+        }
     }
 
     private void calculateStimPack(ObservationInterface observationInterface, ActionInterface actionInterface,

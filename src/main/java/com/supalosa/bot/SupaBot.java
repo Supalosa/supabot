@@ -123,9 +123,26 @@ public class SupaBot extends S2Agent implements AgentData {
         tryBuildCommandCentre();
         tryBuildRefinery();
         int supply = observation().getFoodUsed();
+        Set<Upgrade> upgrades = new HashSet<>(observation().getUpgrades());
 
-        if (supply > 40) {
-            tryBuildMax(Abilities.BUILD_FACTORY, Units.TERRAN_FACTORY, Units.TERRAN_SCV, 1, 1);
+        if (supply > 50) {
+            int targetFactories = supply > 160 ? 2 : 1;
+            if (supply == 200) {
+                targetFactories = 4;
+            }
+            tryBuildMax(Abilities.BUILD_FACTORY, Units.TERRAN_FACTORY, Units.TERRAN_SCV, 1, targetFactories);
+            observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                    unitInPool.unit().getAddOnTag().isEmpty() &&
+                    UnitInPool.isUnit(Units.TERRAN_FACTORY).test(unitInPool)).forEach(unit -> {
+                actions().unitCommand(unit.unit(),
+                        countUnitType(Units.TERRAN_FACTORY_TECHLAB) == 0 ?
+                                Abilities.BUILD_TECHLAB_FACTORY :
+                                Abilities.BUILD_REACTOR_FACTORY, unit.unit().getPosition().toPoint2d(),
+                        false);
+            });
+            tryGetUpgrades(upgrades, Units.TERRAN_FACTORY_TECHLAB, Map.of(
+                    Upgrades.DRILL_CLAWS, Abilities.RESEARCH_DRILLING_CLAWS
+            ));
         }
         if (supply > 70) {
             tryBuildMax(Abilities.BUILD_ENGINEERING_BAY, Units.TERRAN_ENGINEERING_BAY, Units.TERRAN_SCV, 1, 2);
@@ -149,8 +166,7 @@ public class SupaBot extends S2Agent implements AgentData {
                         false);
             });
         }
-        Set<Upgrade> upgrades = new HashSet<>(observation().getUpgrades());
-        if (supply > 50) {
+        if (supply > 40) {
             observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
@@ -201,14 +217,20 @@ public class SupaBot extends S2Agent implements AgentData {
             // However that will lead to lower costs being starved.
             int maxMineralCost = requestedUnitTypes.stream().mapToInt(request ->
                     gameData.getUnitMineralCost(request.unitType()).orElse(50)).max().orElse(50);
-            System.out.println("Waiting for " + maxMineralCost + " minerals");
+            //System.out.println("Waiting for " + maxMineralCost + " minerals");
             if (observation().getMinerals() > maxMineralCost) {
                 Collections.shuffle(requestedUnitTypes);
                 requestedUnitTypes.forEach(requestedUnitType -> {
-                    System.out.println("Making " + requestedUnitType.unitType() + " (max " + requestedUnitType.amount() + ")");
+                    //System.out.println("Making " + requestedUnitType.unitType() + " (max " + requestedUnitType.amount() + ")");
+                    UnitType[] type;
+                    if (requestedUnitType.alternateForm().isPresent()) {
+                        type = new UnitType[]{requestedUnitType.unitType(), requestedUnitType.alternateForm().get()};
+                    } else {
+                        type = new UnitType[]{requestedUnitType.unitType()};
+                    }
                     tryBuildUnit(
                             requestedUnitType.productionAbility(),
-                            requestedUnitType.unitType(),
+                            type,
                             requestedUnitType.producingUnitType(),
                             requestedUnitType.needsTechLab(),
                             Optional.of(requestedUnitType.amount()));
@@ -541,10 +563,14 @@ public class SupaBot extends S2Agent implements AgentData {
         });
         return true;
     }
-
     private boolean tryBuildUnit(Ability abilityToCast, UnitType unitType, UnitType buildFrom,
                                  boolean needTechLab, Optional<Integer> maximum) {
-        int count = countUnitType(unitType);
+        return tryBuildUnit(abilityToCast, new UnitType[]{unitType}, buildFrom, needTechLab, maximum);
+    }
+
+    private boolean tryBuildUnit(Ability abilityToCast, UnitType[] unitTypes, UnitType buildFrom,
+                                 boolean needTechLab, Optional<Integer> maximum) {
+        int count = countUnitType(unitTypes);
         if (maximum.isPresent()) {
             if (count >= maximum.get()) {
                 return false;

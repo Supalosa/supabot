@@ -4,6 +4,8 @@ import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import org.immutables.value.Value;
 
+import java.util.Optional;
+
 /**
  * Represents a desire to have an amount of a certain unit.
  */
@@ -14,6 +16,11 @@ public interface UnitTypeRequest {
      * The unit type to produce.
      */
     UnitType unitType();
+
+    /**
+     * Alternate form of the unit (used for accounting to see if we need more).
+     */
+    Optional<UnitType> alternateForm();
 
     /**
      * The ability which produces the unit.
