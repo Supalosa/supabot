@@ -14,20 +14,6 @@ import java.util.Optional;
 public interface ArmyTask extends TaskWithUnits {
 
     /**
-     * Defines how this army will handle engagements.
-     */
-    enum MicroState {
-        // Full aggression towards the enemy. Never retreats.
-        FULL_AGGRESSION,
-
-        // Holding ground in a fight. Retreat if losing.
-        BALANCED,
-
-        // Retreat without trying to fight back.
-        FULL_RETREAT,
-    }
-
-    /**
      * Set which one of the {@code PathRules} the army will take to its path.
      */
     void setPathRules(MapAwareness.PathRules pathRules);
@@ -67,6 +53,4 @@ public interface ArmyTask extends TaskWithUnits {
      * Returns the position that this army is trying to move to.
      */
     Optional<Point2d> getTargetPosition();
-
-    void setMicroState(MicroState microState);
 }

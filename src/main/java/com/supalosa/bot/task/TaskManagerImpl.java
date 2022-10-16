@@ -139,7 +139,7 @@ public class TaskManagerImpl implements TaskManager {
     @Override
     public void debug(S2Agent agent) {
         agent.debug().debugTextOut("Tasks (" + taskSet.size() + ")", Point2d.of(0.01f, 0.0f), Color.WHITE, 8);
-        final float spacing = 0.01f;
+        final float spacing = 0.0125f;
         float yPosition = 0.01f;
         for (Map.Entry<String, Task> entry : taskSet.entrySet()) {
             Task task = entry.getValue();

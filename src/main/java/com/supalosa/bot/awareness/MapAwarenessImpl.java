@@ -22,6 +22,7 @@ import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.pathfinding.GraphUtils;
 import com.supalosa.bot.pathfinding.RegionGraph;
 import com.supalosa.bot.utils.UnitFilter;
@@ -54,8 +55,8 @@ public class MapAwarenessImpl implements MapAwareness {
     private List<Unit> myDefendableStructures = new ArrayList<>();
 
     private long maybeEnemyArmyCalculatedAt = 0L;
-    private Optional<ImmutableArmy> maybeEnemyArmy = Optional.empty();
-    private Map<Point, List<UnitInPool>> enemyClusters = new HashMap<>();
+    private Optional<ImmutableArmy> maybeLargestEnemyArmy = Optional.empty();
+    private Map<Point, ImmutableArmy> enemyClusters = new HashMap<>();
 
     private Optional<ImageData> cachedCreepMap = Optional.empty();
     private Optional<Float> creepCoveragePercentage = Optional.empty();
@@ -70,9 +71,12 @@ public class MapAwarenessImpl implements MapAwareness {
 
     private Optional<AnalysisResults> mapAnalysisResults = Optional.empty();
 
-    public MapAwarenessImpl() {
+    private ThreatCalculator threatCalculator;
+
+    public MapAwarenessImpl(ThreatCalculator threatCalculator) {
         this.startPosition = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
+        this.threatCalculator = threatCalculator;
     }
 
     @Override
@@ -168,25 +172,33 @@ public class MapAwarenessImpl implements MapAwareness {
                             .alliance(Alliance.ENEMY)
                             .unitTypes(Constants.ARMY_UNIT_TYPES)
                             .build());
-            this.enemyClusters = Expansions.cluster(enemyArmy, 10f);
+            Map<Point,List<UnitInPool>> clusters = Expansions.cluster(enemyArmy, 10f);
             // Army threat decays slowly
-            if (maybeEnemyArmy.isPresent() && agent.observation().getVisibility(maybeEnemyArmy.get().position()) == Visibility.VISIBLE) {
-                maybeEnemyArmy = maybeEnemyArmy.map(army -> army
+            if (maybeLargestEnemyArmy.isPresent() && agent.observation().getVisibility(maybeLargestEnemyArmy.get().position()) == Visibility.VISIBLE) {
+                maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
                         .withSize(army.size() * 0.5f - 1.0f)
                         .withThreat(army.threat() * 0.5f - 1.0f));
             } else {
-                maybeEnemyArmy = maybeEnemyArmy.map(army -> army
+                maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
                         .withSize(army.size() * 0.999f)
                         .withThreat(army.threat() * 0.999f));
             }
-            maybeEnemyArmy = maybeEnemyArmy.filter(army -> army.size() > 1.0);
-            if (this.enemyClusters.size() > 0) {
-                // TODO: Threat calc instead of number of units
+            maybeLargestEnemyArmy = maybeLargestEnemyArmy.filter(army -> army.size() > 1.0);
+            if (clusters.size() > 0) {
                 int biggestArmySize = Integer.MIN_VALUE;
+                this.enemyClusters = new HashMap();
                 Point biggestArmy = null;
-                for (Map.Entry<Point, List<UnitInPool>> entry : this.enemyClusters.entrySet()) {
+                for (Map.Entry<Point, List<UnitInPool>> entry : clusters.entrySet()) {
                     Point point = entry.getKey();
                     List<UnitInPool> units = entry.getValue();
+                    Collection<UnitType> composition = getComposition(units);
+                    double threat = threatCalculator.calculateThreat(composition);
+                    enemyClusters.put(point, ImmutableArmy.builder()
+                            .position(point.toPoint2d())
+                            .size(units.size())
+                            .composition(composition)
+                            .threat(threat)
+                            .build());
                     int size = units.size();
                     if (size > biggestArmySize) {
                         biggestArmySize = size;
@@ -194,16 +206,8 @@ public class MapAwarenessImpl implements MapAwareness {
                     }
                 }
                 if (biggestArmy != null) {
-                    if (this.maybeEnemyArmy.isEmpty() || biggestArmySize > this.maybeEnemyArmy.get().size()) {
-                        Collection<UnitType> composition = getComposition(this.enemyClusters.get(biggestArmy));
-                        double threat = calculateThreat(composition);
-                        this.maybeEnemyArmy = Optional.of(
-                                ImmutableArmy.builder()
-                                        .position(biggestArmy.toPoint2d())
-                                        .size(biggestArmySize)
-                                        .composition(composition)
-                                        .threat(threat)
-                                        .build());
+                    if (this.maybeLargestEnemyArmy.isEmpty() || biggestArmySize > this.maybeLargestEnemyArmy.get().size()) {
+                        this.maybeLargestEnemyArmy = Optional.of(enemyClusters.get(biggestArmy));
                     }
                 }
             }
@@ -254,7 +258,7 @@ public class MapAwarenessImpl implements MapAwareness {
                         currentVisibility :
                         Math.max(currentVisibility, previousData.get().decayingVisibilityPercent() * 0.95 - 0.01);
                 // Calculation and decay of region threat.
-                double currentThreatValue = calculateThreat(
+                double currentThreatValue = threatCalculator.calculateThreat(
                         regionIdToEnemyUnits.get(region.regionId()).stream()
                                 .map(unitInPool -> unitInPool.unit().getType())
                                 .collect(Collectors.toUnmodifiableList()));
@@ -273,7 +277,7 @@ public class MapAwarenessImpl implements MapAwareness {
 
             double finalMaxEnemyThreat = maxEnemyThreat;
             analysisResults.getRegions().forEach(region -> {
-                double currentSelfThreat = calculateThreat(
+                double currentSelfThreat = threatCalculator.calculatePower(
                         regionIdToSelfUnits.get(region.regionId()).stream()
                                 .map(unitInPool -> unitInPool.unit().getType())
                                 .collect(Collectors.toUnmodifiableList()));
@@ -390,43 +394,6 @@ public class MapAwarenessImpl implements MapAwareness {
         return unitInPools.stream().map(unitInPool -> unitInPool.unit().getType()).collect(Collectors.toList());
     }
 
-    private double calculateThreat(Collection<UnitType> composition) {
-        double enemyThreat = composition.stream().mapToDouble(unitType -> {
-            if (unitType instanceof Units) {
-                switch ((Units)unitType) {
-                    case TERRAN_SIEGE_TANK_SIEGED:
-                        return 25.0;
-                    case ZERG_ULTRALISK:
-                    case PROTOSS_MOTHERSHIP:
-                    case PROTOSS_CARRIER:
-                        return 10.0;
-                    case TERRAN_THOR:
-                    case ZERG_BROODLORD:
-                    case PROTOSS_IMMORTAL:
-                        return 5.0;
-                    case ZERG_QUEEN:
-                        return 3.0;
-                    case TERRAN_MARAUDER:
-                    case ZERG_ROACH:
-                    case PROTOSS_ZEALOT:
-                    case PROTOSS_STALKER:
-                    case TERRAN_SIEGE_TANK:
-                        return 2.0;
-                    case ZERG_DRONE:
-                    case TERRAN_SCV:
-                    case PROTOSS_PROBE:
-                        return 0.5;
-                    default:
-                        return 1.5;
-                }
-            } else {
-                return 1.5;
-            }
-        }).sum();
-        return enemyThreat;
-    }
-
-
     private void updateMyDefendableStructures(AgentData data, ObservationInterface observation) {
         long gameLoop = observation.getGameLoop();
         if (gameLoop > myDefendableStructuresCalculatedAt + 22L * 4) {
@@ -459,8 +426,24 @@ public class MapAwarenessImpl implements MapAwareness {
     }
 
     @Override
-    public Optional<Army> getMaybeEnemyArmy() {
-        return maybeEnemyArmy.map(Function.identity());
+    public Optional<Army> getMaybeEnemyArmy(Point2d point2d) {
+        Point closest = null;
+        double closestDistance = Float.MAX_VALUE;
+        for (Map.Entry<Point, ImmutableArmy> entry : this.enemyClusters.entrySet()) {
+            Point point = entry.getKey();
+            ImmutableArmy army = entry.getValue();
+            double distance = point2d.distance(point.toPoint2d());
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closest = point;
+            }
+        }
+        return Optional.ofNullable(this.enemyClusters.get(closest));
+    }
+
+    @Override
+    public Optional<Army> getLargestEnemyArmy() {
+        return maybeLargestEnemyArmy.map(Function.identity());
     }
 
     private void updateValidExpansions(ObservationInterface observationInterface, QueryInterface queryInterface) {
@@ -616,7 +599,7 @@ public class MapAwarenessImpl implements MapAwareness {
         this.enemyClusters.forEach((point, units) -> {
             agent.debug().debugSphereOut(point, units.size(), Color.RED);
         });
-        maybeEnemyArmy.ifPresent(army -> {
+        maybeLargestEnemyArmy.ifPresent(army -> {
             float z = agent.observation().terrainHeight(army.position());
             Point point = Point.of(army.position().getX(), army.position().getY(), z);
             agent.debug().debugSphereOut(point, army.size(), Color.RED);

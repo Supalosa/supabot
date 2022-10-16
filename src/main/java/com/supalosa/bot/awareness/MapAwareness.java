@@ -4,7 +4,6 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
-import com.supalosa.bot.SupaBot;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
 
@@ -82,10 +81,13 @@ public interface MapAwareness {
     boolean shouldDefendLocation(Point2d location);
 
     /**
-     * Returns the potential location of the enemy army.
+     * Returns the potential location of the enemy army nearest to a given position.
      * If there are multiple armies, it is the biggest one we see.
+     * @param point2d
      */
-    Optional<Army> getMaybeEnemyArmy();
+    Optional<Army> getMaybeEnemyArmy(Point2d point2d);
+
+    Optional<Army> getLargestEnemyArmy();
 
     void debug(S2Agent supaBot);
 

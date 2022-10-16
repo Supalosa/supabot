@@ -24,6 +24,7 @@ import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.MapAwarenessImpl;
 import com.supalosa.bot.debug.DebugTarget;
+import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.utils.UnitComparator;
@@ -73,7 +74,7 @@ public class SupaBot extends S2Agent implements AgentData {
         this.isDebug = isDebug;
         this.taskManager = new TaskManagerImpl();
         this.fightManager = new FightManager(this);
-        this.mapAwareness = new MapAwarenessImpl();
+        this.mapAwareness = new MapAwarenessImpl(new TerranBioThreatCalculator());
         this.gameData = new GameData(observation());
         this.debugTarget = debugTarget;
     }
@@ -227,10 +228,10 @@ public class SupaBot extends S2Agent implements AgentData {
         mineGas();
         taskManager.onStep(this, this);
 
-        if (mapAwareness.getMaybeEnemyArmy().isEmpty()) {
+        if (mapAwareness.getLargestEnemyArmy().isEmpty()) {
             fightManager.setAttackPosition(mapAwareness.getMaybeEnemyPositionNearEnemy());
         } else {
-            Army enemyArmy = mapAwareness.getMaybeEnemyArmy().get();
+            Army enemyArmy = mapAwareness.getLargestEnemyArmy().get();
             if (fightManager.predictWinAgainst(enemyArmy)) {
                 if (enemyArmy.threat() > 10f) {
                     fightManager.setAttackPosition(Optional.of(enemyArmy.position()));
@@ -290,8 +291,8 @@ public class SupaBot extends S2Agent implements AgentData {
 
         Optional<Point2d> nearestEnemy = mapAwareness.getMaybeEnemyPositionNearBase();
         if (nearestEnemy.isPresent() && mapAwareness.shouldDefendLocation(nearestEnemy.get())) {
-            if (mapAwareness.getMaybeEnemyArmy().isPresent()) {
-                Army enemyArmy = mapAwareness.getMaybeEnemyArmy().get();
+            if (mapAwareness.getMaybeEnemyArmy(nearestEnemy.get()).isPresent()) {
+                Army enemyArmy = mapAwareness.getMaybeEnemyArmy(nearestEnemy.get()).get();
                 if (enemyArmy.position().distance(nearestEnemy.get()) < 10f) {
                     // enemy army is near base and we expect to win.
                     if (fightManager.predictDefensiveWinAgainst(enemyArmy)) {
@@ -349,11 +350,11 @@ public class SupaBot extends S2Agent implements AgentData {
 
         debugTarget.onStep(this, this);
         if (isDebug) {
-            /*try {
-                Thread.sleep(60);
+            try {
+                Thread.sleep(80);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            }*/
+            }
             if (this.taskManager != null) {
                 this.taskManager.debug(this);
             }
@@ -572,6 +573,9 @@ public class SupaBot extends S2Agent implements AgentData {
         }
         observation().getUnits(Alliance.SELF,
                 unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
+            if (commandCentre.unit().getBuildProgress() < 1.0f) {
+                return;
+            }
             if (commandCentre.unit().getOrders().isEmpty()) {
                 if (numScvs < Math.min(80, numBases * 22)) {
                     actions().unitCommand(commandCentre.unit(), Abilities.TRAIN_SCV, false);
@@ -594,6 +598,9 @@ public class SupaBot extends S2Agent implements AgentData {
         }
         observation().getUnits(Alliance.SELF, UnitInPool.isUnit(buildFrom)).forEach(structure -> {
             boolean reactor = false;
+            if (structure.unit().getBuildProgress() < 1.0f) {
+                return;
+            }
             if (structure.unit().getAddOnTag().isPresent()) {
                 Tag addOn = structure.unit().getAddOnTag().get();
                 UnitInPool addOnUnit = observation().getUnit(addOn);
@@ -616,7 +623,7 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     private boolean needsRefinery() {
-        return observation().getFoodWorkers() > 24 &&
+        return observation().getFoodWorkers() > 16 &&
                 countUnitType(Units.TERRAN_REFINERY) < countUnitType(Constants.TERRAN_CC_TYPES_ARRAY) * (observation().getFoodCap() > 100 ? 2 : 1);
     }
 

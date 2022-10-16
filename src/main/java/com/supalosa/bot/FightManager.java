@@ -61,10 +61,9 @@ public class FightManager {
 
     public void setDefencePosition(Optional<Point2d> defencePosition) {
         this.reserveArmy.setTargetPosition(defencePosition);
+        // TODO try to remember why we did this for reserveArmy.
         armyTasks.forEach(armyTask -> {
-            if (armyTask != reserveArmy) {
                 armyTask.setRetreatPosition(defencePosition);
-            };
         });
     }
 
@@ -88,8 +87,14 @@ public class FightManager {
             ArmyTask harrassTask = new TerranBioHarrassArmyTask("Harrass", 100);
             if (taskManager.addTask(harrassTask, 1)) {
                 harrassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
+                armyTasks.add(harrassTask);
             }
         }
+
+        // Remove complete tasks.
+        List<ArmyTask> validArmyTasks = armyTasks.stream().filter(armyTask -> !armyTask.isComplete()).collect(Collectors.toList());
+        armyTasks.clear();
+        armyTasks.addAll(validArmyTasks);
 
         long gameLoop = agent.observation().getGameLoop();
 
