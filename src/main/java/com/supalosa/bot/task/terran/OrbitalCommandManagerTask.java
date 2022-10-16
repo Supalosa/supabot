@@ -85,11 +85,17 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
             }
             if (targetFound != null) {
                 Point2d target2d = targetFound.toPoint2d();
-                if (agent.observation().getVisibility(target2d) != Visibility.VISIBLE) {
-                    agent.actions().unitCommand(armyUnits.stream().findFirst().get(), Abilities.EFFECT_SCAN, target2d, false);
-                } else {
-                    agent.actions().unitCommand(armyUnits.stream().findFirst().get(), Abilities.EFFECT_CALL_DOWN_MULE, target2d, false);
-                }
+                Optional<UnitInPool> ccWithEnergy = armyUnits.stream()
+                        .map(tag -> agent.observation().getUnit(tag))
+                        .filter(unitInPool -> unitInPool != null && unitInPool.unit().getEnergy().isPresent() && unitInPool.unit().getEnergy().get() > 50f)
+                        .findFirst();
+                ccWithEnergy.ifPresent(cc -> {
+                    if (agent.observation().getVisibility(target2d) != Visibility.VISIBLE) {
+                        agent.actions().unitCommand(cc.unit(), Abilities.EFFECT_SCAN, target2d, false);
+                    } else {
+                        agent.actions().unitCommand(cc.unit(), Abilities.EFFECT_CALL_DOWN_MULE, target2d, false);
+                    }
+                });
             }
         }
 
@@ -163,7 +169,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
 
     @Override
     public String getDebugText() {
-        return "Mule Bomb";
+        return "Orbital Command Manager";
     }
 
     @Override

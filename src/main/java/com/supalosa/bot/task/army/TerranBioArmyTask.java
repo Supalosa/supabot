@@ -100,15 +100,16 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                                  ActionInterface actionInterface,
                                  Optional<Point2d> centreOfMass,
                                  Optional<Point2d> suggestedAttackMovePosition,
+                                 Optional<Point2d> suggestedRetreatMovePosition,
                                  Optional<Army> maybeEnemyArmy) {
-        AggressionState parentState = super.attackCommand(observationInterface,actionInterface, centreOfMass,
-                suggestedAttackMovePosition, maybeEnemyArmy);
+        AggressionState parentState = super.attackCommand(observationInterface, actionInterface, centreOfMass,
+                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
         if (parentState == AggressionState.ATTACKING && armyUnits.size() > 0) {
             Optional<Point2d> positionToAttackMove = suggestedAttackMovePosition;
             // Stutter step towards/away from enemy.
             // TODO: the retreat position should actually be pathfinded away from the enemy.
             // Move towards the enemy if we're winning, otherwise kite them.
-            final Optional<Point2d> movePoint = (getFightPerformance() == FightPerformance.WINNING) ? positionToAttackMove : retreatPosition;
+            Optional<Point2d> movePoint = suggestedRetreatMovePosition;
             Optional<Point2d> attackPoint = positionToAttackMove.isPresent() ? positionToAttackMove : retreatPosition;
             if (movePoint.isPresent()) {
                 armyUnits.forEach(tag -> {

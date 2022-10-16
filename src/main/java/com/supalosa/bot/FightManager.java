@@ -74,24 +74,12 @@ public class FightManager {
 
     // these will be moved to a playstyle-specific class
     private void onStepTerranBio(TaskManager taskManager, AgentData data) {
-
-
         if (agent.observation().getArmyCount() > 60) {
             // Start a harrass force.
             ArmyTask harrassTask = new TerranBioHarrassArmyTask("Harrass", 100);
             if (taskManager.addTask(harrassTask, 1)) {
                 harrassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
                 armyTasks.add(harrassTask);
-            }
-        }
-        List<UnitInPool> enemySiegeTanks = agent.observation().getUnits(
-                UnitFilter.builder()
-                        .alliance(Alliance.ENEMY)
-                        .unitType(Units.TERRAN_SIEGE_TANK_SIEGED).build());
-        if (!enemySiegeTanks.isEmpty()) {
-            // Start a harrass force.
-            TaskWithUnits siegeTankMuleBombTask = new OrbitalCommandManagerTask(100);
-            if (taskManager.addTask(siegeTankMuleBombTask, 1)) {
             }
         }
     }

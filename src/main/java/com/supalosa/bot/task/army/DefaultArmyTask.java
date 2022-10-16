@@ -250,6 +250,10 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 suggestedAttackMovePosition = Optional.of(head.centrePoint());
             }
         }
+        // This is the point where the army should 'move' to between stutter step commands.
+        final Optional<Point2d> suggestedRetreatMovePosition = (getFightPerformance() == FightPerformance.WINNING) ?
+                suggestedAttackMovePosition :
+                retreatPosition;
         Optional<Army> enemyArmy = centreOfMass.flatMap(point2d -> data.mapAwareness().getMaybeEnemyArmy(point2d));
         switch (aggressionState) {
             case ATTACKING:
@@ -259,6 +263,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                         agent.actions(),
                         centreOfMass,
                         suggestedAttackMovePosition,
+                        suggestedRetreatMovePosition,
                         enemyArmy);
                 break;
             case REGROUPING:
@@ -266,6 +271,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                         agent.observation(),
                         agent.actions(),
                         centreOfMass,
+                        suggestedAttackMovePosition,
+                        suggestedRetreatMovePosition,
                         enemyArmy);
                 break;
             case RETREATING:
@@ -273,6 +280,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                         agent.observation(),
                         agent.actions(),
                         centreOfMass,
+                        suggestedAttackMovePosition,
+                        suggestedRetreatMovePosition,
                         enemyArmy);
         }
         // Overrides for the value returned by the respective command.
@@ -329,7 +338,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     protected enum FightPerformance {
         WINNING,
         STABLE,
-        LOSING
+        SLIGHTLY_LOSING,
+        LOSING,
     }
 
     protected FightPerformance getFightPerformance() {
@@ -367,11 +377,16 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 System.out.println(armyName + " is Winning [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.WINNING;
-        } else if (currentEnemyThreat > currentPower && relativeDelta < 0) {
+        } else if (currentEnemyThreat > currentPower && relativeDelta < -(currentPower)) {
             if (currentFightPerformance != FightPerformance.LOSING) {
-                System.out.println(armyName + " is Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
+                System.out.println(armyName + " is Badly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.LOSING;
+        } else if (currentEnemyThreat > currentPower && relativeDelta < 0) {
+            if (currentFightPerformance != FightPerformance.LOSING) {
+                System.out.println(armyName + " is Slightly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
+            }
+            return FightPerformance.SLIGHTLY_LOSING;
         } else {
             if (currentFightPerformance != FightPerformance.STABLE) {
                 System.out.println(armyName + " is Stable [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
@@ -391,6 +406,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                                           ActionInterface actionInterface,
                                           Optional<Point2d> centreOfMass,
                                           Optional<Point2d> suggestedAttackMovePosition,
+                                            Optional<Point2d> suggestedRetreatMovePosition,
                                           Optional<Army> maybeEnemyArmy) {
         if (armyUnits.size() == 0) {
             return AggressionState.REGROUPING;
@@ -402,6 +418,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     protected AggressionState regroupCommand(ObservationInterface observationInterface,
                                              ActionInterface actionInterface,
                                              Optional<Point2d> centreOfMass,
+                                             Optional<Point2d> suggestedAttackMovePosition,
+                                             Optional<Point2d> suggestedRetreatMovePosition,
                                              Optional<Army> maybeEnemyArmy) {
         if (armyUnits.size() > 0 && (centreOfMass.isEmpty() || !shouldRegroup(observationInterface))) {
             System.out.println(armyName + " Regroup -> Attack");
@@ -433,6 +451,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     protected AggressionState retreatCommand(ObservationInterface observationInterface,
                                              ActionInterface actionInterface,
                                              Optional<Point2d> centreOfMass,
+                                             Optional<Point2d> suggestedAttackMovePosition,
+                                             Optional<Point2d> suggestedRetreatMovePosition,
                                              Optional<Army> maybeEnemyArmy) {
         if (!armyUnits.isEmpty() && retreatPosition.isPresent()) {
             Point2d retreatPoint2d = retreatPosition.get();
@@ -444,12 +464,12 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 retreatPoint2d = head.centrePoint();
             }
             Point2d finalRetreatPoint2d = retreatPoint2d;
-            if (aggressionLevel == AggressionLevel.FULL_RETREAT) {
+            if (aggressionLevel == AggressionLevel.FULL_RETREAT || currentFightPerformance == FightPerformance.LOSING) {
                 // Fully run away
                 retreatPosition.ifPresent(point2d ->
                         actionInterface.unitCommand(armyUnits, Abilities.MOVE, finalRetreatPoint2d, false));
             } else {
-                // Stutter step away from the enemy.
+                // Stutter step away from the enemy if we're not badly losing.
                 armyUnits.forEach(tag -> {
                     UnitInPool unit = observationInterface.getUnit(tag);
                     if (unit != null) {
