@@ -24,9 +24,8 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                 switch ((Units)unitType) {
                     case TERRAN_MEDIVAC:
                     case TERRAN_MARAUDER:
-                        return amount * 1.5;
-                    case TERRAN_MARINE:
                         return amount * 1.25;
+                    case TERRAN_MARINE:
                     default:
                         return amount * 1.0;
                 }
@@ -62,18 +61,18 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                     case ZERG_BANELING:
                         return amount * 5.0;
                     case ZERG_QUEEN:
-                        return amount * 3.0;
+                        return amount * 3.5;
                     case TERRAN_MARAUDER:
                     case ZERG_ROACH:
                     case PROTOSS_ZEALOT:
                     case PROTOSS_STALKER:
                     case TERRAN_SIEGE_TANK:
                     case TERRAN_VIKING_ASSAULT:
-                        return amount * 2.0;
+                        return amount * 3.0;
                     case TERRAN_MARINE:
                     case ZERG_ZERGLING:
                     case PROTOSS_PHOENIX:
-                        return amount * 1.0;
+                        return amount * 2.0;
                     case ZERG_DRONE:
                     case TERRAN_SCV:
                     case PROTOSS_PROBE:
