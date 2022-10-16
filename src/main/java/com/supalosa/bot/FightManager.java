@@ -14,6 +14,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.task.army.*;
@@ -77,13 +78,22 @@ public class FightManager {
 
     // these will be moved to a playstyle-specific class
     private void onStepTerranBio(TaskManager taskManager, AgentData data) {
-        if (agent.observation().getArmyCount() > 60) {
+        if (agent.observation().getArmyCount() > 40) {
             // Start a harass force.
             DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harrass", 100);
             if (taskManager.addTask(harassTask, 1)) {
                 harassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
                 harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);
                 armyTasks.add(harassTask);
+            }
+        }
+        if (data.mapAwareness().getValidExpansionLocations().isPresent() && agent.observation().getArmyCount() > 80) {
+            // Start parking units around the map
+            DefaultArmyTask mapTask = new TerranMapControlArmyTask("Parked", 100);
+            if (taskManager.addTask(mapTask, data.mapAwareness().getValidExpansionLocations().get().size())) {
+                mapTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
+                mapTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_AGGRESSION);
+                armyTasks.add(mapTask);
             }
         }
     }
@@ -153,7 +163,8 @@ public class FightManager {
         this.setAttackPosition(attackPosition);
         // Select harass position with the lowest diffuse threat that is not close to the attack position.
         final double MIN_DISTANCE_FROM_ATTACK_POSITION = 25f;
-        double minThreat = Double.MAX_VALUE;
+        // TODO - this is the max threat to harass a base.
+        double minThreat = 10f;
         RegionData minRegion = null;
         for (RegionData regionData : data.mapAwareness().getAllRegionData()) {
             if (attackPosition.isPresent() &&
@@ -169,20 +180,33 @@ public class FightManager {
         Optional<Point2d> harassPosition = Optional.empty();
         if (minRegion != null) {
             harassPosition = Optional.of(minRegion.region().centrePoint());
+        } else {
+            harassPosition = data.mapAwareness().getNextScoutTarget();
         }
         this.setHarassPosition(harassPosition);
         Optional<Point2d> finalHarassPosition = harassPosition;
         data.mapAwareness().getLargestEnemyArmy().ifPresent(enemyArmy -> {
-            attackingArmy.predictFightAgainst(enemyArmy).ifPresent(predictedOutcome -> {
-                if (finalHarassPosition.isPresent() && predictedOutcome != FightPerformance.WINNING) {
+            FightPerformance predictedOutcome = attackingArmy.predictFightAgainst(enemyArmy);
+            if (predictedOutcome != FightPerformance.WINNING) {
+                if (finalHarassPosition.isPresent()) {
                     this.setAttackPosition(finalHarassPosition);
+                } else {
+                    this.setAttackPosition(data.mapAwareness().getNextScoutTarget());
                 }
-            });
+            }
         });
         Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearBase();
         if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
             // Enemy detected near our base, attack them.
             this.setDefencePosition(nearestEnemy);
+            Optional<Army> attackingEnemyArmy = data.mapAwareness().getMaybeEnemyArmy(nearestEnemy.get());
+            if (attackingEnemyArmy.isPresent()) {
+                FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(attackingEnemyArmy.get());
+                if (predictedOutcome == FightPerformance.SLIGHTLY_LOSING || predictedOutcome == FightPerformance.BADLY_LOSING) {
+                    // Defending army needs help.
+                    this.setAttackPosition(nearestEnemy);
+                }
+            }
         } else {
             data.structurePlacementCalculator().ifPresent(spc -> {
                 // Defend from behind the barracks, or else the position of the barracks.

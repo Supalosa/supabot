@@ -30,4 +30,9 @@ public interface UnitTypeRequest {
      */
     int amount();
 
+    @Value.Default
+    default boolean needsTechLab() {
+        return false;
+    }
+
 }

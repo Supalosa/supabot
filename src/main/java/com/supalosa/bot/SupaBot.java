@@ -37,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -123,7 +124,7 @@ public class SupaBot extends S2Agent implements AgentData {
         tryBuildRefinery();
         int supply = observation().getFoodUsed();
 
-        if (supply > 60) {
+        if (supply > 40) {
             tryBuildMax(Abilities.BUILD_FACTORY, Units.TERRAN_FACTORY, Units.TERRAN_SCV, 1, 1);
         }
         if (supply > 70) {
@@ -132,12 +133,19 @@ public class SupaBot extends S2Agent implements AgentData {
         if (supply > 100) {
             tryBuildMax(Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1);
         }
-        if (supply > 80) {
-            tryBuildMax(Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 1, supply > 160 ? 2 : 1);
+        if (supply > 50) {
+            int targetStarports = supply > 160 ? 2 : 1;
+            if (supply == 200) {
+                targetStarports = 4;
+            }
+            tryBuildMax(Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 1, targetStarports);
             observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
-                actions().unitCommand(unit.unit(), Abilities.BUILD_TECHLAB_STARPORT, unit.unit().getPosition().toPoint2d(),
+                actions().unitCommand(unit.unit(),
+                        countUnitType(Units.TERRAN_STARPORT_REACTOR) == 0 ?
+                                Abilities.BUILD_REACTOR_STARPORT :
+                                Abilities.BUILD_TECHLAB_STARPORT, unit.unit().getPosition().toPoint2d(),
                         false);
             });
         }
@@ -176,7 +184,7 @@ public class SupaBot extends S2Agent implements AgentData {
         observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                 UnitInPool.isUnit(Units.TERRAN_COMMAND_CENTER).test(unitInPool)).forEach(unit -> {
             Ability ability = Abilities.MORPH_ORBITAL_COMMAND;
-            if (numCcs > 3) {
+            if (numCcs > 4) {
                 ability = Abilities.MORPH_PLANETARY_FORTRESS;
             }
             actions().unitCommand(unit.unit(), ability, false);
@@ -184,16 +192,28 @@ public class SupaBot extends S2Agent implements AgentData {
         tryBuildScvs();
         if (fightManager.hasSeenCloakedOrBurrowedUnits() ||
                 mapAwareness.getObservedCreepCoverage().map(coverage -> coverage > 0.1f).orElse(false)) {
-            tryBuildUnit(Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, Optional.of(1));
+            tryBuildUnit(Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, true, Optional.of(1));
         }
         List<UnitTypeRequest> requestedUnitTypes = fightManager.getRequestedUnitTypes();
         if (requestedUnitTypes.size() > 0) {
-            requestedUnitTypes.forEach(requestedUnitType -> {
-                tryBuildUnit(
-                        requestedUnitType.productionAbility(),
-                        requestedUnitType.unitType(),
-                        requestedUnitType.producingUnitType(), Optional.of(requestedUnitType.amount()));
-            });
+            // TODO better logic to prevent starvation.
+            // Here we just wait until we have the highest mineral cost.
+            // However that will lead to lower costs being starved.
+            int maxMineralCost = requestedUnitTypes.stream().mapToInt(request ->
+                    gameData.getUnitMineralCost(request.unitType()).orElse(50)).max().orElse(50);
+            System.out.println("Waiting for " + maxMineralCost + " minerals");
+            if (observation().getMinerals() > maxMineralCost) {
+                Collections.shuffle(requestedUnitTypes);
+                requestedUnitTypes.forEach(requestedUnitType -> {
+                    System.out.println("Making " + requestedUnitType.unitType() + " (max " + requestedUnitType.amount() + ")");
+                    tryBuildUnit(
+                            requestedUnitType.productionAbility(),
+                            requestedUnitType.unitType(),
+                            requestedUnitType.producingUnitType(),
+                            requestedUnitType.needsTechLab(),
+                            Optional.of(requestedUnitType.amount()));
+                });
+            }
         }
         rebalanceWorkers();
 
@@ -523,9 +543,9 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     private boolean tryBuildUnit(Ability abilityToCast, UnitType unitType, UnitType buildFrom,
-                                 Optional<Integer> maximum) {
+                                 boolean needTechLab, Optional<Integer> maximum) {
+        int count = countUnitType(unitType);
         if (maximum.isPresent()) {
-            int count = countUnitType(unitType);
             if (count >= maximum.get()) {
                 return false;
             }
@@ -533,26 +553,41 @@ public class SupaBot extends S2Agent implements AgentData {
         if (observation().getFoodUsed() == observation().getFoodCap()) {
             return false;
         }
+        AtomicInteger amountNeeded = new AtomicInteger(maximum.orElse(1000) - count);
         observation().getUnits(Alliance.SELF, UnitInPool.isUnit(buildFrom)).forEach(structure -> {
             boolean reactor = false;
+            boolean techLab = false;
             if (structure.unit().getBuildProgress() < 1.0f) {
+                return;
+            }
+            if (amountNeeded.get() <= 0) {
                 return;
             }
             if (structure.unit().getAddOnTag().isPresent()) {
                 Tag addOn = structure.unit().getAddOnTag().get();
                 UnitInPool addOnUnit = observation().getUnit(addOn);
-                if (addOnUnit != null &&
-                        (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_REACTOR ||
-                                addOnUnit.unit().getType() == Units.TERRAN_STARPORT_REACTOR ||
-                                addOnUnit.unit().getType() == Units.TERRAN_FACTORY_REACTOR)) {
-                    reactor = true;
+                if (addOnUnit != null) {
+                    if (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_REACTOR ||
+                            addOnUnit.unit().getType() == Units.TERRAN_STARPORT_REACTOR ||
+                            addOnUnit.unit().getType() == Units.TERRAN_FACTORY_REACTOR) {
+                        reactor = true;
+                    }
+                    if (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_TECHLAB ||
+                            addOnUnit.unit().getType() == Units.TERRAN_STARPORT_TECHLAB ||
+                            addOnUnit.unit().getType() == Units.TERRAN_FACTORY_TECHLAB) {
+                        techLab = true;
+                    }
                 }
+            }
+            if (needTechLab && !techLab) {
+                return;
             }
             List<UnitOrder> orders = structure.unit().getOrders();
             if (orders.isEmpty() || (reactor && orders.size() < 2)) {
                 // Hack here - need prioritsation.
                 if (observation().getMinerals() > 600 || !needsCommandCentre()) {
                     actions().unitCommand(structure.unit(), abilityToCast, false);
+                    amountNeeded.decrementAndGet();
                 }
             }
         });
@@ -776,7 +811,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (countUnitType(Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT_LOWERED) < 1) {
             return false;
         }
-        if (needsSupplyDepot() && observation().getMinerals() < 100) {
+        if (needsSupplyDepot() && observation().getMinerals() < 150) {
             return false;
         }
         if (needsCommandCentre()) {
@@ -785,7 +820,11 @@ public class SupaBot extends S2Agent implements AgentData {
 
         int numBarracks = countUnitType(Units.TERRAN_BARRACKS);
         int numCc = countMiningBases();
-        if (numBarracks > numCc * 4) {
+        int barracksPerCc = observation().getMinerals() > 1000 ? 4 : 3;
+        if (observation().getMinerals() > 2000) {
+            barracksPerCc = 6;
+        }
+        if (numBarracks > numCc * barracksPerCc) {
             return false;
         }
         Optional<Point2d> position = Optional.empty();

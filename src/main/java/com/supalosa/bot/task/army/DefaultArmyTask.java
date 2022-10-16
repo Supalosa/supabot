@@ -231,8 +231,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             case ATTACKING:
             default:
                 aggressionState = attackCommand(
-                        agent.observation(),
-                        agent.actions(),
+                        agent,
+                        data,
                         centreOfMass,
                         suggestedAttackMovePosition,
                         suggestedRetreatMovePosition,
@@ -240,8 +240,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 break;
             case REGROUPING:
                 aggressionState = regroupCommand(
-                        agent.observation(),
-                        agent.actions(),
+                        agent,
+                        data,
                         centreOfMass,
                         suggestedAttackMovePosition,
                         suggestedRetreatMovePosition,
@@ -249,8 +249,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 break;
             case RETREATING:
                 aggressionState = retreatCommand(
-                        agent.observation(),
-                        agent.actions(),
+                        agent,
+                        data,
                         centreOfMass,
                         suggestedAttackMovePosition,
                         suggestedRetreatMovePosition,
@@ -370,8 +370,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
      * @param suggestedAttackMovePosition The position of either the next waypoint in the path, or the targetPosition.
      * @return he state that the army should be in (aggressive, regroup, retreat etc).
      */
-    protected AggressionState attackCommand(ObservationInterface observationInterface,
-                                            ActionInterface actionInterface,
+    protected AggressionState attackCommand(S2Agent agent,
+                                            AgentData data,
                                             Optional<Point2d> centreOfMass,
                                             Optional<Point2d> suggestedAttackMovePosition,
                                             Optional<Point2d> suggestedRetreatMovePosition,
@@ -383,12 +383,14 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         }
     }
 
-    protected AggressionState regroupCommand(ObservationInterface observationInterface,
-                                             ActionInterface actionInterface,
+    protected AggressionState regroupCommand(S2Agent agent,
+                                             AgentData data,
                                              Optional<Point2d> centreOfMass,
                                              Optional<Point2d> suggestedAttackMovePosition,
                                              Optional<Point2d> suggestedRetreatMovePosition,
                                              Optional<Army> maybeEnemyArmy) {
+        ObservationInterface observationInterface = agent.observation();
+        ActionInterface actionInterface = agent.actions();
         if (armyUnits.size() > 0 && (centreOfMass.isEmpty() || !shouldRegroup(observationInterface))) {
             System.out.println(armyName + " Regroup -> Attack");
             return AggressionState.ATTACKING;
@@ -416,12 +418,14 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         return AggressionState.REGROUPING;
     }
 
-    protected AggressionState retreatCommand(ObservationInterface observationInterface,
-                                             ActionInterface actionInterface,
+    protected AggressionState retreatCommand(S2Agent agent,
+                                             AgentData data,
                                              Optional<Point2d> centreOfMass,
                                              Optional<Point2d> suggestedAttackMovePosition,
                                              Optional<Point2d> suggestedRetreatMovePosition,
                                              Optional<Army> maybeEnemyArmy) {
+        ObservationInterface observationInterface = agent.observation();
+        ActionInterface actionInterface = agent.actions();
         if (!armyUnits.isEmpty() && retreatPosition.isPresent()) {
             Point2d retreatPoint2d = retreatPosition.get();
             // If we've plotted a path to the retreat region, start retreating in the direction of that path.
@@ -451,7 +455,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             }
         }
         // Temporary logic to go back into the ATTACKING state.
-        if (maybeEnemyArmy.isEmpty() || predictFightAgainst(maybeEnemyArmy.get()).orElse(FightPerformance.STABLE) == FightPerformance.WINNING) {
+        if (maybeEnemyArmy.isEmpty() || predictFightAgainst(maybeEnemyArmy.get()) == FightPerformance.WINNING) {
             System.out.println(armyName + " Retreat -> Attack");
             return AggressionState.ATTACKING;
         } else {
@@ -506,17 +510,17 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     }
 
     @Override
-    public Optional<FightPerformance> predictFightAgainst(Army army) {
+    public FightPerformance predictFightAgainst(Army army) {
         double currentEnemyThreat = army.threat();
         double currentPower = threatCalculator.calculatePower(currentComposition);
         if (currentPower > currentEnemyThreat * 1.5) {
-            return Optional.of(FightPerformance.WINNING);
+            return FightPerformance.WINNING;
         } else if (currentPower > currentEnemyThreat * 1.25) {
-            return Optional.of(FightPerformance.STABLE);
+            return FightPerformance.STABLE;
         } else if (currentPower > currentEnemyThreat * 0.75) {
-            return Optional.of(FightPerformance.SLIGHTLY_LOSING);
+            return FightPerformance.SLIGHTLY_LOSING;
         } else {
-            return Optional.of(FightPerformance.BADLY_LOSING);
+            return FightPerformance.BADLY_LOSING;
         }
     }
 

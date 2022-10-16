@@ -15,11 +15,13 @@ import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
+import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -65,7 +67,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 .unitType(Units.TERRAN_MARINE)
                 .productionAbility(Abilities.TRAIN_MARINE)
                 .producingUnitType(Units.TERRAN_BARRACKS)
-                .amount(100)
+                .amount(40)
                 .build()
         );
         if (armyUnits.size() > 10) {
@@ -73,7 +75,8 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .unitType(Units.TERRAN_MARAUDER)
                     .productionAbility(Abilities.TRAIN_MARAUDER)
                     .producingUnitType(Units.TERRAN_BARRACKS)
-                    .amount(20)
+                    .needsTechLab(true)
+                    .amount(40)
                     .build()
             );
         }
@@ -96,14 +99,17 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     }
 
     @Override
-    protected AggressionState attackCommand(ObservationInterface observationInterface,
-                                 ActionInterface actionInterface,
+    protected AggressionState attackCommand(S2Agent agent,
+                                 AgentData data,
                                  Optional<Point2d> centreOfMass,
                                  Optional<Point2d> suggestedAttackMovePosition,
                                  Optional<Point2d> suggestedRetreatMovePosition,
                                  Optional<Army> maybeEnemyArmy) {
-        AggressionState parentState = super.attackCommand(observationInterface, actionInterface, centreOfMass,
+        AggressionState parentState = super.attackCommand(agent, data, centreOfMass,
                 suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
+
+        ObservationInterface observationInterface = agent.observation();
+        ActionInterface actionInterface = agent.actions();
         if (parentState == AggressionState.ATTACKING && armyUnits.size() > 0) {
             Optional<Point2d> positionToAttackMove = suggestedAttackMovePosition;
             // Stutter step towards/away from enemy.
@@ -112,6 +118,17 @@ public class TerranBioArmyTask extends DefaultArmyTask {
             Optional<Point2d> movePoint = suggestedRetreatMovePosition;
             Optional<Point2d> attackPoint = positionToAttackMove.isPresent() ? positionToAttackMove : retreatPosition;
             if (movePoint.isPresent()) {
+                // If we're in a kill zone, randomise the move point (by a lot) to spread the army.
+                Optional<RegionData> maybeRegionData = data.mapAwareness().getRegionDataForPoint(movePoint.get());
+                if (maybeRegionData.isPresent()) {
+                    double killzoneFactor = maybeRegionData.get().killzoneFactor();
+                    if (killzoneFactor > 1.0) {
+                        float randomX = movePoint.get().getX() + (ThreadLocalRandom.current().nextFloat() - 0.5f) * (float)killzoneFactor;
+                        float randomY = movePoint.get().getY() + (ThreadLocalRandom.current().nextFloat() - 0.5f) * (float)killzoneFactor;
+                        movePoint = Optional.of(Point2d.of(Math.max(0f, randomX), Math.max(0f, randomY)));
+                    }
+                }
+                Optional<Point2d> finalMovePoint = movePoint;
                 armyUnits.forEach(tag -> {
                     UnitInPool unit = observationInterface.getUnit(tag);
                     if (unit != null) {
@@ -120,7 +137,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                                 (unit.unit().getWeaponCooldown().isPresent() && unit.unit().getWeaponCooldown().get() < 0.01f)) {
                             actionInterface.unitCommand(tag, Abilities.ATTACK, attackPoint.get(), false);
                         } else {
-                            actionInterface.unitCommand(tag, Abilities.MOVE, movePoint.get(), false);
+                            actionInterface.unitCommand(tag, Abilities.MOVE, finalMovePoint.get(), false);
                         }
                     }
                 });

@@ -53,5 +53,5 @@ public interface ArmyTask extends TaskWithUnits {
     /**
      * Predict how fight against a certain army will go.
      */
-    Optional<FightPerformance> predictFightAgainst(Army army);
+    FightPerformance predictFightAgainst(Army army);
 }

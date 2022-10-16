@@ -36,7 +36,7 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
             updateBioArmyComposition();
         }
         // This army disappears if the overall army is small.
-        if (agent.observation().getArmyCount() < 40) {
+        if (agent.observation().getArmyCount() < 24) {
             this.isComplete = true;
         }
     }
@@ -54,6 +54,7 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
                 .unitType(Units.TERRAN_MARAUDER)
                 .productionAbility(Abilities.TRAIN_MARAUDER)
                 .producingUnitType(Units.TERRAN_BARRACKS)
+                .needsTechLab(true)
                 .amount(4)
                 .build()
         );
@@ -68,6 +69,11 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
     }
 
     @Override
+    public List<UnitTypeRequest> requestingUnitTypes() {
+        return desiredComposition;
+    }
+
+    @Override
     public boolean isComplete() {
         return isComplete;
     }
@@ -79,15 +85,5 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
             return true;
         }
         return false;
-    }
-
-    @Override
-    public boolean wantsUnit(Unit unit) {
-        // This unit will take any bio-army unit.
-        // Note, should set its priority lower than other tasks so it doesn't hog them all.
-        return unit.getType() == Units.TERRAN_MARINE ||
-                unit.getType() == Units.TERRAN_MARAUDER ||
-                unit.getType() == Units.TERRAN_MEDIVAC ||
-                unit.getType() == Units.TERRAN_RAVEN;
     }
 }
