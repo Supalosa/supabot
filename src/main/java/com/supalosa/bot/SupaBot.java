@@ -144,15 +144,15 @@ public class SupaBot extends S2Agent implements AgentData {
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
                 Ability ability = Abilities.BUILD_REACTOR;
-                if (ThreadLocalRandom.current().nextBoolean()) {
+                if (countUnitType(Units.TERRAN_BARRACKS_TECHLAB) == 0 || ThreadLocalRandom.current().nextBoolean()) {
                     ability = Abilities.BUILD_TECHLAB;
                 }
                 actions().unitCommand(unit.unit(), ability, unit.unit().getPosition().toPoint2d(), false);
             });
-                tryGetUpgrades(upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
-                    Upgrades.COMBAT_SHIELD, Abilities.RESEARCH_COMBAT_SHIELD,
-                    Upgrades.STIMPACK, Abilities.RESEARCH_STIMPACK,
-                    Upgrades.JACKHAMMER_CONCUSSION_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
+            tryGetUpgrades(upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
+                Upgrades.COMBAT_SHIELD, Abilities.RESEARCH_COMBAT_SHIELD,
+                Upgrades.STIMPACK, Abilities.RESEARCH_STIMPACK,
+                Upgrades.JACKHAMMER_CONCUSSION_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
             ));
             tryGetUpgrades(upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
                     Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
@@ -209,7 +209,6 @@ public class SupaBot extends S2Agent implements AgentData {
             }
         });
         tryBuildScvs();
-        int marineCount = countUnitType(Units.TERRAN_MARINE);
         if (fightManager.hasSeenCloakedOrBurrowedUnits() ||
                 mapAwareness.getObservedCreepCoverage().map(coverage -> coverage > 0.1f).orElse(false)) {
             tryBuildUnit(Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, Optional.of(1));
@@ -815,13 +814,8 @@ public class SupaBot extends S2Agent implements AgentData {
                             actions().unitCommand(unit, Abilities.SMART, mineralPatch, false));
                 });
                 break;
-            case TERRAN_MARINE:
-            case TERRAN_MARAUDER:
-            case TERRAN_MEDIVAC:
-            case TERRAN_RAVEN:
-                fightManager.onUnitIdle(unitInPool);
-                break;
             default:
+                fightManager.onUnitIdle(unitInPool);
                 break;
         }
     }

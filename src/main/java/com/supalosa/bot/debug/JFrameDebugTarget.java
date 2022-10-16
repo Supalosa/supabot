@@ -18,7 +18,7 @@ public class JFrameDebugTarget implements DebugTarget {
     public static final int WHITE = VisualisationUtils.makeRgb(255, 255, 255);
     public static final int BLACK = VisualisationUtils.makeRgb(0, 0, 0);
     public static final int RED = VisualisationUtils.makeRgb(255, 0, 0);
-    public static final double OUTPUT_SCALE_FACTOR = 2.0;
+    public static final double OUTPUT_SCALE_FACTOR = 4.0;
 
     private SupaBot agent;
 
@@ -92,7 +92,7 @@ public class JFrameDebugTarget implements DebugTarget {
                         if (regionData.isBlocked()) {
                             return VisualisationUtils.makeRgb(128, 128, 128);
                         }
-                        double visibilityFactor = Math.min(1.0, 0.15 + regionData.decayingVisibilityPercent());
+                        double visibilityFactor = Math.min(1.0, 0.15 + (regionData.decayingVisibilityPercent() * 0.85));
                         double red = (255 - (int) (255 * regionData.playerThreat() / baseThreat)) * visibilityFactor;
                         double green = (255 - (int) (255 * regionData.enemyThreat() / baseThreat)) * visibilityFactor;
                         double blue = (255 - (int) (128 * regionData.playerThreat() / baseThreat)
@@ -119,10 +119,10 @@ public class JFrameDebugTarget implements DebugTarget {
         transform.scale(OUTPUT_SCALE_FACTOR, OUTPUT_SCALE_FACTOR);
         AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
 
-        BufferedImage placementScaled = new BufferedImage(placementBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        BufferedImage placementScaled = new BufferedImage((int)(placementBmp.getWidth() * OUTPUT_SCALE_FACTOR), (int)(baseBmp.getHeight() * OUTPUT_SCALE_FACTOR), BufferedImage.TYPE_3BYTE_BGR);
         QuickDrawPanel placementPanel = new QuickDrawPanel(transformOp.filter(placementBmp, placementScaled));
 
-        BufferedImage pathingScaled = new BufferedImage(regionBmp.getWidth() * 2, baseBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        BufferedImage pathingScaled = new BufferedImage((int)(regionBmp.getWidth() * OUTPUT_SCALE_FACTOR), (int)(baseBmp.getHeight() * OUTPUT_SCALE_FACTOR), BufferedImage.TYPE_3BYTE_BGR);
         QuickDrawPanel placementPanel2 = new QuickDrawPanel(transformOp.filter(regionBmp, pathingScaled));
 
 
@@ -138,6 +138,13 @@ public class JFrameDebugTarget implements DebugTarget {
                 int y = scaleY(regionData.region().centrePoint().getY(),  mapHeight);
                 drawCross(g, x, y, (int) (1 * regionData.killzoneFactor()));
             }
+            g.setColor(Color.WHITE);
+            int x = scaleX(regionData.region().centrePoint().getX());
+            int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
+            Font lastFont = g.getFont();
+            g.setFont(lastFont.deriveFont(10.0f));
+            g.drawString(Integer.toString(regionData.region().regionId()), x, y);
+            g.setFont(lastFont);
         });
 
         // Draw army metadata.
@@ -170,6 +177,7 @@ public class JFrameDebugTarget implements DebugTarget {
             armyTask.getTargetPosition().ifPresent(targetPosition -> {
                 int x = (int)(targetPosition.getX() * OUTPUT_SCALE_FACTOR);
                 int y = (int)((mapHeight - targetPosition.getY()) * OUTPUT_SCALE_FACTOR);
+                g.setColor(Color.RED);
                 g.drawOval(x - 4, y - 4, 8, 8);
             });
         });

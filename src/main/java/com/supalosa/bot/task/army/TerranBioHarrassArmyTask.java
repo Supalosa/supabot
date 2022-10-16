@@ -24,9 +24,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * A small force of terran units that tries to avoid the enemy army.
+ * A subtype of TerranBioArmyTask that tries to avoid the enemy army.
  */
-public class TerranBioHarrassArmyTask extends AbstractDefaultArmyTask {
+public class TerranBioHarrassArmyTask extends TerranBioArmyTask {
 
     private int basePriority;
     private boolean isComplete = false;
@@ -35,7 +35,7 @@ public class TerranBioHarrassArmyTask extends AbstractDefaultArmyTask {
     private long desiredCompositionUpdatedAt = 0L;
 
     public TerranBioHarrassArmyTask(String armyName, int basePriority) {
-        super(armyName, new TerranBioThreatCalculator());
+        super(armyName, basePriority);
         this.basePriority = basePriority;
     }
 
@@ -86,103 +86,6 @@ public class TerranBioHarrassArmyTask extends AbstractDefaultArmyTask {
     }
 
     @Override
-    protected AggressionState attackCommand(ObservationInterface observationInterface,
-                                            ActionInterface actionInterface,
-                                            Optional<Point2d> centreOfatMass,
-                                            Optional<Army> maybeEnemyArmy) {
-        Set<Tag> unitsToAttackWith = new HashSet<>(armyUnits);
-        if (armyUnits.size() > 0) {
-            // TODO better detection of 'move-only' units.
-            Set<Tag> unitsThatMustMove = observationInterface.getUnits(unitInPool ->
-                    unitsToAttackWith.contains(unitInPool.getTag()) && unitInPool.unit().getType() == Units.TERRAN_MEDIVAC
-            ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
-            unitsToAttackWith.removeAll(unitsThatMustMove);
-            Optional<Point2d> positionToAttackMove = targetPosition;
-            // Handle pathfinding.
-            if (waypointsCalculatedTo.isPresent() && regionWaypoints.size() > 0) {
-                Region head = regionWaypoints.get(0);
-                if (targetRegion.isPresent() && targetRegion.get().equals(head)) {
-                    // Arrived; attack the target.
-                    positionToAttackMove = targetPosition;
-                } else {
-                    // Attack move to centre of the next region.
-                    positionToAttackMove = Optional.of(head.centrePoint());
-                }
-            } else {
-                //System.out.println("No waypoint target or no points (" + regionWaypoints.size() + ")");
-            }
-            if (unitsToAttackWith.size() > 0) {
-                positionToAttackMove.ifPresentOrElse(point2d ->
-                                actionInterface.unitCommand(unitsToAttackWith, Abilities.ATTACK, point2d, false),
-                        () -> retreatPosition.ifPresent(point2d ->
-                                actionInterface.unitCommand(unitsToAttackWith,
-                                        Abilities.MOVE, point2d, false)));
-            }
-            if (unitsThatMustMove.size() > 0) {
-                centreOfMass.ifPresentOrElse(point2d ->
-                                actionInterface.unitCommand(unitsThatMustMove, Abilities.ATTACK, point2d, false),
-                        () -> retreatPosition.ifPresent(point2d ->
-                                actionInterface.unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
-            }
-            if (maybeEnemyArmy.isPresent()) {
-                // TODO this belongs in a method.
-                AtomicInteger stimmedMarines = new AtomicInteger(0);
-                AtomicInteger stimmedMarauders = new AtomicInteger(0);
-                Set<Tag> marinesWithoutStim = observationInterface.getUnits(unitInPool ->
-                        unitsToAttackWith.contains(unitInPool.getTag()) &&
-                                (unitInPool.unit().getType() == Units.TERRAN_MARINE) &&
-                                unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
-                                unitInPool.unit().getHealth().filter(health -> health > 25f).isPresent()
-                ).stream().filter(unitInPool -> {
-                    if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK)) {
-                        stimmedMarines.incrementAndGet();
-                        return false;
-                    } else {
-                        return true;
-                    }
-                }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
-
-                Set<Tag> maraudersWithoutStim = observationInterface.getUnits(unitInPool ->
-                        unitsToAttackWith.contains(unitInPool.getTag()) &&
-                                (unitInPool.unit().getType() == Units.TERRAN_MARAUDER) &&
-                                unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
-                                unitInPool.unit().getHealth().filter(health -> health > 40f).isPresent()
-                ).stream().filter(unitInPool -> {
-                    if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER)) {
-                        stimmedMarauders.incrementAndGet();
-                        return false;
-                    } else {
-                        return true;
-                    }
-                }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
-                // Stim 1:1 ratio
-                int stimsRequested = Math.max(0, (int)maybeEnemyArmy.get().size() - stimmedMarines.get() - stimmedMarauders.get());
-                marinesWithoutStim =
-                        marinesWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
-                if (marinesWithoutStim.size() > 0) {
-                    actionInterface.unitCommand(marinesWithoutStim, Abilities.EFFECT_STIM_MARINE, false);
-                    stimsRequested -= marinesWithoutStim.size();
-                }
-                maraudersWithoutStim = maraudersWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
-                if (maraudersWithoutStim.size() > 0) {
-                    actionInterface.unitCommand(maraudersWithoutStim, Abilities.EFFECT_STIM_MARAUDER, false);
-                }
-            }
-        }
-        return AggressionState.ATTACKING;
-    }
-
-    @Override
-    public List<UnitTypeRequest> requestingUnitTypes() {
-        return desiredComposition;
-    }
-
-    @Override
-    public int getPriority() {
-        return basePriority;
-    }
-
-    @Override
     public boolean isSimilarTo(Task otherTask) {
         if (otherTask instanceof TerranBioHarrassArmyTask) {
             // only one at a time for now.
@@ -190,39 +93,4 @@ public class TerranBioHarrassArmyTask extends AbstractDefaultArmyTask {
         }
         return false;
     }
-
-    @Override
-    public void debug(S2Agent agent) {
-        centreOfMass.ifPresent(point2d -> {
-            float z = agent.observation().terrainHeight(point2d);
-            Point point = Point.of(point2d.getX(), point2d.getY(), z);
-            agent.debug().debugSphereOut(point, aggressionState == AggressionState.REGROUPING ? 5f : 10f, Color.YELLOW);
-            agent.debug().debugTextOut(this.armyName, point, Color.WHITE, 8);
-        });
-        targetPosition.ifPresent(point2d -> {
-            float z = agent.observation().terrainHeight(point2d);
-            Point point = Point.of(point2d.getX(), point2d.getY(), z);
-            agent.debug().debugSphereOut(point, 1f, Color.RED);
-            agent.debug().debugTextOut(this.armyName, point, Color.WHITE, 8);
-        });
-        retreatPosition.ifPresent(point2d -> {
-            float z = agent.observation().terrainHeight(point2d);
-            Point point = Point.of(point2d.getX(), point2d.getY(), z);
-            agent.debug().debugSphereOut(point, 1f, Color.YELLOW);
-            agent.debug().debugTextOut(this.armyName, point, Color.WHITE, 8);
-        });
-        if (centreOfMass.isPresent() && regionWaypoints.size() > 0) {
-            Point2d startPoint = centreOfMass.get();
-            Point lastPoint = Point.of(startPoint.getX(), startPoint.getY(), agent.observation().terrainHeight(startPoint)+1f);
-            for (Region waypoint : regionWaypoints) {
-                Point2d nextPoint = waypoint.centrePoint();
-                Point newPoint = Point.of(nextPoint.getX(), nextPoint.getY(), agent.observation().terrainHeight(nextPoint)+1f);
-
-                agent.debug().debugSphereOut(newPoint, 1f, Color.WHITE);
-                agent.debug().debugLineOut(lastPoint, newPoint, Color.WHITE);
-                lastPoint = newPoint;
-            }
-        }
-    }
-
 }

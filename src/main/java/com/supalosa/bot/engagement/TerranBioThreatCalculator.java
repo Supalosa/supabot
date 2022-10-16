@@ -49,6 +49,8 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
             if (unitType instanceof Units) {
                 switch ((Units)unitType) {
                     case TERRAN_SIEGE_TANK_SIEGED:
+                        return amount * 33.0;
+                    case ZERG_LURKER_MP_BURROWED:
                         return amount * 25.0;
                     case ZERG_ULTRALISK:
                     case PROTOSS_MOTHERSHIP:
@@ -57,6 +59,7 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                     case TERRAN_THOR:
                     case ZERG_BROODLORD:
                     case PROTOSS_IMMORTAL:
+                    case ZERG_BANELING:
                         return amount * 5.0;
                     case ZERG_QUEEN:
                         return amount * 3.0;
@@ -65,10 +68,20 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                     case PROTOSS_ZEALOT:
                     case PROTOSS_STALKER:
                     case TERRAN_SIEGE_TANK:
+                    case TERRAN_VIKING_ASSAULT:
                         return amount * 2.0;
+                    case TERRAN_MARINE:
+                    case ZERG_ZERGLING:
+                    case PROTOSS_PHOENIX:
+                        return amount * 1.0;
                     case ZERG_DRONE:
                     case TERRAN_SCV:
                     case PROTOSS_PROBE:
+                    case ZERG_BANELING_COCOON:
+                    case ZERG_RAVAGER_COCOON:
+                    case ZERG_BROODLORD_COCOON:
+                    case ZERG_CORRUPTOR:
+                    case TERRAN_VIKING_FIGHTER:
                         return amount * 0.5;
                     default:
                         return amount * 1.5;

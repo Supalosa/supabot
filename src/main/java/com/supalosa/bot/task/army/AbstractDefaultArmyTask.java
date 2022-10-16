@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 
 public abstract class AbstractDefaultArmyTask implements ArmyTask {
 
-    private FightPerformance currentFightPerformance;
+    private FightPerformance currentFightPerformance = FightPerformance.STABLE;
 
     /**
      * Defines how this army will handle engagements.
@@ -198,21 +198,27 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
         }
         Pair<List<Unit>, List<Unit>> splitUnits = calculateUnitProximityToPoint(
                 observationInterface,
-                aggressionState == AggressionState.ATTACKING ? 5f : 10f,
+                10f,
                 centreOfMass.get());
 
         List<Unit> nearUnits = splitUnits.getLeft();
         List<Unit> farUnits = splitUnits.getRight();
 
-        if (nearUnits.size() > armyUnits.size() * 0.75) {
-            // 75% of units are near the CoM, regrouping is finished
-            return false;
-        } else if (nearUnits.size() < armyUnits.size() * 0.35) {
-            // 35% of units are near the CoM, start regrouping.
-            return true;
+        if (aggressionState == AggressionState.REGROUPING) {
+            if (nearUnits.size() > armyUnits.size() * 0.85) {
+                // 85% of units are near the CoM, regrouping is finished
+                return false;
+            } else {
+                return true;
+            }
+        } else {
+            // Less than 35% of units are near the CoM, should regroup/
+            if (nearUnits.size() < armyUnits.size() * 0.35) {
+                return true;
+            } else {
+                return false;
+            }
         }
-        // TODO ? huh
-        return true;
     }
 
     private Pair<List<Unit>, List<Unit>> calculateUnitProximityToPoint(ObservationInterface observationInterface,
@@ -247,6 +253,19 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
         if (averageX.isPresent() && averageY.isPresent()) {
             centreOfMass = Optional.of(Point2d.of((float)averageX.getAsDouble(), (float)averageY.getAsDouble()));
         }
+        // Handle pathfinding. The suggestedAttackMovePosition is the position of either the next waypoint in the
+        // path, or the targetPosition.
+        Optional<Point2d> suggestedAttackMovePosition = targetPosition;
+        if (waypointsCalculatedTo.isPresent() && regionWaypoints.size() > 0) {
+            Region head = regionWaypoints.get(0);
+            if (targetRegion.isPresent() && targetRegion.get().equals(head)) {
+                // Arrived; attack the target.
+                suggestedAttackMovePosition = targetPosition;
+            } else {
+                // Attack move to centre of the next region.
+                suggestedAttackMovePosition = Optional.of(head.centrePoint());
+            }
+        }
         Optional<Army> enemyArmy = centreOfMass.flatMap(point2d -> data.mapAwareness().getMaybeEnemyArmy(point2d));
         switch (aggressionState) {
             case ATTACKING:
@@ -255,6 +274,7 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
                         agent.observation(),
                         agent.actions(),
                         centreOfMass,
+                        suggestedAttackMovePosition,
                         enemyArmy);
                 break;
             case REGROUPING:
@@ -286,11 +306,11 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
             boolean shouldRegroup = shouldRegroup(agent.observation());
             switch (aggressionLevel) {
                 case BALANCED:
-                    if (shouldRetreat) {
-                        System.out.println(armyName + " Force Retreat");
+                    if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
+                        System.out.println(armyName + ": Forced Retreat (Losing)");
                         aggressionState = AggressionState.RETREATING;
-                    } else if (shouldRegroup) {
-                        System.out.println(armyName + " Force Regroup");
+                    } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
+                        System.out.println(armyName + ": Forced Regroup (Dispersed)");
                         aggressionState = AggressionState.REGROUPING;
                     }
                     break;
@@ -298,14 +318,14 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
                     // never retreat or regroup!
                     break;
                 case FULL_RETREAT:
-                    if (shouldRetreat) {
-                        System.out.println(armyName + " Force Retreat");
+                    if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
+                        System.out.println(armyName + ": Forced Retreat (Losing)");
                         aggressionState = AggressionState.RETREATING;
-                    } else if (!isWinning) {
-                        System.out.println(armyName + " Force Retreat (Not winning)");
+                    } else if (!isWinning && aggressionState != AggressionState.RETREATING) {
+                        System.out.println(armyName + ": Forced Retreat (Not winning)");
                         aggressionState = AggressionState.RETREATING;
-                    } else if (shouldRegroup) {
-                        System.out.println(armyName + " Force Regroup");
+                    } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
+                        System.out.println(armyName + ": Forced Regroup (Dispersed)");
                         aggressionState = AggressionState.REGROUPING;
                     }
                     break;
@@ -317,7 +337,7 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
         if (enemyArmy.isPresent() &&
                 centreOfMass.isPresent() &&
                 enemyArmy.get().position().distance(centreOfMass.get()) < 20.0) {
-            return 2;
+            return 11;
         }
         return NORMAL_UPDATE_INTERVAL;
     }
@@ -357,18 +377,13 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
         cumulativeThreatDelta = (cumulativeThreatDelta * decayFactor) + threatDelta;
         cumulativePowerDelta = (cumulativePowerDelta * decayFactor) + powerDelta;
         cumulativeThreatAndPowerCalculatedAt = gameLoop;
-        if (cumulativeThreatDelta > 0 || cumulativeThreatDelta < 0) {
-            //System.out.println("Enemy threat delta: " + threatDelta + " (cumulative " + cumulativeThreatDelta + ")");
-        }
-        if (cumulativeThreatDelta > 0 || cumulativeThreatDelta < 0) {
-            //System.out.println("My power delta: " + powerDelta + " (cumulative " + cumulativePowerDelta + ")");
-        }
-        if (currentPower > currentEnemyThreat && cumulativePowerDelta > (cumulativeThreatDelta * 1.25 + 2.0)) {
+        double relativeDelta = cumulativePowerDelta - cumulativeThreatDelta;
+        if (currentPower > currentEnemyThreat && relativeDelta > 0) {
             if (currentFightPerformance != FightPerformance.WINNING) {
                 System.out.println(armyName + " is Winning [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
             return FightPerformance.WINNING;
-        } else if (currentEnemyThreat > currentPower && cumulativeThreatDelta < (cumulativePowerDelta * 1.25 - 2.0)) {
+        } else if (currentEnemyThreat > currentPower && relativeDelta < 0) {
             if (currentFightPerformance != FightPerformance.LOSING) {
                 System.out.println(armyName + " is Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
             }
@@ -385,12 +400,20 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
      * Override this to handle how the army's units handle being told to attack or move.
      * It's basically a periodic 'update' command. Maybe I should rename it.
      *
-     * Return the state that the army should be in (aggressive, regroup, retreat etc).
+     * @param suggestedAttackMovePosition The position of either the next waypoint in the path, or the targetPosition.
+     * @return he state that the army should be in (aggressive, regroup, retreat etc).
      */
-    protected abstract AggressionState attackCommand(ObservationInterface observationInterface,
+    protected AggressionState attackCommand(ObservationInterface observationInterface,
                                           ActionInterface actionInterface,
-                                          Optional<Point2d> centreOfatMass,
-                                          Optional<Army> maybeEnemyArmy);
+                                          Optional<Point2d> centreOfMass,
+                                          Optional<Point2d> suggestedAttackMovePosition,
+                                          Optional<Army> maybeEnemyArmy) {
+        if (armyUnits.size() == 0) {
+            return AggressionState.REGROUPING;
+        } else {
+            return AggressionState.ATTACKING;
+        }
+    }
 
     protected AggressionState regroupCommand(ObservationInterface observationInterface,
                                              ActionInterface actionInterface,
@@ -507,8 +530,9 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
 
     @Override
     public String getDebugText() {
-        return "Army (" + armyName + ") " + targetPosition.map(point2d -> point2d.getX() + "," + point2d.getY()).orElse("?") +
-                " (" + armyUnits.size() + ") - " + aggressionState;
+        return "Army (" + armyName + ") " + targetPosition.map(point2d -> "T").orElse("!T") + " " +
+                retreatPosition.map(point2d -> "R").orElse("!R") +
+                " (" + armyUnits.size() + ") - " + aggressionState + " - " + currentFightPerformance;
     }
 
     @Override

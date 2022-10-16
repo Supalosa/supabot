@@ -82,7 +82,7 @@ public class TerranBioArmyTask extends AbstractDefaultArmyTask {
                     .unitType(Units.TERRAN_MEDIVAC)
                     .productionAbility(Abilities.TRAIN_MEDIVAC)
                     .producingUnitType(Units.TERRAN_STARPORT)
-                    .amount(10)
+                    .amount((int)(Math.min(10, armyUnits.size() * 0.1)))
                     .build()
             );
         }
@@ -98,107 +98,82 @@ public class TerranBioArmyTask extends AbstractDefaultArmyTask {
     @Override
     protected AggressionState attackCommand(ObservationInterface observationInterface,
                                  ActionInterface actionInterface,
-                                 Optional<Point2d> centreOfatMass,
+                                 Optional<Point2d> centreOfMass,
+                                 Optional<Point2d> suggestedAttackMovePosition,
                                  Optional<Army> maybeEnemyArmy) {
-        Set<Tag> unitsToAttackWith = new HashSet<>(armyUnits);
-        if (armyUnits.size() > 0) {
-            // TODO better detection of 'move-only' units.
-            Set<Tag> unitsThatMustMove = observationInterface.getUnits(unitInPool ->
-                    unitsToAttackWith.contains(unitInPool.getTag()) && unitInPool.unit().getType() == Units.TERRAN_MEDIVAC
-            ).stream().map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
-            unitsToAttackWith.removeAll(unitsThatMustMove);
-            Optional<Point2d> positionToAttackMove = targetPosition;
-            // Handle pathfinding.
-            if (waypointsCalculatedTo.isPresent() && regionWaypoints.size() > 0) {
-                Region head = regionWaypoints.get(0);
-                if (targetRegion.isPresent() && targetRegion.get().equals(head)) {
-                    // Arrived; attack the target.
-                    positionToAttackMove = targetPosition;
-                } else {
-                    // Attack move to centre of the next region.
-                    positionToAttackMove = Optional.of(head.centrePoint());
-                }
-            } else {
-                //System.out.println("No waypoint target or no points (" + regionWaypoints.size() + ")");
-            }
-            if (unitsToAttackWith.size() > 0) {
-                // Stutter step towards/away from enemy.
-                // TODO: the retreat position should actually be pathfinded away from the enemy.
-                // Move towards the enemy if we're winning, otherwise kite them.
-                final Optional<Point2d> movePoint = (getFightPerformance() == FightPerformance.WINNING) ? positionToAttackMove : retreatPosition;
-                Optional<Point2d> attackPoint = positionToAttackMove.isPresent() ? positionToAttackMove : retreatPosition;
-                if (movePoint.isPresent()) {
-                    unitsToAttackWith.forEach(tag -> {
-                        UnitInPool unit = observationInterface.getUnit(tag);
-                        if (unit != null) {
-                            if (unit.unit().getWeaponCooldown().isPresent() && unit.unit().getWeaponCooldown().get() < 0.01f) {
-                                actionInterface.unitCommand(tag, Abilities.ATTACK, attackPoint.get(), false);
-                            } else {
-                                actionInterface.unitCommand(tag, Abilities.MOVE, movePoint.get(), false);
-                            }
+        AggressionState parentState = super.attackCommand(observationInterface,actionInterface, centreOfMass,
+                suggestedAttackMovePosition, maybeEnemyArmy);
+        if (parentState == AggressionState.ATTACKING && armyUnits.size() > 0) {
+            Optional<Point2d> positionToAttackMove = suggestedAttackMovePosition;
+            // Stutter step towards/away from enemy.
+            // TODO: the retreat position should actually be pathfinded away from the enemy.
+            // Move towards the enemy if we're winning, otherwise kite them.
+            final Optional<Point2d> movePoint = (getFightPerformance() == FightPerformance.WINNING) ? positionToAttackMove : retreatPosition;
+            Optional<Point2d> attackPoint = positionToAttackMove.isPresent() ? positionToAttackMove : retreatPosition;
+            if (movePoint.isPresent()) {
+                armyUnits.forEach(tag -> {
+                    UnitInPool unit = observationInterface.getUnit(tag);
+                    if (unit != null) {
+                        // Empty weapon = no attack - so just scan-attack there.
+                        if (unit.unit().getWeaponCooldown().isEmpty() ||
+                                (unit.unit().getWeaponCooldown().isPresent() && unit.unit().getWeaponCooldown().get() < 0.01f)) {
+                            actionInterface.unitCommand(tag, Abilities.ATTACK, attackPoint.get(), false);
+                        } else {
+                            actionInterface.unitCommand(tag, Abilities.MOVE, movePoint.get(), false);
                         }
-                    });
-                }
-                /*positionToAttackMove.ifPresentOrElse(point2d ->
-                                actionInterface.unitCommand(unitsToAttackWith, Abilities.ATTACK, point2d, false),
-                        () -> retreatPosition.ifPresent(point2d ->
-                                actionInterface.unitCommand(unitsToAttackWith,
-                                Abilities.MOVE, point2d, false)));*/
-            }
-            if (unitsThatMustMove.size() > 0) {
-                centreOfMass.ifPresentOrElse(point2d ->
-                                actionInterface.unitCommand(unitsThatMustMove, Abilities.ATTACK, point2d, false),
-                        () -> retreatPosition.ifPresent(point2d ->
-                                actionInterface.unitCommand(unitsToAttackWith, Abilities.MOVE, point2d, false)));
+                    }
+                });
             }
             if (maybeEnemyArmy.isPresent()) {
-                // TODO this belongs in a method.
-                AtomicInteger stimmedMarines = new AtomicInteger(0);
-                AtomicInteger stimmedMarauders = new AtomicInteger(0);
-                Set<Tag> marinesWithoutStim = observationInterface.getUnits(unitInPool ->
-                        unitsToAttackWith.contains(unitInPool.getTag()) &&
-                                (unitInPool.unit().getType() == Units.TERRAN_MARINE) &&
-                                unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
-                                unitInPool.unit().getHealth().filter(health -> health > 25f).isPresent()
-                ).stream().filter(unitInPool -> {
-                    if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK)) {
-                        stimmedMarines.incrementAndGet();
-                        return false;
-                    } else {
-                        return true;
-                    }
-                }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
-
-                Set<Tag> maraudersWithoutStim = observationInterface.getUnits(unitInPool ->
-                        unitsToAttackWith.contains(unitInPool.getTag()) &&
-                                (unitInPool.unit().getType() == Units.TERRAN_MARAUDER) &&
-                                unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
-                                unitInPool.unit().getHealth().filter(health -> health > 40f).isPresent()
-                ).stream().filter(unitInPool -> {
-                    if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER)) {
-                        stimmedMarauders.incrementAndGet();
-                        return false;
-                    } else {
-                        return true;
-                    }
-                }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
-                // Stim 1:1 ratio
-                int stimsRequested = Math.max(0, (int)maybeEnemyArmy.get().size() - stimmedMarines.get() - stimmedMarauders.get());
-                marinesWithoutStim =
-                        marinesWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
-                if (marinesWithoutStim.size() > 0) {
-                    actionInterface.unitCommand(marinesWithoutStim, Abilities.EFFECT_STIM_MARINE, false);
-                    stimsRequested -= marinesWithoutStim.size();
-                }
-                maraudersWithoutStim = maraudersWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
-                if (maraudersWithoutStim.size() > 0) {
-                    actionInterface.unitCommand(maraudersWithoutStim, Abilities.EFFECT_STIM_MARAUDER, false);
-                }
+                calculateStimPack(observationInterface, actionInterface, maybeEnemyArmy, armyUnits);
             }
-        } else {
-            return AggressionState.REGROUPING;
         }
-        return AggressionState.ATTACKING;
+        return parentState;
+    }
+
+    private void calculateStimPack(ObservationInterface observationInterface, ActionInterface actionInterface,
+                           Optional<Army> maybeEnemyArmy, Set<Tag> unitsToAttackWith) {
+        AtomicInteger stimmedMarines = new AtomicInteger(0);
+        AtomicInteger stimmedMarauders = new AtomicInteger(0);
+        Set<Tag> marinesWithoutStim = observationInterface.getUnits(unitInPool ->
+                unitsToAttackWith.contains(unitInPool.getTag()) &&
+                        (unitInPool.unit().getType() == Units.TERRAN_MARINE) &&
+                        unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
+                        unitInPool.unit().getHealth().filter(health -> health > 25f).isPresent()
+        ).stream().filter(unitInPool -> {
+            if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK)) {
+                stimmedMarines.incrementAndGet();
+                return false;
+            } else {
+                return true;
+            }
+        }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
+
+        Set<Tag> maraudersWithoutStim = observationInterface.getUnits(unitInPool ->
+                unitsToAttackWith.contains(unitInPool.getTag()) &&
+                        (unitInPool.unit().getType() == Units.TERRAN_MARAUDER) &&
+                        unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
+                        unitInPool.unit().getHealth().filter(health -> health > 40f).isPresent()
+        ).stream().filter(unitInPool -> {
+            if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER)) {
+                stimmedMarauders.incrementAndGet();
+                return false;
+            } else {
+                return true;
+            }
+        }).map(unitInPool -> unitInPool.getTag()).collect(Collectors.toSet());
+        // Stim 1:1 ratio
+        int stimsRequested = Math.max(0, (int) maybeEnemyArmy.get().size() - stimmedMarines.get() - stimmedMarauders.get());
+        marinesWithoutStim =
+                marinesWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
+        if (marinesWithoutStim.size() > 0) {
+            actionInterface.unitCommand(marinesWithoutStim, Abilities.EFFECT_STIM_MARINE, false);
+            stimsRequested -= marinesWithoutStim.size();
+        }
+        maraudersWithoutStim = maraudersWithoutStim.stream().limit(stimsRequested).collect(Collectors.toSet());
+        if (maraudersWithoutStim.size() > 0) {
+            actionInterface.unitCommand(maraudersWithoutStim, Abilities.EFFECT_STIM_MARAUDER, false);
+        }
     }
 
     @Override

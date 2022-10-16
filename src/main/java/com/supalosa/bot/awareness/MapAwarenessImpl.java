@@ -288,12 +288,10 @@ public class MapAwarenessImpl implements MapAwareness {
                 ).reduce(Double::sum);
                 // Diffuse threat is the sum of the threat of all other regions, modulated by the distance to those
                 // regions. To be honest there's probably a JGraphT algorithm for this which would be better.
-                Optional<Double> diffuseThreat = regionToEnemyThreat.entrySet().stream().map(entry -> {
-                    int otherRegionId = entry.getKey();
-                    double threat = entry.getValue();
-                    double distance = region.centrePoint().distance(analysisResults.getRegion(otherRegionId).centrePoint());
-                    return 10.0f / Math.max(1.0, distance) * threat;
-                }).reduce(Double::sum);
+                Optional<Double> diffuseThreat = getDiffuseEnemyThreatForRegion(
+                        analysisResults,
+                        regionToEnemyThreat,
+                        region);
                 // For ramps only, detect if they are blocked.
                 boolean isRampAndBlocked = false;
                 if (mapAnalysisResults.isPresent() && region.getRampId().isPresent()) {
@@ -330,6 +328,35 @@ public class MapAwarenessImpl implements MapAwareness {
             avoidKillzoneGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.killzoneFactor() < 10.0f ? destinationRegion.killzoneFactor() : null));
         }
+    }
+
+    private Optional<Double> getDiffuseEnemyThreatForRegion(AnalysisResults analysisResults,
+                                       Map<Integer, Double> regionToEnemyThreat,
+                                       Region region) {
+        // Diffuse threat is the sum of the threat of all other regions, modulated by the distance to those
+        // regions. To be honest there's probably a JGraphT algorithm for this which would be better.
+        double diffuseThreat = 0;
+        Queue<Region> openSet = new LinkedList<>();
+        Map<Integer, Double> distanceToRegion = new HashMap<>();
+        Set<Integer> closedSet = new HashSet();
+        openSet.add(region);
+        distanceToRegion.put(region.regionId(), 0.0);
+        while (openSet.size() > 0) {
+            Region head = openSet.poll();
+            closedSet.add(head.regionId());
+            double distance = distanceToRegion.getOrDefault(head.regionId(), 0.0);
+            double distanceFactor = 1.0 / Math.max(1.0, distance);
+            diffuseThreat += regionToEnemyThreat.getOrDefault(head.regionId(), 0.0) * distanceFactor;
+            head.connectedRegions().forEach(connectedRegionId -> {
+                if (closedSet.contains(connectedRegionId)) {
+                    return;
+                }
+                Region connectedRegion = analysisResults.getRegion(connectedRegionId);
+                distanceToRegion.put(connectedRegionId, distance + head.centrePoint().distance(connectedRegion.centrePoint()));
+                openSet.add(connectedRegion);
+            });
+        }
+        return Optional.of(diffuseThreat);
     }
 
     /**
