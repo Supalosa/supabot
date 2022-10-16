@@ -295,6 +295,10 @@ public class MapAwarenessImpl implements MapAwareness {
                 Optional<Double> killzoneThreat = region.onLowGroundOfRegions().stream().map(highGroundRegionId ->
                    regionToEnemyThreat.get(highGroundRegionId)
                 ).reduce(Double::sum);
+                // Calculating neighbour threat.
+                Optional<Double> neighbourThreat = region.connectedRegions().stream().map(connectedRegionId ->
+                        regionToEnemyThreat.get(connectedRegionId)
+                ).reduce(Double::sum).map(threat -> threat + enemyThreat);
                 // Diffuse threat is the sum of the threat of all other regions, modulated by the distance to those
                 // regions. To be honest there's probably a JGraphT algorithm for this which would be better.
                 Optional<Double> diffuseThreat = getDiffuseEnemyThreatForRegion(
@@ -318,6 +322,7 @@ public class MapAwarenessImpl implements MapAwareness {
                         .isBlocked(isRampAndBlocked)
                         .enemyArmyFactor(enemyArmyFactor)
                         .killzoneFactor(killzoneFactor)
+                        .nearbyEnemyThreat(neighbourThreat.orElse(0.0))
                         .enemyThreat(enemyThreat)
                         .playerThreat(currentSelfThreat)
                         .visibilityPercent(visibilityPercent)
@@ -495,6 +500,11 @@ public class MapAwarenessImpl implements MapAwareness {
                     .unitTypes(Constants.MINERAL_TYPES).build());
             for (Expansion expansion : this.expansionLocations.get()) {
                 if (!observationInterface.isPlacable(expansion.position().toPoint2d())) {
+                    continue;
+                }
+                // Do not expand where the enemy is.
+                Optional<RegionData> region = getRegionDataForPoint(expansion.position().toPoint2d());
+                if (region.isPresent() && region.get().enemyThreat() > region.get().playerThreat()) {
                     continue;
                 }
                 int remainingMinerals = expansion.resourcePositions().stream().mapToInt(point2d -> {

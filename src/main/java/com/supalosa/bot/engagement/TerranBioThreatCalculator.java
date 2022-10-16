@@ -25,6 +25,8 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                     case TERRAN_MEDIVAC:
                     case TERRAN_MARAUDER:
                         return amount * 1.25;
+                    case TERRAN_SCV:
+                        return 0.0;
                     case TERRAN_MARINE:
                     default:
                         return amount * 1.0;

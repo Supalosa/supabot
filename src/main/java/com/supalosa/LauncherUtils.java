@@ -45,7 +45,7 @@ public class LauncherUtils {
         PlayerSettings[] participants = new PlayerSettings[2];
         participants[0] = S2Coordinator.createParticipant(Race.TERRAN, pBot, "supabot");
         participants[1] = pAI[0];
-        S2Coordinator vS2Coordinator = S2Coordinator.setup().setRealtime(pRealtime).setRawAffectsSelection(true)
+        S2Coordinator vS2Coordinator = S2Coordinator.setup().setRealtime(pRealtime).setRawAffectsSelection(false)
                 .loadSettings(pArgs)
                 .setShowCloaked(true)
                 .setShowBurrowed(true)

@@ -80,6 +80,15 @@ public class BuildStructureTask implements Task {
                 });
             });
         } else {
+            agent.observation().getActionErrors().stream().forEach(actionError -> {
+                if (actionError.getUnitTag().equals(assignedWorker)) {
+                    System.out.println("Assigned builder had an action error: " + actionError.getActionResult());
+                    if (actionError.getActionResult() == ActionResult.COULDNT_REACH_TARGET) {
+                        assignedWorker = Optional.empty();
+                        return;
+                    }
+                }
+            });
             worker = assignedWorker
                     .map(assignedWorkerTag -> agent.observation().getUnit(assignedWorkerTag));
             if (worker.isEmpty()) {
@@ -113,7 +122,8 @@ public class BuildStructureTask implements Task {
         if (buildAttempts > MAX_BUILD_ATTEMPTS || actionErrors.stream().anyMatch(actionError -> {
             if (actionError.getUnitTag().equals(assignedWorker) &&
                     actionError.getActionResult() != ActionResult.NOT_ENOUGH_MINERALS &&
-                    actionError.getActionResult() != ActionResult.NOT_ENOUGH_VESPENE) {
+                    actionError.getActionResult() != ActionResult.NOT_ENOUGH_VESPENE &&
+                    actionError.getActionResult() != ActionResult.COULDNT_REACH_TARGET) {
                 System.out.println("Relevant action error: " + actionError.getActionResult());
                 return true;
             }
@@ -129,6 +139,7 @@ public class BuildStructureTask implements Task {
                 agent.actions().unitCommand(tag, Abilities.CANCEL, false);
             });
             isComplete = true;
+            return;
         }
 
         if (worker.isPresent() &&

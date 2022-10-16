@@ -49,6 +49,14 @@ public interface RegionData {
     }
 
     /**
+     * A scalar figure indicating the enemy threat of this region and all neighbouring regions.
+     */
+    @Value.Default
+    default double nearbyEnemyThreat() {
+        return 0.0;
+    }
+
+    /**
      * A scalar figure indicating how much enemy threat is _near_ this region. Named as such because
      * the threat value diffuses through the graph.
      */

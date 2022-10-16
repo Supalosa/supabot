@@ -107,11 +107,6 @@ public class FightManager {
             taskManager.addTask(reserveArmy, 1);
         }
 
-        // hack, maybe?
-        if ((reserveArmy.getSize()) >= getTargetMarines()) {
-            attackingArmy.takeAllFrom(reserveArmy);
-        }
-
         onStepTerranBio(taskManager, data);
 
         // Remove complete tasks.
@@ -121,7 +116,7 @@ public class FightManager {
 
         long gameLoop = agent.observation().getGameLoop();
 
-        if (gameLoop > positionalLogicUpdatedAt + 33L) {
+        if (gameLoop > positionalLogicUpdatedAt + 22L) {
             positionalLogicUpdatedAt = gameLoop;
             updateTargetingLogic(data);
         }
@@ -196,6 +191,7 @@ public class FightManager {
             }
         });
         Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearBase();
+        boolean isDefending = false;
         if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
             // Enemy detected near our base, attack them.
             this.setDefencePosition(nearestEnemy);
@@ -207,6 +203,7 @@ public class FightManager {
                     this.setAttackPosition(nearestEnemy);
                 }
             }
+            isDefending = true;
         } else {
             data.structurePlacementCalculator().ifPresent(spc -> {
                 // Defend from behind the barracks, or else the position of the barracks.
@@ -216,6 +213,10 @@ public class FightManager {
                         .orElse(spc.getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d()));
                 this.setDefencePosition(defencePosition);
             });
+        }
+        // hack, maybe?
+        if (!isDefending && (reserveArmy.getSize()) >= getTargetMarines()) {
+            attackingArmy.takeAllFrom(reserveArmy);
         }
     }
 

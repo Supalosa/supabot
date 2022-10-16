@@ -48,7 +48,7 @@ public class SupaBot extends S2Agent implements AgentData {
     private final FightManager fightManager;
     private final GameData gameData;
     private final MapAwareness mapAwareness;
-    private final long lastGasCheck = 0L;
+    private long lastGasCheck = 0L;
     private final LoadingCache<UnitType, Integer> countOfUnits = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(1, TimeUnit.SECONDS)
@@ -98,7 +98,7 @@ public class SupaBot extends S2Agent implements AgentData {
         this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
         mapAnalysis.ifPresent(analysis -> this.mapAwareness.setMapAnalysisResults(analysis));
 
-        dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemy(), 2));
+        dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemy(), 1));
         dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
     }
 
@@ -248,7 +248,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 if (observation().getUnits(Alliance.ENEMY).stream()
                         .anyMatch(enemyUnit -> enemyUnit
                                 .getUnit()
-                                .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < 5)
+                                .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < 8)
                                 .isPresent())) {
                     rampClosed.set(true);
                 }
@@ -435,7 +435,7 @@ public class SupaBot extends S2Agent implements AgentData {
 
     private boolean needsCommandCentre() {
         // Expand every 16 workers.
-        final int[] expansionNumWorkers = new int[]{0, 16, 32, 48, 64, 72};
+        final int[] expansionNumWorkers = new int[]{0, 18, 32, 48, 64, 72};
         int currentWorkers = observation().getFoodWorkers();
         int numCcs = countMiningBases();
         int index = Math.min(expansionNumWorkers.length - 1, Math.max(0, numCcs));
@@ -588,9 +588,16 @@ public class SupaBot extends S2Agent implements AgentData {
                 return;
             }
             List<UnitOrder> orders = structure.unit().getOrders();
+            boolean structureInHighThreat = mapAwareness.getRegionDataForPoint
+                    (structure.unit().getPosition().toPoint2d())
+                    .map(regionData -> {
+                        //System.out.println("Nearby threat " + regionData.nearbyEnemyThreat() + " vs " + regionData.playerThreat());
+                        return regionData.nearbyEnemyThreat() > regionData.playerThreat();
+                    })
+                    .orElse(false);
             if (orders.isEmpty() || (reactor && orders.size() < 2)) {
                 // Hack here - need prioritsation.
-                if (observation().getMinerals() > 600 || !needsCommandCentre()) {
+                if (structureInHighThreat || observation().getMinerals() > 600/* || !needsCommandCentre()*/) {
                     actions().unitCommand(structure.unit(), abilityToCast, false);
                     amountNeeded.decrementAndGet();
                 }
@@ -600,8 +607,8 @@ public class SupaBot extends S2Agent implements AgentData {
     }
 
     private boolean needsRefinery() {
-        return observation().getFoodWorkers() > 16 &&
-                countUnitType(Units.TERRAN_REFINERY) < countUnitType(Constants.TERRAN_CC_TYPES_ARRAY) * (observation().getFoodCap() > 100 ? 2 : 1);
+        return observation().getFoodWorkers() > 18 &&
+                countUnitType(Units.TERRAN_REFINERY) < countUnitType(Constants.TERRAN_CC_TYPES_ARRAY) * (observation().getFoodUsed() > 100 ? 2 : 1);
     }
 
     private boolean tryBuildRefinery() {
@@ -656,9 +663,10 @@ public class SupaBot extends S2Agent implements AgentData {
         if (gameLoop < lastGasCheck + GAS_CHECK_INTERVAL) {
             return;
         }
+        lastGasCheck = gameLoop;
         List<Unit> commandCentres = observation().getUnits(unitInPool ->
                         unitInPool.unit().getAlliance() == Alliance.SELF &&
-                                (Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType()))).stream()
+                                (Constants.ALL_TOWN_HALL_TYPES.contains(unitInPool.unit().getType()))).stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
         List<Unit> refineries = observation().getUnits(unitInPool ->
@@ -668,19 +676,46 @@ public class SupaBot extends S2Agent implements AgentData {
                 ).stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
+        Set<Unit> ccsDoneThisRun = new HashSet<>();
         refineries.forEach(refinery -> {
             if (refinery.getAssignedHarvesters().isPresent() &&
-                    refinery.getIdealHarvesters().isPresent() &&
-                    refinery.getAssignedHarvesters().get() < refinery.getIdealHarvesters().get()) {
+                    refinery.getIdealHarvesters().isPresent()) {
+                Optional<Unit> nearCc = commandCentres.stream().filter(cc -> cc.getPosition().distance(refinery.getPosition()) < 10f).findAny();
                 int delta = refinery.getIdealHarvesters().get() - refinery.getAssignedHarvesters().get();
-                List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
-                                unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                                        unitInPool.unit().getType() == Units.TERRAN_SCV &&
-                                        UnitInPool.isCarryingMinerals().test(unitInPool) &&
-                                        unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
-                        .stream().map(UnitInPool::unit).collect(Collectors.toList());
-                for (int i = 0; i < Math.min(nearbyScvs.size(), delta); ++i) {
-                    actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, refinery, false);
+                if (nearCc.isPresent()) {
+                    int desiredHarvesters = nearCc.get().getIdealHarvesters().orElse(0);
+                    int currentHarvesters = nearCc.get().getAssignedHarvesters().orElse(0);
+                    if (currentHarvesters <= desiredHarvesters) {
+                        // remove harvesters
+                        delta = -(desiredHarvesters - currentHarvesters);
+                    }
+                    if (ccsDoneThisRun.contains(nearCc.get())) {
+                        return;
+                    }
+                    ccsDoneThisRun.add(nearCc.get());
+                }
+                if (delta > 0) {
+                    List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
+                                    unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                                            unitInPool.unit().getType() == Units.TERRAN_SCV &&
+                                            UnitInPool.isCarryingMinerals().test(unitInPool) &&
+                                            unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
+                            .stream().map(UnitInPool::unit).collect(Collectors.toList());
+                    for (int i = 0; i < Math.min(nearbyScvs.size(), delta); ++i) {
+                        actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, refinery, false);
+                    }
+                } else if (nearCc.isPresent() && delta < 0) {
+                    List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
+                            unitInPool.unit().getOrders().stream().anyMatch(order -> order.getTargetedUnitTag().equals(Optional.of(refinery.getTag()))) &&
+                                    unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
+                                            unitInPool.unit().getType() == Units.TERRAN_SCV &&
+                                            unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
+                            .stream().map(UnitInPool::unit).collect(Collectors.toList());
+
+                    Optional<Unit> nearMinerals = Utils.findNearestMineralPatch(observation(), nearCc.get().getPosition().toPoint2d());
+                    for (int i = 0; i < Math.min(nearbyScvs.size(), Math.abs(delta)); ++i) {
+                        actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, nearMinerals.get(), false);
+                    }
                 }
             }
         });
