@@ -1,4 +1,4 @@
-package com.supalosa.bot.task.army;
+package com.supalosa.bot.task.terran;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
@@ -9,34 +9,35 @@ import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
-import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
-import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.engagement.ThreatCalculator;
+import com.supalosa.bot.task.DefaultTaskWithUnits;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.task.TaskResult;
 import com.supalosa.bot.utils.UnitFilter;
+import com.supalosa.bot.utils.Utils;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Steals orbital commands to scan/drop mules on enemy siege tanks.
+ * Manages mules/scans.
  */
-public class SiegeTankMuleBombTask extends AbstractDefaultArmyTask {
+public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
 
     private List<UnitInPool> enemySiegeTanks = new ArrayList<>();
     private Map<Point, List<UnitInPool>> siegeTankClusters = new HashMap<>();
     private long lastSiegeTankSeenAt = 0L;
-    private boolean isComplete = false;
 
     private long siegeTankClustersCalculatedAt = 0L;
 
-    public SiegeTankMuleBombTask(String armyName, ThreatCalculator threatCalculator) {
-        super(armyName, threatCalculator);
+    private final Map<Point2d, Long> scannedClusters = new HashMap<>();
+
+    public OrbitalCommandManagerTask(int priority) {
+        super(priority);
     }
 
     @Override
@@ -55,7 +56,6 @@ public class SiegeTankMuleBombTask extends AbstractDefaultArmyTask {
         if (enemySiegeTanks.size() > 0) {
             lastSiegeTankSeenAt = gameLoop;
         }
-        isComplete = enemySiegeTanks.size() == 0 && gameLoop > lastSiegeTankSeenAt + 22L * 10;
 
         if (gameLoop > siegeTankClustersCalculatedAt + 33L) {
             siegeTankClustersCalculatedAt = gameLoop;
@@ -92,16 +92,58 @@ public class SiegeTankMuleBombTask extends AbstractDefaultArmyTask {
                 }
             }
         }
+
+        if (siegeTankClusters.size() == 0) {
+            // land mules and scan cloaked items
+            float reserveCcEnergy = (data.fightManager().hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
+            Set<Point2d> scanClusters = new HashSet<>(data.fightManager().getCloakedOrBurrowedUnitClusters());
+            new HashMap<>(scannedClusters).forEach((scannedCluster, time) -> {
+                // Scan lasts for 12.3 seconds.
+                if (gameLoop > time + 22L * 12) {
+                    scannedClusters.remove(scannedCluster);
+                }
+            });
+            agent.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+                    UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
+                if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > reserveCcEnergy) {
+                    Optional<Unit> nearestMineral = Utils.findNearestMineralPatch(agent.observation(), unit.unit().getPosition().toPoint2d());
+                    nearestMineral.ifPresent(mineral -> {
+                        agent.actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
+                    });
+                }
+                if (scanClusters.size() > 0) {
+                    scanClusters.stream().filter(scanPoint ->
+                            // Return scan points that are not near an already scanned point.
+                            !scannedClusters.keySet().stream()
+                                    .anyMatch(alreadyScannedPoint -> alreadyScannedPoint.distance(scanPoint) < 8f)
+                    ).findFirst().ifPresent(scanPoint -> {
+                        agent.actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
+                        scannedClusters.put(scanPoint, gameLoop);
+                        scanClusters.remove(scanPoint);
+                    });
+                }
+            });
+        }
+    }
+
+    @Override
+    public Optional<TaskResult> getResult() {
+        return Optional.empty();
     }
 
     @Override
     public boolean isComplete() {
-        return isComplete;
+        return false;
+    }
+
+    @Override
+    public String getKey() {
+        return null;
     }
 
     @Override
     public boolean isSimilarTo(Task otherTask) {
-        return otherTask instanceof SiegeTankMuleBombTask;
+        return otherTask instanceof OrbitalCommandManagerTask;
     }
 
     @Override
@@ -120,8 +162,8 @@ public class SiegeTankMuleBombTask extends AbstractDefaultArmyTask {
     }
 
     @Override
-    public int getPriority() {
-        return 0;
+    public String getDebugText() {
+        return "Mule Bomb";
     }
 
     @Override

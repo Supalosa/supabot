@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 /**
  * A permanent bio army that constantly asks for reinforcements.
  */
-public class TerranBioArmyTask extends AbstractDefaultArmyTask {
+public class TerranBioArmyTask extends DefaultArmyTask {
 
     private int numMedivacs = 0;
     private int basePriority;
@@ -35,7 +35,7 @@ public class TerranBioArmyTask extends AbstractDefaultArmyTask {
     private long desiredCompositionUpdatedAt = 0L;
 
     public TerranBioArmyTask(String armyName, int basePriority) {
-        super(armyName, new TerranBioThreatCalculator());
+        super(armyName, basePriority, new TerranBioThreatCalculator());
         this.basePriority = basePriority;
     }
 
@@ -235,4 +235,8 @@ public class TerranBioArmyTask extends AbstractDefaultArmyTask {
         }
     }
 
+    @Override
+    public void onUnitIdle(UnitInPool unitTag) {
+
+    }
 }

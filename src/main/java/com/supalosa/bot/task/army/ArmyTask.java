@@ -29,11 +29,6 @@ public interface ArmyTask extends TaskWithUnits {
     void setRetreatPosition(Optional<Point2d> retreatPosition);
 
     /**
-     * Returns the number of units in this army.
-     */
-    int getSize();
-
-    /**
      * Call this when a given unit (which is part of the army) goes idle.
      */
     void onUnitIdle(UnitInPool unitTag);

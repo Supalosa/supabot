@@ -27,8 +27,10 @@ import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
+import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
+import com.supalosa.bot.utils.Utils;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -56,7 +58,6 @@ public class SupaBot extends S2Agent implements AgentData {
                     return count;
                 }
             });
-    private final Map<Point2d, Long> scannedClusters = new HashMap<>();
     private boolean isDebug;
     private Optional<AnalysisResults> mapAnalysis = Optional.empty();
     private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
@@ -98,6 +99,7 @@ public class SupaBot extends S2Agent implements AgentData {
         mapAnalysis.ifPresent(analysis -> this.mapAwareness.setMapAnalysisResults(analysis));
 
         dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemy(), 2));
+        dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
     }
 
     @Override
@@ -177,36 +179,6 @@ public class SupaBot extends S2Agent implements AgentData {
                 ability = Abilities.MORPH_PLANETARY_FORTRESS;
             }
             actions().unitCommand(unit.unit(), ability, false);
-        });
-        // land mules and scan cloaked items
-        float reserveCcEnergy = (fightManager.hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
-        Set<Point2d> scanClusters = new HashSet<>(fightManager.getCloakedOrBurrowedUnitClusters());
-        long gameLoop = observation().getGameLoop();
-        new HashMap<>(scannedClusters).forEach((scannedCluster, time) -> {
-            // Scan lasts for 12.3 seconds.
-            if (gameLoop > time + 22L * 12) {
-                scannedClusters.remove(scannedCluster);
-            }
-        });
-        observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
-            if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > reserveCcEnergy) {
-                Optional<Unit> nearestMineral = findNearestMineralPatch(unit.unit().getPosition().toPoint2d());
-                nearestMineral.ifPresent(mineral -> {
-                    actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
-                });
-            }
-            if (scanClusters.size() > 0) {
-                scanClusters.stream().filter(scanPoint ->
-                    // Return scan points that are not near an already scanned point.
-                    !scannedClusters.keySet().stream()
-                            .anyMatch(alreadyScannedPoint -> alreadyScannedPoint.distance(scanPoint) < 8f)
-                ).findFirst().ifPresent(scanPoint -> {
-                    actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
-                    scannedClusters.put(scanPoint, gameLoop);
-                    scanClusters.remove(scanPoint);
-                });
-            }
         });
         tryBuildScvs();
         if (fightManager.hasSeenCloakedOrBurrowedUnits() ||
@@ -396,7 +368,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 takers.entrySet().forEach(taker -> {
                     Unit takerCc = taker.getKey();
                     int takerAmount = taker.getValue();
-                    Optional<Unit> nearestMineralPatch = findNearestMineralPatch(takerCc.getPosition().toPoint2d());
+                    Optional<Unit> nearestMineralPatch = Utils.findNearestMineralPatch(observation(), takerCc.getPosition().toPoint2d());
                     if (donatedWorkers.size() > 0) {
                         while (!donatedWorkers.isEmpty() && takerAmount > 0) {
                             --takerAmount;
@@ -764,7 +736,7 @@ public class SupaBot extends S2Agent implements AgentData {
         switch ((Units) unit.getType()) {
             case TERRAN_SCV:
                 findNearestCommandCentreWithMinerals(unit.getPosition().toPoint2d()).ifPresent(commandCentre -> {
-                    findNearestMineralPatch(commandCentre.getPosition().toPoint2d()).ifPresent(mineralPatch ->
+                    Utils.findNearestMineralPatch(observation(), commandCentre.getPosition().toPoint2d()).ifPresent(mineralPatch ->
                             actions().unitCommand(unit, Abilities.SMART, mineralPatch, false));
                 });
                 break;
@@ -786,23 +758,6 @@ public class SupaBot extends S2Agent implements AgentData {
                         .distanceToPoint(start)
                         .ascending(true).build())
                 .map(unitInPool -> unitInPool.unit());
-    }
-
-    private Optional<Unit> findNearestMineralPatch(Point2d start) {
-        List<UnitInPool> units = observation().getUnits(Alliance.NEUTRAL);
-        double distance = Double.MAX_VALUE;
-        Unit target = null;
-        for (UnitInPool unitInPool : units) {
-            Unit unit = unitInPool.unit();
-            if (Constants.MINERAL_TYPES.contains(unit.getType())) {
-                double d = unit.getPosition().toPoint2d().distance(start);
-                if (d < distance) {
-                    distance = d;
-                    target = unit;
-                }
-            }
-        }
-        return Optional.ofNullable(target);
     }
 
     private boolean tryBuildBarracks() {

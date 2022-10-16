@@ -28,7 +28,6 @@ import java.util.stream.Collectors;
  */
 public class TerranBioHarrassArmyTask extends TerranBioArmyTask {
 
-    private int basePriority;
     private boolean isComplete = false;
 
     private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
@@ -36,7 +35,6 @@ public class TerranBioHarrassArmyTask extends TerranBioArmyTask {
 
     public TerranBioHarrassArmyTask(String armyName, int basePriority) {
         super(armyName, basePriority);
-        this.basePriority = basePriority;
     }
 
     @Override

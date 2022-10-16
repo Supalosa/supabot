@@ -38,4 +38,9 @@ public interface TaskWithUnits extends Task {
      * Return the desired composition of this army.
      */
     List<UnitTypeRequest> requestingUnitTypes();
+
+    /**
+     * Returns the number of units in this army.
+     */
+    int getSize();
 }

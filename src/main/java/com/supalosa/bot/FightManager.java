@@ -14,11 +14,10 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.engagement.TerranBioThreatCalculator;
+import com.supalosa.bot.task.TaskWithUnits;
 import com.supalosa.bot.task.army.ArmyTask;
-import com.supalosa.bot.task.army.SiegeTankMuleBombTask;
+import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.task.army.TerranBioArmyTask;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
@@ -26,7 +25,6 @@ import com.supalosa.bot.task.army.TerranBioHarrassArmyTask;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class FightManager {
@@ -92,10 +90,8 @@ public class FightManager {
                         .unitType(Units.TERRAN_SIEGE_TANK_SIEGED).build());
         if (!enemySiegeTanks.isEmpty()) {
             // Start a harrass force.
-            ArmyTask siegeTankMuleBombTask = new SiegeTankMuleBombTask("MuleBomb", new TerranBioThreatCalculator());
+            TaskWithUnits siegeTankMuleBombTask = new OrbitalCommandManagerTask(100);
             if (taskManager.addTask(siegeTankMuleBombTask, 1)) {
-                siegeTankMuleBombTask.setPathRules(MapAwareness.PathRules.NORMAL);
-                armyTasks.add(siegeTankMuleBombTask);
             }
         }
     }

@@ -16,6 +16,7 @@ import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.ThreatCalculator;
+import com.supalosa.bot.task.DefaultTaskWithUnits;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.TaskResult;
 import org.apache.commons.lang3.tuple.Pair;
@@ -24,7 +25,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
-public abstract class AbstractDefaultArmyTask implements ArmyTask {
+public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements ArmyTask {
 
     private FightPerformance currentFightPerformance = FightPerformance.STABLE;
 
@@ -50,7 +51,6 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
 
     protected final String armyName;
     protected final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
-    protected Set<Tag> armyUnits = new HashSet<>();
     protected Optional<Point2d> targetPosition = Optional.empty();
     protected Optional<Point2d> retreatPosition = Optional.empty();
     protected Optional<Point2d> centreOfMass = Optional.empty();
@@ -63,7 +63,6 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     protected Optional<Region> waypointsCalculatedTo = Optional.empty();
     protected long waypointsCalculatedAt = 0L;
     protected long nextArmyLogicUpdateAt = 0L;
-    protected Map<UnitType, Integer> currentComposition = new HashMap<>();
     protected MapAwareness.PathRules pathRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
     // These are used for observing if we're winning or losing a fight.
     protected Optional<Army> previousEnemyArmyObservation = Optional.empty();
@@ -78,7 +77,8 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
 
     protected final ThreatCalculator threatCalculator;
 
-    public AbstractDefaultArmyTask(String armyName, ThreatCalculator threatCalculator) {
+    public DefaultArmyTask(String armyName, int basePriority, ThreatCalculator threatCalculator) {
+        super(basePriority);
         this.armyName = armyName;
         this.threatCalculator = threatCalculator;
     }
@@ -100,15 +100,12 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
 
     @Override
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+        super.onStep(taskManager, data, agent);
         List<Point2d> armyPositions = new ArrayList<>();
-        currentComposition.clear();
         armyUnits = armyUnits.stream().filter(tag -> {
                     UnitInPool unit = agent.observation().getUnit(tag);
                     if (unit != null) {
                         armyPositions.add(unit.unit().getPosition().toPoint2d());
-                        currentComposition.put(
-                                unit.unit().getType(),
-                                currentComposition.getOrDefault(unit.unit().getType(), 0) + 1);
                     }
                     return (unit != null && unit.isAlive());
                 })
@@ -127,19 +124,6 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
             waypointsCalculatedAt = gameLoop;
             calculateNewPath(data);
         }
-    }
-
-    protected int getAmountOfUnit(UnitType type) {
-        return currentComposition.getOrDefault(type, 0);
-    }
-
-    /**
-     * Default implementation of wantsUnit that looks at the current and desired composition.
-     */
-    @Override
-    public boolean wantsUnit(Unit unit) {
-        return requestingUnitTypes().stream().anyMatch(request ->
-                request.unitType().equals(unit.getType()) && getAmountOfUnit(unit.getType()) < request.amount());
     }
 
     private void calculateNewPath(AgentData data) {
@@ -488,34 +472,8 @@ public abstract class AbstractDefaultArmyTask implements ArmyTask {
     }
 
     @Override
-    public boolean addUnit(Tag unitTag) {
-        return armyUnits.add(unitTag);
-    }
-
-    @Override
-    public boolean hasUnit(Tag unitTag) {
-        return armyUnits.contains(unitTag);
-    }
-
-    @Override
-    public void onUnitIdle(UnitInPool unitTag) {
-
-    }
-
-    @Override
     public void setPathRules(MapAwareness.PathRules pathRules) {
         this.pathRules = pathRules;
-    }
-
-    /**
-     * Take all units from the other army. The other army becomes an empty army.
-     */
-    public void takeAllFrom(TerranBioArmyTask otherArmy) {
-        if (otherArmy == this) {
-            return;
-        }
-        this.armyUnits.addAll(otherArmy.armyUnits);
-        otherArmy.armyUnits.clear();
     }
 
     @Override
