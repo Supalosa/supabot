@@ -1,7 +1,13 @@
 package com.supalosa.bot.awareness;
 
+import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.Region;
 import org.immutables.value.Value;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Represents the dynamic data of a region (calculated periodically).
@@ -101,4 +107,24 @@ public interface RegionData {
 
     @Value.Default
     default double estimatedCreepPercentage() { return 0.0; }
+
+    /**
+     * Returns the borders of this region that face towards the enemy.
+     * The result is a map of the connected region ID and the tiles along
+     * that border.
+     */
+    @Value.Default
+    default Map<Integer, Set<Point2d>> borderTilesTowardsEnemy() {
+        return new HashMap<>();
+    }
+
+    /**
+     * Returns the borders of this region that face away from the enemy.
+     * The result is a map of the connected region ID and the tiles along
+     * that border.
+     */
+    @Value.Default
+    default Map<Integer, Set<Point2d>> borderTilesAwayFromEnemy() {
+        return new HashMap<>();
+    }
 }
