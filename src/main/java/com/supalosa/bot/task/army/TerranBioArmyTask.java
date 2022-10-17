@@ -189,7 +189,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                             });
                         });
                     }
-                    if (region.killzoneFactor() > 2.0) {
+                    if (region.killzoneFactor() > 2.5) {
                         // Find the (highest threat X lowest visibility) region near us and scan the midpoint between current region
                         // and that region.
                         List<RegionData> connectedRegionsByThreat = region.region().connectedRegions().stream()
