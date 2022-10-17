@@ -12,7 +12,8 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
-import com.supalosa.bot.utils.UnitComparator;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.List;
@@ -132,5 +133,10 @@ public class ScoutTask implements Task {
     @Override
     public String getDebugText() {
         return "Scout " + scoutTarget.map(point2d -> point2d.toString()).orElse("<unknown>") + " x(" + usedScouters + "/" + maxScouters + ")";
+    }
+
+    @Override
+    public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
+        return Optional.empty();
     }
 }

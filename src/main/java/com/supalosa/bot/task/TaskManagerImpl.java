@@ -3,15 +3,18 @@ package com.supalosa.bot.task;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskMessageResponse;
+import com.supalosa.bot.task.message.TaskPromise;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -176,5 +179,17 @@ public class TaskManagerImpl implements TaskManager {
                 return;
             }
         }
+    }
+
+    @Override
+    public List<TaskPromise> dispatchMessage(Task task, TaskMessage message) {
+        List<TaskPromise> responses = new ArrayList<>();
+        taskSet.values().forEach(respondingTask -> {
+            if (task != respondingTask) {
+                Optional<TaskPromise> response = respondingTask.onTaskMessage(task, message);
+                response.ifPresent(promise -> responses.add(promise));
+            }
+        });
+        return responses;
     }
 }

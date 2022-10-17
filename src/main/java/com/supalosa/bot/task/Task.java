@@ -1,13 +1,13 @@
 package com.supalosa.bot.task;
 
 import com.github.ocraft.s2client.bot.S2Agent;
-import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
-import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
-import com.supalosa.bot.placement.StructurePlacementCalculator;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskMessageResponse;
+import com.supalosa.bot.task.message.TaskPromise;
 
 import java.util.Optional;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 
 public interface Task {
 
@@ -42,4 +42,14 @@ public interface Task {
     void debug(S2Agent agent);
 
     String getDebugText();
+
+    /**
+     * Called when a task has sent a message.
+     *
+     * @param taskOrigin The task that sent the message.
+     * @param message The message from another task.
+     * @return If this task accepts the message, an optional promise that will be called when the
+     * task is resolved (successfully or not).
+     */
+    Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message);
 }

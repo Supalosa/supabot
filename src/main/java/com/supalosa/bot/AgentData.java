@@ -3,6 +3,7 @@ package com.supalosa.bot;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
+import com.supalosa.bot.task.TaskManager;
 
 import java.util.Optional;
 
@@ -17,4 +18,6 @@ public interface AgentData {
     MapAwareness mapAwareness();
 
     FightManager fightManager();
+
+    TaskManager taskManager();
 }

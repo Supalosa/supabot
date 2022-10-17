@@ -6,11 +6,12 @@ import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
-import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 
@@ -137,5 +138,10 @@ public class RepairTask implements Task {
     @Override
     public String getDebugText() {
         return "Repair " + repairTarget.map(tag -> tag.getValue().toString()).orElse("<unknown>") + " x(" + assignedRepairers.size() + "/" + targetRepairers + ")";
+    }
+
+    @Override
+    public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
+        return Optional.empty();
     }
 }

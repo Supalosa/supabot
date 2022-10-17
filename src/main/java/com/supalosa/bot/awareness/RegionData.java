@@ -98,4 +98,7 @@ public interface RegionData {
     default boolean hasEnemyBase() {
         return false;
     }
+
+    @Value.Default
+    default double estimatedCreepPercentage() { return 0.0; }
 }

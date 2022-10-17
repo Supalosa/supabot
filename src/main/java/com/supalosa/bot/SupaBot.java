@@ -44,6 +44,8 @@ import java.util.stream.Collectors;
 public class SupaBot extends S2Agent implements AgentData {
 
     private static final long GAS_CHECK_INTERVAL = 22L;
+    // expected amount before we start pulling workers from gas back to minerals.
+    public static final int MINIMUM_MINERAL_WORKERS_PER_CC = 14;
     private final TaskManager taskManager;
     private final FightManager fightManager;
     private final GameData gameData;
@@ -683,7 +685,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 Optional<Unit> nearCc = commandCentres.stream().filter(cc -> cc.getPosition().distance(refinery.getPosition()) < 10f).findAny();
                 int delta = refinery.getIdealHarvesters().get() - refinery.getAssignedHarvesters().get();
                 if (nearCc.isPresent()) {
-                    int desiredHarvesters = nearCc.get().getIdealHarvesters().orElse(0);
+                    int desiredHarvesters = Math.min(MINIMUM_MINERAL_WORKERS_PER_CC, nearCc.get().getIdealHarvesters().orElse(0));
                     int currentHarvesters = nearCc.get().getAssignedHarvesters().orElse(0);
                     if (currentHarvesters <= desiredHarvesters) {
                         // remove harvesters
@@ -955,5 +957,10 @@ public class SupaBot extends S2Agent implements AgentData {
     @Override
     public FightManager fightManager() {
         return fightManager;
+    }
+
+    @Override
+    public TaskManager taskManager() {
+        return taskManager;
     }
 }

@@ -10,7 +10,6 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
-import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
@@ -21,9 +20,13 @@ import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.task.message.*;
+import com.supalosa.bot.task.terran.ImmutableScanRequestTaskMessage;
+import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -73,7 +76,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 .amount(40)
                 .build()
         );
-        if (armyUnits.size() > 10) {
+        if (armyUnits.size() > 5) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_MARAUDER)
                     .productionAbility(Abilities.TRAIN_MARAUDER)
@@ -82,6 +85,8 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .amount(40)
                     .build()
             );
+        }
+        if (armyUnits.size() > 10) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_WIDOWMINE)
                     .alternateForm(Units.TERRAN_WIDOWMINE_BURROWED)
@@ -163,8 +168,69 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     actionInterface.unitCommand(armyUnits, Abilities.BURROW_UP_WIDOWMINE, false);
                 }
             }
+            // Scan if creep is nearby and there is no known base here.
+            // Also scan highground if killzone threat is high.
+            if (centreOfMass.isPresent()) {
+                final long scanRequiredBefore = observationInterface.getGameLoop() + 66L;
+                Optional<RegionData> thisRegion = centreOfMass.flatMap(point2d -> data.mapAwareness().getRegionDataForPoint(point2d));
+                thisRegion.ifPresent(region -> {
+                    if (region.estimatedCreepPercentage() > 0.25f && !region.hasEnemyBase()) {
+                        requestScannerSweep(data, centreOfMass.get(), scanRequiredBefore)
+                                .forEach(promise -> {
+                            promise.thenAccept(response -> {
+                                if (response instanceof OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) {
+                                    if (response.isSuccess()) {
+                                        Optional<Point2d> scannedPoint = ((OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) response).scannedPoint();
+                                        System.out.println("Bio army got a scan back [creep scan].");
+                                    } else {
+                                        System.out.println("Bio army scan was rejected [creep scan].");
+                                    }
+                                }
+                            });
+                        });
+                    }
+                    if (region.killzoneFactor() > 2.0) {
+                        // Find the (highest threat X lowest visibility) region near us and scan the midpoint between current region
+                        // and that region.
+                        List<RegionData> connectedRegionsByThreat = region.region().connectedRegions().stream()
+                                .map(nextRegionId -> data.mapAwareness().getRegionDataForId(nextRegionId))
+                                .filter(Optional::isPresent)
+                                .map(Optional::get)
+                                .sorted(Comparator.comparing((RegionData nextRegion) ->
+                                        nextRegion.enemyThreat() * (1.0 - nextRegion.visibilityPercent())
+                                ).reversed())
+                                .collect(Collectors.toList());
+                        if (connectedRegionsByThreat.size() > 0) {
+                            RegionData head = connectedRegionsByThreat.get(0);
+                            Point2d midPoint = head.region().centrePoint().add(region.region().centrePoint()).div(2f);
+                            requestScannerSweep(data, midPoint, scanRequiredBefore)
+                                    .forEach(promise -> {
+                                        promise.thenAccept(response -> {
+                                            if (response instanceof OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) {
+                                                if (response.isSuccess()) {
+                                                    Optional<Point2d> scannedPoint = ((OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) response).scannedPoint();
+                                                    System.out.println("Bio army got a scan back [highground scan].");
+                                                } else {
+                                                    System.out.println("Bio army scan was rejected [highground scan].");
+                                                }
+                                            }
+                                        });
+                                    });
+                        }
+                    }
+
+                });
+            }
         }
         return parentState;
+    }
+
+    private List<TaskPromise> requestScannerSweep(AgentData data, Point2d scanPosition, long scanRequiredBefore) {
+        return data.taskManager().dispatchMessage(this,
+                ImmutableScanRequestTaskMessage.builder()
+                        .point2d(scanPosition)
+                        .requiredBefore(scanRequiredBefore)
+                        .build());
     }
 
     @Override
@@ -312,5 +378,10 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     @Override
     public void onUnitIdle(UnitInPool unitTag) {
 
+    }
+
+    @Override
+    public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
+        return Optional.empty();
     }
 }

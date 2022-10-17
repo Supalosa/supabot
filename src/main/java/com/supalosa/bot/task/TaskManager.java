@@ -6,9 +6,14 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskMessageResponse;
+import com.supalosa.bot.task.message.TaskPromise;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 /**
@@ -82,4 +87,13 @@ public interface TaskManager {
      * Dispatch a unit to the tasks that might want it.
      */
     void dispatchUnit(Unit unit);
+
+    /**
+     * Dispatch a message to all other tasks. Multiple tasks can respond.
+     *
+     * @param task The task sending the message.
+     * @param message The message to send.
+     * @return A list of promises from tasks that responded.
+     */
+    List<TaskPromise> dispatchMessage(Task task, TaskMessage message);
 }

@@ -21,6 +21,7 @@ import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.analysis.Tile;
 import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.pathfinding.GraphUtils;
 import com.supalosa.bot.pathfinding.RegionGraph;
@@ -87,6 +88,15 @@ public class MapAwarenessImpl implements MapAwareness {
                 return Optional.empty();
             }
         });
+    }
+
+    @Override
+    public Optional<RegionData> getRegionDataForId(int regionId) {
+        if (regionData.containsKey(regionId)) {
+            return Optional.of(regionData.get(regionId));
+        } else {
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -257,12 +267,14 @@ public class MapAwarenessImpl implements MapAwareness {
             double maxEnemyThreat = 0;
             Map<Integer, Double> regionToEnemyThreat = new HashMap<>();
             Map<Integer, Double> regionToVisibility = new HashMap<>();
+            Map<Integer, Double> regionToCreep = new HashMap<>();
             Map<Integer, Double> regionToDecayingVisibility = new HashMap<>();
 
             for (Region region : analysisResults.getRegions()) {
                 Optional<RegionData> previousData = Optional.ofNullable(regionData.get(region.regionId()));
                 // Calculation and decay of region visibility.
                 double currentVisibility = calculateVisibilityOfRegion(agent.observation(), region, 0.33);
+                double currentCreep = calculateCreepCoverageOfRegion(agent.observation(), region, 0.33);
                 double decayingVisibilityValue = previousData.isEmpty() ?
                         currentVisibility :
                         Math.max(currentVisibility, previousData.get().decayingVisibilityPercent() * 0.95 - 0.01);
@@ -279,6 +291,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 regionToEnemyThreat.put(region.regionId(), threatValue);
                 regionToVisibility.put(region.regionId(), currentVisibility);
                 regionToDecayingVisibility.put(region.regionId(), decayingVisibilityValue);
+                regionToCreep.put(region.regionId(), currentCreep);
                 if (threatValue > maxEnemyThreat) {
                     maxEnemyThreat = threatValue;
                 }
@@ -315,7 +328,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 double decayingVisibilityPercent = regionToDecayingVisibility.get(region.regionId());
                 double enemyArmyFactor = 1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat);
                 double killzoneFactor = 1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0);
-
+                double regionCreepPercentage = regionToCreep.get(region.regionId());
                 ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
                         .region(region)
                         .weight(1.0) // TODO what to do with this?
@@ -328,7 +341,8 @@ public class MapAwarenessImpl implements MapAwareness {
                         .visibilityPercent(visibilityPercent)
                         .decayingVisibilityPercent(decayingVisibilityPercent)
                         .diffuseEnemyThreat(diffuseThreat.orElse(0.0))
-                        .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()));
+                        .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()))
+                        .estimatedCreepPercentage(regionCreepPercentage);
 
                regionData.put(region.regionId(), builder.build());
             });
@@ -382,6 +396,28 @@ public class MapAwarenessImpl implements MapAwareness {
      * @param resolution Approximate percentage of tiles to query. 1.0 for all tiles. 0.25 for quarter etc.
      */
     private double calculateVisibilityOfRegion(ObservationInterface observation, Region region, double resolution) {
+        return calculateValueOverRegion(region, resolution, tile -> observation.getVisibility(tile) == Visibility.VISIBLE);
+    }
+
+    /**
+     * Calculate the creep coverage of a given region.
+     *
+     * @param observation Observation interface to use.
+     * @param region Region to calculate.
+     * @param resolution Approximate percentage of tiles to query. 1.0 for all tiles. 0.25 for quarter etc.
+     */
+    private double calculateCreepCoverageOfRegion(ObservationInterface observation, Region region, double resolution) {
+        return calculateValueOverRegion(region, resolution, point -> observation.hasCreep(point));
+    }
+
+    /**
+     * Calculate a generalised boolean over a region.
+     *
+     * @param region Region to calculate.
+     * @param resolution Approximate percentage of tiles to query. 1.0 for all tiles. 0.25 for quarter etc.
+     * @param predicate Predicate to test on sampled tiles.
+     */
+    private double calculateValueOverRegion(Region region, double resolution, Function<Point2d, Boolean> predicate) {
         if (region.getTiles().size() == 0) {
             return 0.0;
         }
@@ -395,7 +431,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 Point2d point = Point2d.of((int)x, (int)y);
                 // TODO: maybe grid lookup is better for this test.
                 if (region.getTiles().contains(point)) {
-                    if (observation.getVisibility(point) == Visibility.VISIBLE) {
+                    if (predicate.apply(point)) {
                         visibleTiles++;
                     }
                     ++sampledTiles;

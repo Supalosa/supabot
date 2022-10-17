@@ -16,9 +16,9 @@ import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.ThreatCalculator;
-import com.supalosa.bot.task.DefaultTaskWithUnits;
-import com.supalosa.bot.task.TaskManager;
-import com.supalosa.bot.task.TaskResult;
+import com.supalosa.bot.task.*;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskPromise;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
@@ -522,6 +522,11 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         } else {
             return FightPerformance.BADLY_LOSING;
         }
+    }
+
+    @Override
+    public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
+        return Optional.empty();
     }
 
     /**

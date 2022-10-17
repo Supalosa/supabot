@@ -13,12 +13,13 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.task.DefaultTaskWithUnits;
-import com.supalosa.bot.task.Task;
-import com.supalosa.bot.task.TaskManager;
-import com.supalosa.bot.task.TaskResult;
+import com.supalosa.bot.task.*;
+import com.supalosa.bot.task.message.TaskMessage;
+import com.supalosa.bot.task.message.TaskMessageResponse;
+import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
+import org.immutables.value.Value;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,13 +29,37 @@ import java.util.stream.Collectors;
  */
 public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
 
+    @Value.Immutable
+    public interface ScanRequestTaskMessage extends TaskMessage {
+        /**
+         * Point that scan is requested.
+         */
+        Point2d point2d();
+
+        /**
+         * Game loop that the scan is required before.
+         */
+        long requiredBefore();
+    }
+
+    @Value.Immutable
+    public interface ScanRequestTaskMessageResponse extends TaskMessageResponse {
+        /**
+         * The point that was actually scanned (if one was used).
+         */
+        Optional<Point2d> scannedPoint();
+    }
+
     private List<UnitInPool> enemySiegeTanks = new ArrayList<>();
     private Map<Point, List<UnitInPool>> siegeTankClusters = new HashMap<>();
     private long lastSiegeTankSeenAt = 0L;
 
     private long siegeTankClustersCalculatedAt = 0L;
 
+    private final Map<ScanRequestTaskMessage, TaskPromise> scanRequests = new HashMap<>();
     private final Map<Point2d, Long> scannedClusters = new HashMap<>();
+    private long scanRequestsUpdatedAt = 0L;
+    private Map<Point2d, List<Point2d>> scanRequestClusters = new HashMap<>();
 
     public OrbitalCommandManagerTask(int priority) {
         super(priority);
@@ -99,10 +124,33 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
             }
         }
 
+        if (gameLoop > scanRequestsUpdatedAt + 11L) {
+            scanRequestsUpdatedAt = gameLoop;
+            if (scanRequests.size() > 0) {
+                List<Point2d> requestedPoints = scanRequests.keySet().stream()
+                        .filter(request -> request.requiredBefore() > gameLoop)
+                        .map(request -> request.point2d())
+                        .collect(Collectors.toList());
+                scanRequestClusters = Utils.clusterPoints(requestedPoints, 8f);
+                Set<ScanRequestTaskMessage> toRemove = new HashSet<>();
+                scanRequests.forEach((request, promise) -> {
+                    if (gameLoop > request.requiredBefore()) {
+                        promise.complete(ImmutableScanRequestTaskMessageResponse.builder()
+                                .respondingTask(this)
+                                .isSuccess(false)
+                                .build());
+                        toRemove.add(request);
+                    }
+                });
+                toRemove.forEach(key -> scanRequests.remove(key));
+            }
+        }
+
         if (siegeTankClusters.size() == 0) {
             // land mules and scan cloaked items
-            float reserveCcEnergy = (data.fightManager().hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
+            float reserveCcEnergy = (scanRequests.size() > 0 || data.fightManager().hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
             Set<Point2d> scanClusters = new HashSet<>(data.fightManager().getCloakedOrBurrowedUnitClusters());
+            scanClusters.addAll(scanRequestClusters.keySet());
             new HashMap<>(scannedClusters).forEach((scannedCluster, time) -> {
                 // Scan lasts for 12.3 seconds.
                 if (gameLoop > time + 22L * 12) {
@@ -117,7 +165,8 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
                         agent.actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
                     });
                 }
-                if (scanClusters.size() > 0) {
+                if (scanClusters.size() > 0 && unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > 50f) {
+                    Set<ScanRequestTaskMessage> scanRequestsToRemove = new HashSet<>();
                     scanClusters.stream().filter(scanPoint ->
                             // Return scan points that are not near an already scanned point.
                             !scannedClusters.keySet().stream()
@@ -126,7 +175,18 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
                         agent.actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
                         scannedClusters.put(scanPoint, gameLoop);
                         scanClusters.remove(scanPoint);
+                        scanRequests.forEach((request, promise) -> {
+                            if (scanPoint.distance(request.point2d()) < 8.0f) {
+                                promise.complete(ImmutableScanRequestTaskMessageResponse.builder()
+                                        .scannedPoint(scanPoint)
+                                        .respondingTask(this)
+                                        .isSuccess(true)
+                                        .build());
+                                scanRequestsToRemove.add(request);
+                            }
+                        });
                     });
+                    scanRequestsToRemove.forEach(key -> scanRequests.remove(key));
                 }
             });
         }
@@ -180,5 +240,18 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
         return new ArrayList<>();
+    }
+
+    @Override
+    public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
+        if (message instanceof ScanRequestTaskMessage) {
+            ScanRequestTaskMessage request = (ScanRequestTaskMessage)message;
+            if (!scanRequests.containsKey(request)) {
+                TaskPromise promise = new TaskPromise();
+                scanRequests.put(request, promise);
+                return Optional.of(promise);
+            }
+        }
+        return Optional.empty();
     }
 }

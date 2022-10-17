@@ -268,7 +268,7 @@ public class FightManager {
     public int getTargetMarines() {
         int attackingArmySize = attackingArmy.getSize();
         int myFoodCap = agent.observation().getFoodCap() - attackingArmySize;
-        int result = Math.max(10, Math.min(attackingArmySize / 4, (int)(myFoodCap * 0.25)));
+        int result = Math.max(20, Math.min(attackingArmySize / 4, (int)(myFoodCap * 0.25)));
         return result;
     }
 

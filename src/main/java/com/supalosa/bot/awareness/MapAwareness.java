@@ -30,6 +30,7 @@ public interface MapAwareness {
     }
 
     Optional<RegionData> getRegionDataForPoint(Point2d point);
+    Optional<RegionData> getRegionDataForId(int regionId);
 
     Optional<List<Region>> generatePath(Region startRegion, Region endRegion, PathRules rules);
 
