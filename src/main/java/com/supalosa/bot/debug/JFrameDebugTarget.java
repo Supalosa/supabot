@@ -87,7 +87,11 @@ public class JFrameDebugTarget implements DebugTarget {
                     placeable -> placeable ? WHITE : RED,
                     (existingValue, newValue) -> newValue == RED ? newValue : existingValue);
         });
-        double baseThreat = 50;
+        double maybeThreat = 50f;
+        if (data.mapAwareness().getLargestEnemyArmy().isPresent()) {
+            maybeThreat = data.mapAwareness().getLargestEnemyArmy().get().threat();
+        }
+        final double baseThreat = maybeThreat;
         data.mapAwareness().getAllRegionData().forEach(regionData -> {
             VisualisationUtils.renderTileSet(
                     regionBmp,
@@ -96,17 +100,19 @@ public class JFrameDebugTarget implements DebugTarget {
                         if (regionData.isBlocked()) {
                             return VisualisationUtils.makeRgb(128, 128, 128);
                         }
+                        double playerThreatFactor = Math.min(1.0, regionData.playerThreat() / baseThreat);
+                        double enemyThreatFactor = Math.min(1.0, regionData.enemyThreat() / baseThreat);
                         double visibilityFactor = Math.min(1.0, 0.15 + (regionData.decayingVisibilityPercent() * 0.85));
-                        double red = (255 - (int) (255 * regionData.playerThreat() / baseThreat)) * visibilityFactor;
-                        double green = (255 - (int) (255 * regionData.enemyThreat() / baseThreat)) * visibilityFactor;
-                        double blue = (255 - (int) (128 * regionData.playerThreat() / baseThreat)
-                                        - (int) (127 * regionData.enemyThreat() / baseThreat)) * visibilityFactor;
+                        double red = (255 - (int) (255 * playerThreatFactor)) * visibilityFactor;
+                        double green = (255 - (int) (255 * enemyThreatFactor)) * visibilityFactor;
+                        double blue = (255 - (int)(128 * playerThreatFactor) - (int)(127 * enemyThreatFactor)) * visibilityFactor;
                         return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     },
                     (_prevVal) -> {
+                        double diffuseThreatFactor = Math.min(1.0, regionData.diffuseEnemyThreat() / baseThreat);
                         double red = 255;
-                        double green = (255 - (int) (255 * regionData.diffuseEnemyThreat() / baseThreat));
-                        double blue = (255 - (int) (255 * regionData.diffuseEnemyThreat() / baseThreat));
+                        double green = (255 - (int) (255 * diffuseThreatFactor));
+                        double blue = (255 - (int) (255 * diffuseThreatFactor));
                         return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     });
             /*
@@ -147,7 +153,7 @@ public class JFrameDebugTarget implements DebugTarget {
             int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
             Font lastFont = g.getFont();
             g.setFont(lastFont.deriveFont(10.0f));
-            String regionText = Integer.toString(regionData.region().regionId());
+            String regionText = String.format("%.2f / %.2f", regionData.enemyThreat(), regionData.diffuseEnemyThreat());
             if (regionData.hasEnemyBase()) {
                 regionText += "B";
             }

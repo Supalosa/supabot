@@ -20,6 +20,11 @@ public class VisualisationUtils {
     static final int TILE_SIZE = 32;
     static final int LETTER_WIDTH = 5;
 
+    public static final int BLACK = makeRgb(0, 0, 0);
+    public static final int GREEN = makeRgb(0, 255, 0);
+    public static final int GRAY = makeRgb(128, 128, 128);
+    public static final int WHITE = makeRgb(255, 255, 255);
+
     private static int getInvertedY(int gameY, int gridHeight) {
         return gridHeight - gameY - 1;
     }
@@ -296,5 +301,45 @@ public class VisualisationUtils {
         for (int i = 0; i < characters.length; ++i) {
             drawLetter(canvas, x + (i * LETTER_WIDTH), y, characters[i], color);
         }
+    }
+
+    public static Function<Tile, Integer> getDistanceTransformRenderer() {
+        return tile -> {
+            if (!tile.pathable && !tile.placeable) {
+                return BLACK;
+            }
+            if (tile.isPostFilteredLocalMaximum) {
+                return GREEN;
+            }
+            if (tile.isLocalMaximum) {
+                return GRAY;
+            }
+            if (tile.distanceToBorder == 1) {
+                return WHITE;
+            }
+            float dbRatio = tile.distanceToBorder / 20f;
+            int colComponent = (int)(255 * dbRatio);
+            return VisualisationUtils.makeRgb(0, colComponent, colComponent);
+        };
+    }
+
+    public static Function<Tile, Integer> getRegionMapRenderer() {
+        return tile -> {
+            if (!tile.pathable && !tile.placeable) {
+                return BLACK;
+            }
+            if (tile.isPostFilteredLocalMaximum) {
+                return GREEN;
+            }
+            if (tile.distanceToBorder == 1) {
+                return WHITE;
+            }
+            int colComponent = (int)(tile.regionId);
+            colComponent = 31 * colComponent + (int) colComponent;
+            return VisualisationUtils.makeRgb(
+                    (colComponent ^ (colComponent >>> 3)) & 0xFF,
+                    (colComponent ^ (colComponent >>> 7)) & 0xFF,
+                    (colComponent ^ (colComponent >>> 11)) & 0xFF);
+        };
     }
 }

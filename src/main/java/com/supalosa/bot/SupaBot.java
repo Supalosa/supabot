@@ -315,7 +315,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (isDebug) {
             if (isSlow) {
                 try {
-                    Thread.sleep(80);
+                    Thread.sleep(200);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

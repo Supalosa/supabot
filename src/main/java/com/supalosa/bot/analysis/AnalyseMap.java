@@ -32,7 +32,6 @@ public class AnalyseMap {
      * @throws IOException
      */
     public static void main(String[] args) throws IOException {
-        File inputFile = new File("image.bmp");
         BufferedImage terrainBmp = ImageIO.read(new File("terrainHeight.bmp"));
         BufferedImage pathingBmp = ImageIO.read(new File("pathingGrid.bmp"));
         BufferedImage placementBmp = ImageIO.read(new File("placementGrid.bmp"));
@@ -50,40 +49,8 @@ public class AnalyseMap {
         StructurePlacementCalculator spc = new StructurePlacementCalculator(data, gameData, start);
         long endTime = System.currentTimeMillis();
 
-        niceRender("niceTransform.bmp", data, tile -> {
-            if (!tile.pathable && !tile.placeable) {
-                return BLACK;
-            }
-            if (tile.isPostFilteredLocalMaximum) {
-                return GREEN;
-            }
-            if (tile.isLocalMaximum) {
-                return GRAY;
-            }
-            if (tile.distanceToBorder == 1) {
-                return WHITE;
-            }
-            float dbRatio = tile.distanceToBorder / 20f;
-            int colComponent = (int)(255 * dbRatio);
-            return VisualisationUtils.makeRgb(0, colComponent, colComponent);
-        });
-        niceRender("regionMap.bmp", data, tile -> {
-            if (!tile.pathable && !tile.placeable) {
-                return BLACK;
-            }
-            if (tile.isPostFilteredLocalMaximum) {
-                return GREEN;
-            }
-            if (tile.distanceToBorder == 1) {
-                return WHITE;
-            }
-            int colComponent = (int)(tile.regionId);
-            colComponent = 31 * colComponent + (int) colComponent;
-            return VisualisationUtils.makeRgb(
-                    (colComponent ^ (colComponent >>> 3)) & 0xFF,
-                    (colComponent ^ (colComponent >>> 7)) & 0xFF,
-                    (colComponent ^ (colComponent >>> 11)) & 0xFF);
-        });
+        niceRender("niceTransform.bmp", 2.0, data, VisualisationUtils.getDistanceTransformRenderer());
+        niceRender("regionMap.bmp", 2.0, data, VisualisationUtils.getRegionMapRenderer());
         VisualisationUtils.writeCombinedData(start, Optional.empty(), data, "combined.bmp");
         PathfinderTest.run(data);
 
@@ -112,7 +79,7 @@ public class AnalyseMap {
         });
     }
 
-    private static Point2d findAnyPathable(Grid<Integer> pathing) {
+    public static Point2d findAnyPathable(Grid<Integer> pathing) {
         int iters = 0;
         while (++iters < 1000000) {
             int x = ThreadLocalRandom.current().nextInt(pathing.getWidth());
@@ -147,6 +114,8 @@ public class AnalyseMap {
         System.out.println("Start location=" + playerStartLocation.toPoint2d());
         //VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");
 
+        niceRender("niceTransform.bmp", 1.0, data, VisualisationUtils.getDistanceTransformRenderer());
+        niceRender("regionMap.bmp", 1.0, data, VisualisationUtils.getRegionMapRenderer());
         return data;
     }
 
@@ -165,41 +134,20 @@ public class AnalyseMap {
 
     private static BufferedImage convertImageDataToBufferedImage(ImageData imageData) {
         return imageData.getImage();
-        /*
-        // although we could use imageData.getImage(), we want to change it to a 3byte RGB.
-        BufferedImage img = new BufferedImage(
-                imageData.getSize().getX(),
-                imageData.getSize().getY(),
-                BufferedImage.TYPE_3BYTE_BGR);
-        for (int x = 0; x < imageData.getSize().getX(); ++x) {
-            for (int y = 0; y < imageData.getSize().getY(); ++y) {
-                int height = imageData.sample(Point2d.of(x, y), ImageData.Origin.UPPER_LEFT);
-                int rgb = VisualisationUtils.makeRgb(height, height, height);
-                //System.out.println("Height " + height + " = ratio " + ratio + "(" + heightMin + "/" + heightMax + "), BV " + byteValue + ", rgb " + rgb);
-                img.setRGB(x, y, rgb);
-            }
-        }
-        return img;*/
     }
 
     public static final int WHITE = VisualisationUtils.makeRgb(255, 255, 255);
-    public static final int BLACK = VisualisationUtils.makeRgb(0, 0, 0);
-    public static final int GREEN = VisualisationUtils.makeRgb(0, 255, 0);
-    public static final int GRAY = VisualisationUtils.makeRgb(128, 128, 128);
 
-    private static void niceRender(String fileName, AnalysisResults data, Function<Tile, Integer> tileRenderer) {
+    private static void niceRender(String fileName, double scale, AnalysisResults data, Function<Tile, Integer> tileRenderer) {
         BufferedImage niceBmp = VisualisationUtils.renderNewGrid(
                 data.getGrid(), tileRenderer);
 
-        //niceBmp.setRGB(48, niceBmp.getHeight() - 109, VisualisationUtils.makeRgb(255, 0, 0));
-        //niceBmp.setRGB(110, niceBmp.getHeight() - 161, VisualisationUtils.makeRgb(255, 0, 0));
-
         // scale the bitmap
         AffineTransform transform = new AffineTransform();
-        transform.scale(2.0, 2.0);
+        transform.scale(scale, scale);
         AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
 
-        BufferedImage after = new BufferedImage(niceBmp.getWidth() * 2, niceBmp.getHeight() * 2, BufferedImage.TYPE_3BYTE_BGR);
+        BufferedImage after = new BufferedImage((int)(niceBmp.getWidth() * scale), (int)(niceBmp.getHeight() * scale), BufferedImage.TYPE_3BYTE_BGR);
         File outputFile = new File(fileName);
         try {
             ImageIO.write(transformOp.filter(niceBmp, after), "bmp", outputFile);

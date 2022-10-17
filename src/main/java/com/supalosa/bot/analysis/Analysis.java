@@ -235,7 +235,7 @@ public class Analysis {
                     topOfRampPoints,
                     Ramp.calculateDirection(rampPoints, topOfRampPoints),
                     (int)((rampMaxHeight + rampMinHeight) / 2.0));
-            System.out.println("Ramp " + rampId + " is facing " + ramp.getRampDirection().name() + " and midheight " + ramp.getRampMidHeight());
+            //System.out.println("Ramp " + rampId + " is facing " + ramp.getRampDirection().name() + " and midheight " + ramp.getRampMidHeight());
             mapOfRamps.put(rampId, ramp);
         });
 
@@ -484,8 +484,8 @@ public class Analysis {
                     }
                     highGrounds.forEach(highGroundRegionId -> {
                         lowGrounds.forEach(lowGroundRegionId -> {
-                            System.out.println("Region " + highGroundRegionId + " >> " + lowGroundRegionId);
-                            System.out.println("Region " + lowGroundRegionId + " << " + highGroundRegionId);
+                            //System.out.println("Region " + highGroundRegionId + " >> " + lowGroundRegionId);
+                            //System.out.println("Region " + lowGroundRegionId + " << " + highGroundRegionId);
                             regionIsOnLowGroundOf.put(lowGroundRegionId, highGroundRegionId);
                             regionIsOnHighGroundOf.put(highGroundRegionId, lowGroundRegionId);
                         });

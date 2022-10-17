@@ -18,6 +18,9 @@ import java.util.stream.Collectors;
 
 public class RegionDataCalculator {
 
+    // This is the expected distance between each region.
+    static final double DIFFUSE_THREAT_CONSTANT = 5.0;
+
     private final ThreatCalculator threatCalculator;
 
     public RegionDataCalculator(ThreatCalculator threatCalculator) {
@@ -143,7 +146,7 @@ public class RegionDataCalculator {
         return result;
     }
 
-    private Optional<Double> getDiffuseEnemyThreatForRegion(AnalysisResults analysisResults,
+    Optional<Double> getDiffuseEnemyThreatForRegion(AnalysisResults analysisResults,
                                                             Map<Integer, Double> regionToEnemyThreat,
                                                             Region region) {
         // Diffuse threat is the sum of the threat of all other regions, modulated by the distance to those
@@ -158,8 +161,10 @@ public class RegionDataCalculator {
             Region head = openSet.poll();
             closedSet.add(head.regionId());
             double distance = distanceToRegion.getOrDefault(head.regionId(), 0.0);
-            double distanceFactor = 5.0 / Math.max(1.0, distance);
+            double distanceFactor = DIFFUSE_THREAT_CONSTANT / Math.max(DIFFUSE_THREAT_CONSTANT, distance);
             diffuseThreat += regionToEnemyThreat.getOrDefault(head.regionId(), 0.0) * distanceFactor;
+
+            //System.out.println("Region " + head.regionId() + " distance = " + distance + ", result " + diffuseThreat);
             head.connectedRegions().forEach(connectedRegionId -> {
                 if (closedSet.contains(connectedRegionId)) {
                     return;
