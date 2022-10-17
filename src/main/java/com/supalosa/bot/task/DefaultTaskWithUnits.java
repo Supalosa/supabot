@@ -80,9 +80,9 @@ public abstract class DefaultTaskWithUnits implements TaskWithUnits {
     }
 
     /**
-     * Take all units from the other army. The other army becomes an empty army.
+     * Take all units from the other task.
      */
-    public void takeAllFrom(TerranBioArmyTask otherArmy) {
+    public void takeAllFrom(DefaultTaskWithUnits otherArmy) {
         if (otherArmy == this) {
             return;
         }

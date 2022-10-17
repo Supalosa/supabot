@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 
 public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements ArmyTask {
 
-    private static final long NORMAL_UPDATE_INTERVAL = 11;
+    private static final long NORMAL_UPDATE_INTERVAL = 5;
     private static final long FAST_UPDATE_INTERVAL = 2;
     protected final String armyName;
     protected final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
