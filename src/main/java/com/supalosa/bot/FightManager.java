@@ -183,16 +183,18 @@ public class FightManager {
         this.setAttackPosition(attackPosition);
         // Select harass position with the lowest diffuse threat that is not close to the attack position.
         final double MIN_DISTANCE_FROM_ATTACK_POSITION = 25f;
-        // TODO - this is the max threat to harass a base.
-        double minThreat = 10f;
+        // Harass bases which have half the enemy army threat diffused to them.
+        double minDiffuseThreat = data.mapAwareness().getLargestEnemyArmy()
+                .map(army -> army.threat() / 2.0)
+                .orElse(20.0);
         RegionData minRegion = null;
         for (RegionData regionData : data.mapAwareness().getAllRegionData()) {
             if (attackPosition.isPresent() &&
                     regionData.region().centrePoint().distance(attackPosition.get()) > MIN_DISTANCE_FROM_ATTACK_POSITION) {
                 if (regionData.hasEnemyBase()) {
-                    if (regionData.diffuseEnemyThreat() < minThreat) {
+                    if (regionData.diffuseEnemyThreat() < minDiffuseThreat) {
                         minRegion = regionData;
-                        minThreat = regionData.diffuseEnemyThreat();
+                        minDiffuseThreat = regionData.diffuseEnemyThreat();
                     }
                 }
             }

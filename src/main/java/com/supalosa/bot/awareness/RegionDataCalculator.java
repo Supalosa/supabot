@@ -1,6 +1,7 @@
 package com.supalosa.bot.awareness;
 
 import com.github.ocraft.s2client.bot.S2Agent;
+import com.github.ocraft.s2client.bot.gateway.DebugInterface;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
@@ -30,7 +31,8 @@ public class RegionDataCalculator {
     public Map<Integer, RegionData> calculateRegionData(
             S2Agent agent,
             AnalysisResults analysisResults,
-            Map<Integer, RegionData> previousRegionData, List<Point2d> knownEnemyBases) {
+            Map<Integer, RegionData> previousRegionData,
+            List<Point2d> knownEnemyBases) {
         Map<Integer, RegionData> result = new HashMap<>();
 
         List<UnitInPool> allUnits = agent.observation().getUnits();
@@ -126,6 +128,13 @@ public class RegionDataCalculator {
             double enemyArmyFactor = 1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat);
             double killzoneFactor = 1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0);
             double regionCreepPercentage = regionToCreep.get(region.regionId());
+            Set<Point2d> borderTilesTowardsEnemy = calculateBorderTilesTowardsEnemy(region, previousRegionData);
+            OptionalDouble averageX = borderTilesTowardsEnemy.stream().mapToDouble(point -> point.getX()).average();
+            OptionalDouble averageY = borderTilesTowardsEnemy.stream().mapToDouble(point -> point.getY()).average();
+            Optional<Point2d> averageBorderTileTowardsEnemy = Optional.empty();
+            if (averageX.isPresent() && averageY.isPresent()) {
+                averageBorderTileTowardsEnemy = Optional.of(Point2d.of((float) averageX.getAsDouble(), (float) averageY.getAsDouble()));
+            }
             ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
                     .region(region)
                     .weight(1.0) // TODO what to do with this?
@@ -139,10 +148,50 @@ public class RegionDataCalculator {
                     .decayingVisibilityPercent(decayingVisibilityPercent)
                     .diffuseEnemyThreat(diffuseThreat.orElse(0.0))
                     .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()))
-                    .estimatedCreepPercentage(regionCreepPercentage);
+                    .estimatedCreepPercentage(regionCreepPercentage)
+                    .borderTilesTowardsEnemy(borderTilesTowardsEnemy)
+                    .bestTileTowardsEnemy(averageBorderTileTowardsEnemy);
 
             result.put(region.regionId(), builder.build());
         });
+        return result;
+    }
+
+    /**
+     * Return the border tiles which point towards the enemy.
+     */
+    private Set<Point2d> calculateBorderTilesTowardsEnemy(
+            Region region,
+            Map<Integer, RegionData> previousRegionData) {
+        Set<Point2d> result = new HashSet<>();
+        if (region.getBorderTiles().isPresent()) {
+            // We're using the previous region data as a shortcut here.
+            // Find the neighbouring region with the highest diffuse threat [on the previous update]
+            // Note the 1.0 is to prevent returning anything until we actually see the threat.
+            double maxDiffuseThreat = 1.0;
+            int maxDiffuseThreatRegion = -1;
+            for (Integer connectedRegionId : region.connectedRegions()) {
+                RegionData neighbouringRegionData = previousRegionData.get(connectedRegionId);
+                if (neighbouringRegionData == null) {
+                    continue;
+                }
+                if (maxDiffuseThreatRegion < 0 || neighbouringRegionData.diffuseEnemyThreat() > maxDiffuseThreat) {
+                    maxDiffuseThreat = neighbouringRegionData.diffuseEnemyThreat();
+                    maxDiffuseThreatRegion = connectedRegionId;
+                }
+            }
+            if (maxDiffuseThreatRegion > 0) {
+                RegionData highThreatDirection = previousRegionData.get(maxDiffuseThreatRegion);
+                if (highThreatDirection.region().getBorderTiles().isPresent()) {
+                    Set<Point2d> myBorderTiles = region.getBorderTiles().get();
+                    Set<Point2d> theirBorderTiles = highThreatDirection.region().getBorderTiles().get();
+                    result.addAll(myBorderTiles.stream().filter(myBorderTile ->
+                            theirBorderTiles.stream().anyMatch(theirBorderTile -> myBorderTile.distance(theirBorderTile) < 2f))
+                            .collect(Collectors.toSet()));
+                }
+            }
+        }
+
         return result;
     }
 

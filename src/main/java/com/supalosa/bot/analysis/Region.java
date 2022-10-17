@@ -19,5 +19,9 @@ public interface Region extends TileSet {
     List<Integer> onHighGroundOfRegions();
     Optional<Integer> getRampId();
     Point2d centrePoint();
+    /**
+     * Returns a pair of points which represent the bottom left and top right positions
+     * respectively.
+     */
     Pair<Point2d, Point2d> regionBounds();
 }

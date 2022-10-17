@@ -525,6 +525,22 @@ public class MapAwarenessImpl implements MapAwareness {
             agent.debug().debugSphereOut(point, army.size(), Color.RED);
             agent.debug().debugTextOut("[" + army.size() + ", " + army.threat() + "]", point, Color.WHITE, 10);
         });
+        this.regionData.values().forEach(regionData -> {
+            regionData.bestTileTowardsEnemy().ifPresent(bestTileTowardsEnemy -> {
+                float z = agent.observation().terrainHeight(bestTileTowardsEnemy);
+                Point point = Point.of(bestTileTowardsEnemy.getX(), bestTileTowardsEnemy.getY(), z);
+                agent.debug().debugSphereOut(point, 0.5f, Color.RED);
+                float z2 = agent.observation().terrainHeight(regionData.region().centrePoint()) + 1f;
+                Point regionCentrePoint = Point.of(regionData.region().centrePoint().getX(), regionData.region().centrePoint().getY(), z2);
+                agent.debug().debugLineOut(regionCentrePoint, point, Color.RED);
+            });
+            /*
+           regionData.borderTilesTowardsEnemy().forEach(borderTileTowardsEnemy -> {
+               float z = agent.observation().terrainHeight(borderTileTowardsEnemy);
+               Point point = Point.of(borderTileTowardsEnemy.getX(), borderTileTowardsEnemy.getY(), z);
+               agent.debug().debugSphereOut(point, 0.5f, Color.RED);
+           });*/
+        });
     }
 
     @Override

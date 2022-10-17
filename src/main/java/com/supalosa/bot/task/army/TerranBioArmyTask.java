@@ -179,12 +179,13 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                                 .forEach(promise -> {
                             promise.thenAccept(response -> {
                                 if (response instanceof OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) {
+                                    /*
                                     if (response.isSuccess()) {
                                         Optional<Point2d> scannedPoint = ((OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) response).scannedPoint();
                                         System.out.println("Bio army got a scan back [creep scan].");
                                     } else {
                                         System.out.println("Bio army scan was rejected [creep scan].");
-                                    }
+                                    }*/
                                 }
                             });
                         });
@@ -202,17 +203,18 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                                 .collect(Collectors.toList());
                         if (connectedRegionsByThreat.size() > 0) {
                             RegionData head = connectedRegionsByThreat.get(0);
-                            Point2d midPoint = head.region().centrePoint().add(region.region().centrePoint()).div(2f);
+                            Point2d midPoint = centreOfMass.get().add(region.region().centrePoint()).div(2f);
                             requestScannerSweep(data, midPoint, scanRequiredBefore)
                                     .forEach(promise -> {
                                         promise.thenAccept(response -> {
                                             if (response instanceof OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) {
+                                                /*
                                                 if (response.isSuccess()) {
                                                     Optional<Point2d> scannedPoint = ((OrbitalCommandManagerTask.ScanRequestTaskMessageResponse) response).scannedPoint();
                                                     System.out.println("Bio army got a scan back [highground scan].");
                                                 } else {
                                                     System.out.println("Bio army scan was rejected [highground scan].");
-                                                }
+                                                }*/
                                             }
                                         });
                                     });

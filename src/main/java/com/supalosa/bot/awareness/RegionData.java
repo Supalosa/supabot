@@ -4,10 +4,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.Region;
 import org.immutables.value.Value;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Represents the dynamic data of a region (calculated periodically).
@@ -110,21 +107,17 @@ public interface RegionData {
 
     /**
      * Returns the borders of this region that face towards the enemy.
-     * The result is a map of the connected region ID and the tiles along
-     * that border.
      */
     @Value.Default
-    default Map<Integer, Set<Point2d>> borderTilesTowardsEnemy() {
-        return new HashMap<>();
+    default Set<Point2d> borderTilesTowardsEnemy() {
+        return new HashSet<>();
     }
 
     /**
-     * Returns the borders of this region that face away from the enemy.
-     * The result is a map of the connected region ID and the tiles along
-     * that border.
+     * Returns the best tile that faces towards the enemy.
      */
     @Value.Default
-    default Map<Integer, Set<Point2d>> borderTilesAwayFromEnemy() {
-        return new HashMap<>();
+    default Optional<Point2d> bestTileTowardsEnemy() {
+        return Optional.empty();
     }
 }
