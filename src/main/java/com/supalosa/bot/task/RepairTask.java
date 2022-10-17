@@ -91,7 +91,7 @@ public class RepairTask implements Task {
                     UnitFilter.builder()
                             .alliance(Alliance.ENEMY)
                             .inRangeOf(unitToRepair.unit().getPosition().toPoint2d())
-                            .range(unitToRepair.unit().getRadius() + 3f)
+                            .range(unitToRepair.unit().getRadius() + 6f)
                             .build());
             targetRepairers = Math.max(1, Math.min((int)(unitToRepair.unit().getRadius()+2), unitsNearby.size()));
         }

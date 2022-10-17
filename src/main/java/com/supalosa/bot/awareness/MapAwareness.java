@@ -38,8 +38,6 @@ public interface MapAwareness {
 
     void setStartPosition(Point2d startPosition);
 
-    Optional<Point2d> getStartPosition();
-
     List<Point2d> getKnownEnemyBases();
 
     /**
@@ -100,4 +98,9 @@ public interface MapAwareness {
     Optional<Float> getObservedCreepCoverage();
 
     void setMapAnalysisResults(AnalysisResults mapAnalysis);
+
+    /**
+     * Returns the point that we should rally our units and defend from.
+     */
+    Optional<Point2d> getDefenceLocation();
 }

@@ -42,7 +42,6 @@ public class FightManager {
     private List<Point2d> cloakedOrBurrowedUnitClusters = new ArrayList<>();
 
     private boolean hasSeenCloakedOrBurrowedUnits = false;
-    private long lastDefenceCommand = 0L;
 
     private long positionalLogicUpdatedAt = 0L;
 
@@ -231,7 +230,7 @@ public class FightManager {
                 }
             }
             isDefending = true;
-        } else {
+        } else if (agent.observation().getFoodCap() < 50) { // TODO: This is a hardcoded hack
             data.structurePlacementCalculator().ifPresent(spc -> {
                 // Defend from behind the barracks, or else the position of the barracks.
                 Optional<Point2d> defencePosition = spc
@@ -240,6 +239,8 @@ public class FightManager {
                         .orElse(spc.getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d()));
                 this.setDefencePosition(defencePosition);
             });
+        } else {
+            this.setDefencePosition(data.mapAwareness().getDefenceLocation());
         }
         // hack, maybe?
         if (!isDefending && (reserveArmy.getSize()) >= getTargetMarines()) {

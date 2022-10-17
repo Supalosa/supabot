@@ -42,6 +42,7 @@ public class MapAwarenessImpl implements MapAwareness {
     private final Map<Expansion, Long> expansionLastAttempted = new HashMap<>();
     LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
     private Optional<List<Expansion>> expansionLocations = Optional.empty();
+    private Optional<Point2d> defenceLocation = Optional.empty();
 
     private long expansionsValidatedAt = 0L;
 
@@ -123,11 +124,6 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public void setStartPosition(Point2d startPosition) {
         this.startPosition = Optional.of(startPosition);
-    }
-
-    @Override
-    public Optional<Point2d> getStartPosition() {
-        return startPosition;
     }
 
     @Override
@@ -292,6 +288,22 @@ public class MapAwarenessImpl implements MapAwareness {
                 data.gameData().isStructure(unitInPool.unit().getType())
             ).stream().map(unitInPool -> unitInPool.unit()).collect(Collectors.toList());
             myDefendableStructures.addAll(structures);
+            // Defend the region with the majority of structures.
+            Map<Integer, Integer> regionToStructureValue = new HashMap<>();
+            myDefendableStructures.forEach(structure -> {
+                getRegionDataForPoint(structure.getPosition().toPoint2d()).ifPresent(regionData -> {
+                    regionToStructureValue.put(regionData.region().regionId(),
+                            regionToStructureValue.getOrDefault(regionData.region().regionId(), 0) +
+                                    data.gameData().getUnitMineralCost(structure.getType()).orElse(100));
+                });
+            });
+            defenceLocation = regionToStructureValue.entrySet().stream()
+                    .sorted(
+                            Comparator.comparing((Map.Entry<Integer, Integer> entry) -> entry.getValue())
+                                    .reversed())
+                    .findFirst()
+                    .flatMap(mostValuableRegionId -> getRegionDataForId(mostValuableRegionId.getKey()))
+                    .flatMap(RegionData::bestTileTowardsEnemy);
         }
     }
 
@@ -551,5 +563,10 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public void setMapAnalysisResults(AnalysisResults analysis) {
         this.mapAnalysisResults = Optional.of(analysis);
+    }
+
+    @Override
+    public Optional<Point2d> getDefenceLocation() {
+        return defenceLocation;
     }
 }

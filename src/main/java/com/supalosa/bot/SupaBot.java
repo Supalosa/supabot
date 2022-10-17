@@ -695,7 +695,6 @@ public class SupaBot extends S2Agent implements AgentData {
                     if (ccsDoneThisRun.contains(nearCc.get())) {
                         return;
                     }
-                    ccsDoneThisRun.add(nearCc.get());
                 }
                 if (delta > 0) {
                     List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
@@ -707,6 +706,7 @@ public class SupaBot extends S2Agent implements AgentData {
                     for (int i = 0; i < Math.min(nearbyScvs.size(), delta); ++i) {
                         actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, refinery, false);
                     }
+                    ccsDoneThisRun.add(nearCc.get());
                 } else if (nearCc.isPresent() && delta < 0) {
                     List<Unit> nearbyScvs = observation().getUnits(unitInPool ->
                             unitInPool.unit().getOrders().stream().anyMatch(order -> order.getTargetedUnitTag().equals(Optional.of(refinery.getTag()))) &&
@@ -719,6 +719,7 @@ public class SupaBot extends S2Agent implements AgentData {
                     for (int i = 0; i < Math.min(nearbyScvs.size(), Math.abs(delta)); ++i) {
                         actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, nearMinerals.get(), false);
                     }
+                    ccsDoneThisRun.add(nearCc.get());
                 }
             }
         });

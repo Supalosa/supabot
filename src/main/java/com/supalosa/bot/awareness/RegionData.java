@@ -116,8 +116,5 @@ public interface RegionData {
     /**
      * Returns the best tile that faces towards the enemy.
      */
-    @Value.Default
-    default Optional<Point2d> bestTileTowardsEnemy() {
-        return Optional.empty();
-    }
+    Optional<Point2d> bestTileTowardsEnemy();
 }
