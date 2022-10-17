@@ -10,14 +10,13 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class RepairTask implements Task {
@@ -25,11 +24,12 @@ public class RepairTask implements Task {
     private final String taskKey;
 
     private Optional<Tag> repairTarget = Optional.empty();
-    private List<Tag> assignedRepairers = List.of();
+    private Set<Tag> assignedRepairers = new HashSet<>();
     int targetRepairers = 1;
     private long lastRepairCountCheck = 0L;
 
     private boolean isComplete = false;
+    private boolean aborted = false;
 
     public RepairTask(Tag tag) {
         this.repairTarget = Optional.of(tag);
@@ -54,6 +54,13 @@ public class RepairTask implements Task {
         }
         if (Float.compare(unitToRepair.unit().getHealth().get(), unitToRepair.unit().getHealthMax().get()) == 0) {
             isComplete = true;
+            return;
+        }
+        if (aborted) {
+            isComplete = true;
+            if (assignedRepairers.size() > 0) {
+                agent.actions().unitCommand(assignedRepairers, Abilities.STOP, false);
+            }
             return;
         }
 
@@ -88,7 +95,7 @@ public class RepairTask implements Task {
                             .build());
             targetRepairers = Math.max(1, Math.min((int)(unitToRepair.unit().getRadius()+2), unitsNearby.size()));
         }
-        assignedRepairers = repairers.stream().map(unit -> unit.getTag()).collect(Collectors.toList());
+        assignedRepairers = repairers.stream().map(unit -> unit.getTag()).collect(Collectors.toSet());
         if (repairers.size() > 0) {
             // TODO maybe better repair task.
             agent.actions().unitCommand(repairers, Abilities.EFFECT_REPAIR, unitToRepair.unit(), false);
@@ -142,6 +149,12 @@ public class RepairTask implements Task {
 
     @Override
     public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
-        return Optional.empty();
+        // Abort repair task if worker rush detected.
+        if (message instanceof TerranWorkerRushDefenceTask.WorkerRushDetected) {
+            this.aborted = true;
+            return Optional.empty();
+        } else {
+            return Optional.empty();
+        }
     }
 }

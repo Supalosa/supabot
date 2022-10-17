@@ -14,6 +14,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
+import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 
@@ -43,6 +44,8 @@ public class BuildStructureTask implements Task {
     private long buildAttempts = 0;
     private boolean isComplete = false;
 
+    private boolean aborted = false;
+
     public BuildStructureTask(Ability ability,
                               UnitType targetUnitType,
                               Optional<Point2d> location,
@@ -62,6 +65,13 @@ public class BuildStructureTask implements Task {
 
     @Override
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+        if (aborted) {
+            isComplete = true;
+            if (assignedWorker.isPresent()) {
+                agent.actions().unitCommand(assignedWorker.get(), Abilities.STOP, false);
+            }
+            return;
+        }
         Optional<UnitInPool> worker = Optional.empty();
         if (assignedWorker.isEmpty()) {
             assignedWorker = taskManager.findFreeUnitForTask(
@@ -264,6 +274,10 @@ public class BuildStructureTask implements Task {
 
     @Override
     public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
+        // Abort construction task if worker rush detected.
+        if (message instanceof TerranWorkerRushDefenceTask.WorkerRushDetected) {
+            this.aborted = true;
+        }
         return Optional.empty();
     }
 }

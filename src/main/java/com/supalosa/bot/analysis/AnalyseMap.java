@@ -1,6 +1,7 @@
 package com.supalosa.bot.analysis;
 
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
+import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
 import com.github.ocraft.s2client.protocol.spatial.Point;
@@ -43,6 +44,7 @@ public class AnalyseMap {
         Point2d start = findAnyPathable(pathing);
 
         long startTime = System.currentTimeMillis();
+        // TODO: process observations offline.
         AnalysisResults data = Analysis.run(start, terrain, pathing, placement);
         GameData gameData = new GameData(null);
         StructurePlacementCalculator spc = new StructurePlacementCalculator(data, gameData, start);
@@ -88,6 +90,28 @@ public class AnalyseMap {
         System.out.println("Calculation took " + (endTime - startTime) + "ms");
     }
 
+    /**
+     * Remove observations (such as initial structures, minerals, rocks) from the map.
+     */
+    private static void processObservations(List<UnitInPool> observations, GameData data, Grid<Integer> pathing, Grid<Integer> placement) {
+        observations.forEach(unitInPool -> {
+            data.getUnitFootprint(unitInPool.unit().getType()).ifPresent(footprint -> {
+                float x = unitInPool.unit().getPosition().getX();
+                float y = unitInPool.unit().getPosition().getY();
+                float w = footprint.getX();
+                float h = footprint.getY();
+                // Note that a structure's origin is at its centre (biased to northeast for even numbers, hence the `ceil`)
+                int xStart = (int)Math.ceil(x - w / 2);
+                int yStart = (int)Math.ceil(y - h / 2);
+                for (int xx = xStart; xx < xStart + w; ++xx) {
+                    for (int yy = yStart; yy < yStart + h; ++yy) {
+                        pathing.set(xx, yy, Integer.MAX_VALUE);
+                    }
+                }
+            });
+        });
+    }
+
     private static Point2d findAnyPathable(Grid<Integer> pathing) {
         int iters = 0;
         while (++iters < 1000000) {
@@ -107,7 +131,7 @@ public class AnalyseMap {
      * @param startRaw
      * @return
      */
-    public static AnalysisResults analyse(ObservationInterface observationInterface, StartRaw startRaw) {
+    public static AnalysisResults analyse(ObservationInterface observationInterface, GameData gameData, StartRaw startRaw) {
         BufferedImage terrainBmp = writeImageData(startRaw, startRaw.getTerrainHeight(), "terrainHeight.bmp");
         BufferedImage pathingBmp = writeImageData(startRaw, startRaw.getPathingGrid(), "pathingGrid.bmp");
         BufferedImage placementBmp = writeImageData(startRaw, startRaw.getPlacementGrid(), "placementGrid.bmp");
@@ -117,6 +141,8 @@ public class AnalyseMap {
         Grid placement = new BitmapGrid(placementBmp);
 
         Point playerStartLocation = observationInterface.getStartLocation();
+        List<UnitInPool> observations = observationInterface.getUnits();
+        processObservations(observations, gameData, pathing, placement);
         AnalysisResults data = Analysis.run(playerStartLocation.toPoint2d(), terrain, pathing, placement);
         System.out.println("Start location=" + playerStartLocation.toPoint2d());
         //VisualisationUtils.writeCombinedData(playerStartLocation.toPoint2d(), Optional.of(startRaw), data, "combined.bmp");

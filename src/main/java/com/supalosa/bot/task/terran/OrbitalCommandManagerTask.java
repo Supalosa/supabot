@@ -131,7 +131,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
                         .filter(request -> request.requiredBefore() > gameLoop)
                         .map(request -> request.point2d())
                         .collect(Collectors.toList());
-                scanRequestClusters = Utils.clusterPoints(requestedPoints, 8f);
+                scanRequestClusters = Utils.clusterPoints(requestedPoints, 10f);
                 Set<ScanRequestTaskMessage> toRemove = new HashSet<>();
                 scanRequests.forEach((request, promise) -> {
                     if (gameLoop > request.requiredBefore()) {
@@ -176,7 +176,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
                         scannedClusters.put(scanPoint, gameLoop);
                         scanClusters.remove(scanPoint);
                         scanRequests.forEach((request, promise) -> {
-                            if (scanPoint.distance(request.point2d()) < 8.0f) {
+                            if (scanPoint.distance(request.point2d()) < 12.0f) {
                                 promise.complete(ImmutableScanRequestTaskMessageResponse.builder()
                                         .scannedPoint(scanPoint)
                                         .respondingTask(this)

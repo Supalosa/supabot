@@ -67,6 +67,10 @@ public class GameData {
         UnitTypeData unitTypeData = getOrInitUnitTypeData().get(unitType);
         if (unitTypeData == null) {
             return Optional.empty();
+        } else if (Constants.MINERAL_TYPES.contains(unitType)) {
+            return Optional.of(Point2d.of(2f, 1f));
+        } else if (Constants.VESPENE_GEYSER_TYPES.contains(unitType)) {
+            return Optional.of(Point2d.of(2f, 2f));
         } else {
             Optional<Ability> maybeAbility = unitTypeData.getAbility();
             if (maybeAbility.isEmpty()) {

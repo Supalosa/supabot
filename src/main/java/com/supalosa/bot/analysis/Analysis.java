@@ -1,5 +1,6 @@
 package com.supalosa.bot.analysis;
 
+import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashMultimap;

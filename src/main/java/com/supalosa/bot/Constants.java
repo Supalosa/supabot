@@ -59,6 +59,12 @@ public class Constants {
             Units.NEUTRAL_SHAKURAS_VESPENE_GEYSER, Units.NEUTRAL_RICH_VESPENE_GEYSER
     ));
 
+    public static final Set<UnitType> WORKER_TYPES = Set.of(
+            Units.TERRAN_SCV,
+            Units.ZERG_DRONE,
+            Units.PROTOSS_PROBE
+    );
+
     /**
      * Units that we will classify as 'army', so not harrassment units.
      */
@@ -73,6 +79,8 @@ public class Constants {
             Units.TERRAN_THOR,
             Units.TERRAN_THOR_AP,
             Units.TERRAN_BATTLECRUISER,
+            Units.TERRAN_BUNKER,
+            Units.TERRAN_PLANETARY_FORTRESS,
             Units.ZERG_ZERGLING,
             Units.ZERG_ROACH,
             Units.ZERG_BANELING,
@@ -83,8 +91,10 @@ public class Constants {
             Units.ZERG_CORRUPTOR,
             Units.ZERG_RAVAGER,
             Units.ZERG_QUEEN, // thanks to queen bot
+            Units.ZERG_SPINE_CRAWLER,
             Units.PROTOSS_ZEALOT,
             Units.PROTOSS_ADEPT,
+            Units.PROTOSS_ADEPT_PHASE_SHIFT,
             Units.PROTOSS_ARCHON,
             Units.PROTOSS_COLOSSUS,
             Units.PROTOSS_IMMORTAL,
@@ -92,5 +102,6 @@ public class Constants {
             Units.PROTOSS_TEMPEST,
             Units.PROTOSS_SENTRY,
             Units.PROTOSS_DISRUPTOR,
-            Units.PROTOSS_STALKER);
+            Units.PROTOSS_STALKER,
+            Units.PROTOSS_PHOTON_CANNON);
 }

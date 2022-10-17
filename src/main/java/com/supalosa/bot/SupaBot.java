@@ -93,6 +93,7 @@ public class SupaBot extends S2Agent implements AgentData {
         this.unitTypeData = observation().getUnitTypeData(true);
         mapAnalysis = observation().getGameInfo().getStartRaw().map(startRaw -> AnalyseMap.analyse(
                 observation(),
+                gameData,
                 startRaw));
         structurePlacementCalculator = mapAnalysis
                 .map(analysisResults -> new StructurePlacementCalculator(analysisResults, gameData,

@@ -16,6 +16,7 @@ import java.awt.image.BufferedImage;
 public class JFrameDebugTarget implements DebugTarget {
 
     public static final int WHITE = VisualisationUtils.makeRgb(255, 255, 255);
+    public static final int GRAY = VisualisationUtils.makeRgb(128, 128, 128);
     public static final int BLACK = VisualisationUtils.makeRgb(0, 0, 0);
     public static final int RED = VisualisationUtils.makeRgb(255, 0, 0);
     public static final double OUTPUT_SCALE_FACTOR = 4.0;
@@ -67,6 +68,9 @@ public class JFrameDebugTarget implements DebugTarget {
                     }
                     if (tile.distanceToBorder == 1) {
                         return WHITE;
+                    }
+                    if (!tile.pathable) {
+                        return GRAY;
                     }
                     float dbRatio = tile.distanceToBorder / distanceToBorderMax;
                     int colComponent = (int)(255 * dbRatio);
