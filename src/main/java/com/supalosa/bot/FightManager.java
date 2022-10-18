@@ -182,7 +182,7 @@ public class FightManager {
     private void updateTargetingLogic(AgentData data) {
         // Select attack position.
         Optional<Point2d> attackPosition;
-        if (data.mapAwareness().getLargestEnemyArmy().isEmpty()) {
+        if (data.enemyAwareness().getLargestEnemyArmy().isEmpty()) {
             attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemy();
         } else {
             // TODO: defend if my regions are under threat.
@@ -192,7 +192,7 @@ public class FightManager {
         // Select harass position with the lowest diffuse threat that is not close to the attack position.
         final double MIN_DISTANCE_FROM_ATTACK_POSITION = 25f;
         // Harass bases which have half the enemy army threat diffused to them.
-        double minDiffuseThreat = data.mapAwareness().getLargestEnemyArmy()
+        double minDiffuseThreat = data.enemyAwareness().getLargestEnemyArmy()
                 .map(army -> army.threat() / 2.0)
                 .orElse(20.0);
         RegionData minRegion = null;
@@ -215,7 +215,7 @@ public class FightManager {
         }
         this.setHarassPosition(harassPosition);
         Optional<Point2d> finalHarassPosition = harassPosition;
-        data.mapAwareness().getLargestEnemyArmy().ifPresent(enemyArmy -> {
+        data.enemyAwareness().getLargestEnemyArmy().ifPresent(enemyArmy -> {
             FightPerformance predictedOutcome = attackingArmy.predictFightAgainst(enemyArmy);
             if (predictedOutcome != FightPerformance.WINNING) {
                 if (finalHarassPosition.isPresent()) {
@@ -230,7 +230,7 @@ public class FightManager {
         if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
             // Enemy detected near our base, attack them.
             this.setDefencePosition(nearestEnemy);
-            Optional<Army> attackingEnemyArmy = data.mapAwareness().getMaybeEnemyArmy(nearestEnemy.get());
+            Optional<Army> attackingEnemyArmy = data.enemyAwareness().getMaybeEnemyArmy(nearestEnemy.get());
             if (attackingEnemyArmy.isPresent()) {
                 FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(attackingEnemyArmy.get());
                 if (predictedOutcome == FightPerformance.BADLY_LOSING) {

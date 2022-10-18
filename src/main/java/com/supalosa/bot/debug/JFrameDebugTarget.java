@@ -89,8 +89,8 @@ public class JFrameDebugTarget implements DebugTarget {
                     placeable -> placeable ? WHITE : RED,
                     (existingValue, newValue) -> newValue == RED ? newValue : existingValue);
         });
-        if (data.mapAwareness().getLargestEnemyArmy().isPresent()) {
-            baselineThreat = Math.max(100f, data.mapAwareness().getLargestEnemyArmy().get().threat());
+        if (data.enemyAwareness().getLargestEnemyArmy().isPresent()) {
+            baselineThreat = Math.max(100f, data.enemyAwareness().getLargestEnemyArmy().get().threat());
         } else {
             baselineThreat = Math.max(100f, baselineThreat * 0.95);
         }

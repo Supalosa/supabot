@@ -27,7 +27,6 @@ import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MapAwarenessImpl implements MapAwareness {
@@ -51,10 +50,6 @@ public class MapAwarenessImpl implements MapAwareness {
     private final long myDefendableStructuresCalculatedAt = 0L;
     private List<Unit> myDefendableStructures = new ArrayList<>();
 
-    private long maybeEnemyArmyCalculatedAt = 0L;
-    private Optional<ImmutableArmy> maybeLargestEnemyArmy = Optional.empty();
-    private Map<Point, ImmutableArmy> enemyClusters = new HashMap<>();
-
     private Optional<ImageData> cachedCreepMap = Optional.empty();
     private Optional<Float> creepCoveragePercentage = Optional.empty();
     private long creepMapUpdatedAt = 0L;
@@ -70,15 +65,14 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<AnalysisResults> mapAnalysisResults = Optional.empty();
 
     private ThreatCalculator threatCalculator;
-    private long enemyBasesUpdatedAt = 0L;
 
     private final RegionDataCalculator regionDataCalculator;
 
     public MapAwarenessImpl(ThreatCalculator threatCalculator) {
         this.startPosition = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
-        this.threatCalculator = threatCalculator;
         this.regionDataCalculator = new RegionDataCalculator(threatCalculator);
+        this.threatCalculator = threatCalculator;
     }
 
     @Override
@@ -173,57 +167,6 @@ public class MapAwarenessImpl implements MapAwareness {
         analyseCreep(data, agent);
         updateRegionData(data, agent);
 
-        if (agent.observation().getGameLoop() > maybeEnemyArmyCalculatedAt + 22L) {
-            maybeEnemyArmyCalculatedAt = agent.observation().getGameLoop();
-            List<UnitInPool> enemyArmy = agent.observation().getUnits(
-                    UnitFilter.builder()
-                            .alliance(Alliance.ENEMY)
-                            .unitTypes(Constants.ARMY_UNIT_TYPES)
-                            .build());
-            Map<Point,List<UnitInPool>> clusters = Expansions.cluster(enemyArmy, 10f);
-
-            // Army threat decays slowly
-            if (maybeLargestEnemyArmy.isPresent() && agent.observation().getVisibility(maybeLargestEnemyArmy.get().position()) == Visibility.VISIBLE) {
-                maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
-                        .withSize(army.size() * 0.5f - 1.0f)
-                        .withThreat(army.threat() * 0.5f - 1.0f));
-            } else {
-                maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
-                        .withSize(army.size() * 0.999f)
-                        .withThreat(army.threat() * 0.999f));
-            }
-            maybeLargestEnemyArmy = maybeLargestEnemyArmy.filter(army -> army.size() > 1.0);
-            if (clusters.size() > 0) {
-                int biggestArmySize = Integer.MIN_VALUE;
-                this.enemyClusters = new HashMap();
-                Point biggestArmy = null;
-                for (Map.Entry<Point, List<UnitInPool>> entry : clusters.entrySet()) {
-                    Point point = entry.getKey();
-                    List<UnitInPool> units = entry.getValue();
-                    Collection<UnitType> composition = getComposition(units);
-                    double threat = threatCalculator.calculateThreat(composition);
-                    if (threat > 5.0f) {
-                        enemyClusters.put(point, ImmutableArmy.builder()
-                                .position(point.toPoint2d())
-                                .size(units.size())
-                                .composition(composition)
-                                .threat(threat)
-                                .build());
-                        int size = units.size();
-                        if (size > biggestArmySize) {
-                            biggestArmySize = size;
-                            biggestArmy = point;
-                        }
-                    }
-                }
-                if (biggestArmy != null) {
-                    if (this.maybeLargestEnemyArmy.isEmpty() || biggestArmySize > this.maybeLargestEnemyArmy.get().size()) {
-                        this.maybeLargestEnemyArmy = Optional.of(enemyClusters.get(biggestArmy));
-                    }
-                }
-            }
-        }
-
         lockedScoutTarget = lockedScoutTarget.filter(point2d ->
                 agent.observation().getVisibility(point2d) != Visibility.VISIBLE);
 
@@ -280,10 +223,6 @@ public class MapAwarenessImpl implements MapAwareness {
         return creepCoveragePercentage;
     }
 
-    private Collection<UnitType> getComposition(List<UnitInPool> unitInPools) {
-        return unitInPools.stream().map(unitInPool -> unitInPool.unit().getType()).collect(Collectors.toList());
-    }
-
     private void updateMyDefendableStructures(AgentData data, ObservationInterface observation) {
         long gameLoop = observation.getGameLoop();
         if (gameLoop > myDefendableStructuresCalculatedAt + 22L * 4) {
@@ -312,16 +251,6 @@ public class MapAwarenessImpl implements MapAwareness {
     }
 
     @Override
-    public Optional<Point2d> getMaybeEnemyPositionNearEnemy() {
-        return maybeEnemyPositionNearEnemy;
-    }
-
-    @Override
-    public Optional<Point2d> getMaybeEnemyPositionNearBase() {
-        return maybeEnemyPositionNearBase;
-    }
-
-    @Override
     public boolean shouldDefendLocation(Point2d location) {
         for (Unit unit : myDefendableStructures) {
             if (location.distance(unit.getPosition().toPoint2d()) < 10f) {
@@ -332,26 +261,15 @@ public class MapAwarenessImpl implements MapAwareness {
     }
 
     @Override
-    public Optional<Army> getMaybeEnemyArmy(Point2d point2d) {
-        Point closest = null;
-        double closestDistance = Float.MAX_VALUE;
-        for (Map.Entry<Point, ImmutableArmy> entry : this.enemyClusters.entrySet()) {
-            Point point = entry.getKey();
-            ImmutableArmy army = entry.getValue();
-            double distance = point2d.distance(point.toPoint2d());
-            // TODO configurable distance.
-            if (distance < 25f && distance < closestDistance) {
-                closestDistance = distance;
-                closest = point;
-            }
-        }
-        return Optional.ofNullable(this.enemyClusters.get(closest));
+    public Optional<Point2d> getMaybeEnemyPositionNearEnemy() {
+        return maybeEnemyPositionNearEnemy;
     }
 
     @Override
-    public Optional<Army> getLargestEnemyArmy() {
-        return maybeLargestEnemyArmy.map(Function.identity());
+    public Optional<Point2d> getMaybeEnemyPositionNearBase() {
+        return maybeEnemyPositionNearBase;
     }
+
 
     private void updateExpansionsAndBases(ObservationInterface observationInterface, QueryInterface queryInterface) {
         long gameLoop = observationInterface.getGameLoop();
@@ -532,15 +450,6 @@ public class MapAwarenessImpl implements MapAwareness {
 
     @Override
     public void debug(S2Agent agent) {
-        this.enemyClusters.forEach((point, units) -> {
-            agent.debug().debugSphereOut(point, units.size(), Color.RED);
-        });
-        maybeLargestEnemyArmy.ifPresent(army -> {
-            float z = agent.observation().terrainHeight(army.position());
-            Point point = Point.of(army.position().getX(), army.position().getY(), z);
-            agent.debug().debugSphereOut(point, army.size(), Color.RED);
-            agent.debug().debugTextOut("[" + army.size() + ", " + army.threat() + "]", point, Color.WHITE, 10);
-        });
         this.regionData.values().forEach(regionData -> {
             regionData.bestTileTowardsEnemy().ifPresent(bestTileTowardsEnemy -> {
                 float z = agent.observation().terrainHeight(bestTileTowardsEnemy);

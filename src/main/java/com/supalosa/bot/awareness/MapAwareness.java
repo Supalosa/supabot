@@ -86,15 +86,6 @@ public interface MapAwareness {
      */
     boolean shouldDefendLocation(Point2d location);
 
-    /**
-     * Returns the potential location of the enemy army nearest to a given position.
-     * If there are multiple armies, it is the biggest one we see.
-     * @param point2d
-     */
-    Optional<Army> getMaybeEnemyArmy(Point2d point2d);
-
-    Optional<Army> getLargestEnemyArmy();
-
     Optional<Point2d> findEnemyPositionNearPoint(ObservationInterface observationInterface, Point2d point);
 
     void debug(S2Agent supaBot);

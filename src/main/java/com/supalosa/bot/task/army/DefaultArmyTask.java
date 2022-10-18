@@ -237,7 +237,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         final Optional<Point2d> suggestedRetreatMovePosition = (getFightPerformance() == FightPerformance.WINNING) ?
                 suggestedAttackMovePosition :
                 retreatPosition;
-        Optional<Army> enemyArmy = centreOfMass.flatMap(point2d -> data.mapAwareness().getMaybeEnemyArmy(point2d));
+        Optional<Army> enemyArmy = centreOfMass.flatMap(point2d -> data.enemyAwareness().getMaybeEnemyArmy(point2d));
         switch (aggressionState) {
             case ATTACKING:
             default:
