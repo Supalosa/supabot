@@ -316,8 +316,9 @@ public class TerranBioArmyTask extends DefaultArmyTask {
         AtomicInteger stimmedMarauders = new AtomicInteger(0);
         Set<Tag> marinesWithoutStim = observationInterface.getUnits(unitInPool ->
                 unitsToAttackWith.contains(unitInPool.getTag()) &&
+                        maybeEnemyArmy.flatMap(Army::position).isPresent() &&
                         (unitInPool.unit().getType() == Units.TERRAN_MARINE) &&
-                        unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
+                        unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.flatMap(Army::position).get()) < 10f &&
                         unitInPool.unit().getHealth().filter(health -> health > 25f).isPresent()
         ).stream().filter(unitInPool -> {
             if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK)) {
@@ -330,8 +331,9 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
         Set<Tag> maraudersWithoutStim = observationInterface.getUnits(unitInPool ->
                 unitsToAttackWith.contains(unitInPool.getTag()) &&
+                        maybeEnemyArmy.flatMap(Army::position).isPresent() &&
                         (unitInPool.unit().getType() == Units.TERRAN_MARAUDER) &&
-                        unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.get().position()) < 10f &&
+                        unitInPool.unit().getPosition().toPoint2d().distance(maybeEnemyArmy.flatMap(Army::position).get()) < 10f &&
                         unitInPool.unit().getHealth().filter(health -> health > 40f).isPresent()
         ).stream().filter(unitInPool -> {
             if (unitInPool.unit().getBuffs().contains(Buffs.STIMPACK_MARAUDER)) {

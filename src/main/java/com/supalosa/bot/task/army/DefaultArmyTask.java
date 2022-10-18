@@ -308,9 +308,9 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         previousEnemyArmyObservation = enemyArmy;
         previousComposition = new HashMap<>(currentComposition);
         // If the enemy army is near us, update more frequently.
-        if (enemyArmy.isPresent() &&
+        if (enemyArmy.flatMap(Army::position).isPresent() &&
                 centreOfMass.isPresent() &&
-                enemyArmy.get().position().distance(centreOfMass.get()) < 20.0) {
+                enemyArmy.flatMap(Army::position).get().distance(centreOfMass.get()) < 20.0) {
             return FAST_UPDATE_INTERVAL;
         }
         return NORMAL_UPDATE_INTERVAL;

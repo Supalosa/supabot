@@ -9,6 +9,9 @@ import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansions;
@@ -23,7 +26,20 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
 
     private long maybeEnemyArmyCalculatedAt = 0L;
     private Optional<ImmutableArmy> maybeLargestEnemyArmy = Optional.empty();
+    // The potential full size of the enemy army.
+    private Optional<Army> potentialEnemyArmy = Optional.empty();
+    private Optional<Army> missingEnemyArmy;
+
+    /**
+     * A relatively up-to-date snapshot of existing clusters, units within them etc.
+     */
     private Map<Point, ImmutableArmy> enemyClusters = new HashMap<>();
+    private Multimap<ImmutableArmy, UnitInPool> knownUnitsToClusters = HashMultimap.create();
+
+    /**
+     * Tracking of units that we have seen before, but can't figure out where they are.
+     */
+    private Set<UnitInPool> missingEnemyUnits = new HashSet<>();
 
     private final ThreatCalculator threatCalculator;
 
@@ -33,44 +49,60 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
 
     @Override
     public void onStep(ObservationInterface observationInterface, AgentData data) {
-
-
-        if (observationInterface.getGameLoop() > maybeEnemyArmyCalculatedAt + 22L) {
+        final long gameLoop = observationInterface.getGameLoop();
+        if (gameLoop > maybeEnemyArmyCalculatedAt + 22L) {
             maybeEnemyArmyCalculatedAt = observationInterface.getGameLoop();
-            List<UnitInPool> enemyArmy = observationInterface.getUnits(
+            List<UnitInPool> allEnemyUnits = observationInterface.getUnits(
                     UnitFilter.builder()
                             .alliance(Alliance.ENEMY)
                             .unitTypes(Constants.ARMY_UNIT_TYPES)
                             .build());
-            Map<Point,List<UnitInPool>> clusters = Expansions.cluster(enemyArmy, 10f);
+            Set<Tag> seenTags = allEnemyUnits.stream().map(unitInPool ->
+                    unitInPool.getTag()).collect(Collectors.toSet());;
 
-            // Army threat decays slowly
-            if (maybeLargestEnemyArmy.isPresent() && observationInterface.getVisibility(maybeLargestEnemyArmy.get().position()) == Visibility.VISIBLE) {
-                maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
-                        .withSize(army.size() * 0.5f - 1.0f)
-                        .withThreat(army.threat() * 0.5f - 1.0f));
-            } else {
-                maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
-                        .withSize(army.size() * 0.999f)
-                        .withThreat(army.threat() * 0.999f));
-            }
+            // Update units that we knew about, but can't see anymore.
+            Collection<UnitInPool> previousKnownEnemyUnits = knownUnitsToClusters.values();
+            previousKnownEnemyUnits.forEach(previousKnownEnemyUnit -> {
+               if (!seenTags.contains(previousKnownEnemyUnit.getTag())) {
+                   missingEnemyUnits.add(previousKnownEnemyUnit);
+               } else if (missingEnemyUnits.contains(previousKnownEnemyUnit)) {
+                   // Remove and add it again (which will refresh the object).
+                   missingEnemyUnits.remove(previousKnownEnemyUnit);
+                   missingEnemyUnits.add(previousKnownEnemyUnit);
+               }
+            });
+            // Stop tracking missing units after 1 minute.
+            missingEnemyUnits = missingEnemyUnits.stream()
+                    .filter(unitInPool -> gameLoop < unitInPool.getLastSeenGameLoop() + 60 * 22L)
+                    .filter(unitInPool -> observationInterface.getUnit(unitInPool.getTag()) != null)
+                    .collect(Collectors.toSet());
+
+            // Update clusters by merging, splitting etc.
+            Map<Point, List<UnitInPool>> clusters = Expansions.cluster(allEnemyUnits, 10f);
+
             maybeLargestEnemyArmy = maybeLargestEnemyArmy.filter(army -> army.size() > 1.0);
+
+            // TODO: instead of clearing this out, merge it (and apply decay)
+            this.enemyClusters = new HashMap();
             if (clusters.size() > 0) {
+                knownUnitsToClusters.clear();
                 int biggestArmySize = Integer.MIN_VALUE;
-                this.enemyClusters = new HashMap();
                 Point biggestArmy = null;
                 for (Map.Entry<Point, List<UnitInPool>> entry : clusters.entrySet()) {
                     Point point = entry.getKey();
                     List<UnitInPool> units = entry.getValue();
                     Collection<UnitType> composition = getComposition(units);
                     double threat = threatCalculator.calculateThreat(composition);
-                    if (threat > 5.0f) {
-                        enemyClusters.put(point, ImmutableArmy.builder()
+                    if (threat >= 1.0f) {
+                        ImmutableArmy army = ImmutableArmy.builder()
                                 .position(point.toPoint2d())
                                 .size(units.size())
                                 .composition(composition)
                                 .threat(threat)
-                                .build());
+                                .unitTags(entry.getValue().stream().map(UnitInPool::getTag).collect(Collectors.toSet()))
+                                .build();
+                        knownUnitsToClusters.putAll(army, entry.getValue());
+                        enemyClusters.put(point, army);
                         int size = units.size();
                         if (size > biggestArmySize) {
                             biggestArmySize = size;
@@ -82,6 +114,40 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                     if (this.maybeLargestEnemyArmy.isEmpty() || biggestArmySize > this.maybeLargestEnemyArmy.get().size()) {
                         this.maybeLargestEnemyArmy = Optional.of(enemyClusters.get(biggestArmy));
                     }
+                }
+                // Construct a fake army to represent units that we've seen but can't see anymore.
+                if (missingEnemyUnits.size() > 0) {
+                    List<UnitType> unknownArmyComposition = missingEnemyUnits.stream().map(unitInPool -> unitInPool.unit().getType())
+                            .collect(Collectors.toList());
+                    missingEnemyArmy = Optional.of(ImmutableArmy.builder()
+                            .composition(unknownArmyComposition)
+                            .position(Optional.empty())
+                            .size(missingEnemyUnits.size())
+                            .threat(threatCalculator.calculateThreat(unknownArmyComposition))
+                            .build());
+                    potentialEnemyArmy = Optional.of(this.maybeLargestEnemyArmy
+                            .map(army -> army.plus(missingEnemyArmy.get()))
+                            .orElse(missingEnemyArmy.get()));
+                } else {
+                    potentialEnemyArmy = this.maybeLargestEnemyArmy.map(Function.identity());
+                }
+                potentialEnemyArmy.ifPresent(potentialEnemyArmy -> {
+                    System.out.println(" == Potential enemy army == ");
+                    System.out.println("Size: " + potentialEnemyArmy.size());
+                    System.out.println("Threat: " + potentialEnemyArmy.threat());
+                    System.out.println("Composition: " + potentialEnemyArmy.composition());
+                });
+
+                // Army threat decays slowly, unless we can see it.
+                if (maybeLargestEnemyArmy.flatMap(Army::position).isPresent() &&
+                        observationInterface.getVisibility(maybeLargestEnemyArmy.flatMap(Army::position).get()) == Visibility.VISIBLE) {
+                    maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
+                            .withSize(army.size() * 0.5f - 1.0f)
+                            .withThreat(army.threat() * 0.5f - 1.0f));
+                } else {
+                    maybeLargestEnemyArmy = maybeLargestEnemyArmy.map(army -> army
+                            .withSize(army.size() * 0.999f)
+                            .withThreat(army.threat() * 0.999f));
                 }
             }
         }
@@ -109,6 +175,16 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
         return maybeLargestEnemyArmy.map(Function.identity());
     }
 
+    @Override
+    public Optional<Army> getPotentialEnemyArmy() {
+        return potentialEnemyArmy;
+    }
+
+    @Override
+    public Optional<Army> getMissingEnemyArmy() {
+        return missingEnemyArmy;
+    }
+
     private Collection<UnitType> getComposition(List<UnitInPool> unitInPools) {
         return unitInPools.stream().map(unitInPool -> unitInPool.unit().getType()).collect(Collectors.toList());
     }
@@ -119,10 +195,14 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
             agent.debug().debugSphereOut(point, units.size(), Color.RED);
         });
         maybeLargestEnemyArmy.ifPresent(army -> {
-            float z = agent.observation().terrainHeight(army.position());
-            Point point = Point.of(army.position().getX(), army.position().getY(), z);
-            agent.debug().debugSphereOut(point, army.size(), Color.RED);
-            agent.debug().debugTextOut("[" + army.size() + ", " + army.threat() + "]", point, Color.WHITE, 10);
+            army.position().ifPresent(armyPosition -> {
+                if (army.size() > 0) {
+                    float z = agent.observation().terrainHeight(armyPosition);
+                    Point point = Point.of(armyPosition.getX(), armyPosition.getY(), z);
+                    agent.debug().debugSphereOut(point, army.size(), Color.RED);
+                    agent.debug().debugTextOut("[" + army.size() + ", " + army.threat() + "]", point, Color.WHITE, 10);
+                }
+            });
         });
     }
 }

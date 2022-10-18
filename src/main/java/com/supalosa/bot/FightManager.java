@@ -182,7 +182,7 @@ public class FightManager {
     private void updateTargetingLogic(AgentData data) {
         // Select attack position.
         Optional<Point2d> attackPosition;
-        if (data.enemyAwareness().getLargestEnemyArmy().isEmpty()) {
+        if (data.enemyAwareness().getPotentialEnemyArmy().isEmpty()) {
             attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemy();
         } else {
             // TODO: defend if my regions are under threat.
@@ -192,7 +192,7 @@ public class FightManager {
         // Select harass position with the lowest diffuse threat that is not close to the attack position.
         final double MIN_DISTANCE_FROM_ATTACK_POSITION = 25f;
         // Harass bases which have half the enemy army threat diffused to them.
-        double minDiffuseThreat = data.enemyAwareness().getLargestEnemyArmy()
+        double minDiffuseThreat = data.enemyAwareness().getPotentialEnemyArmy()
                 .map(army -> army.threat() / 2.0)
                 .orElse(20.0);
         RegionData minRegion = null;
@@ -215,7 +215,7 @@ public class FightManager {
         }
         this.setHarassPosition(harassPosition);
         Optional<Point2d> finalHarassPosition = harassPosition;
-        data.enemyAwareness().getLargestEnemyArmy().ifPresent(enemyArmy -> {
+        data.enemyAwareness().getPotentialEnemyArmy().ifPresent(enemyArmy -> {
             FightPerformance predictedOutcome = attackingArmy.predictFightAgainst(enemyArmy);
             if (predictedOutcome != FightPerformance.WINNING) {
                 if (finalHarassPosition.isPresent()) {

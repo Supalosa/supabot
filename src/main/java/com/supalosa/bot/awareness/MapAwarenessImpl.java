@@ -450,12 +450,6 @@ public class MapAwarenessImpl implements MapAwareness {
     public void debug(S2Agent agent) {
         this.regionData.values().forEach(regionData -> {
             regionData.bestTileTowardsEnemy().ifPresent(bestTileTowardsEnemy -> {
-                float z = agent.observation().terrainHeight(bestTileTowardsEnemy);
-                Point point = Point.of(bestTileTowardsEnemy.getX(), bestTileTowardsEnemy.getY(), z);
-                agent.debug().debugSphereOut(point, 0.5f, Color.RED);
-                float z2 = agent.observation().terrainHeight(regionData.region().centrePoint()) + 1f;
-                Point regionCentrePoint = Point.of(regionData.region().centrePoint().getX(), regionData.region().centrePoint().getY(), z2);
-                agent.debug().debugLineOut(regionCentrePoint, point, Color.RED);
             });
         });
     }

@@ -1,5 +1,6 @@
 package com.supalosa.bot.debug;
 
+import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.SupaBot;
@@ -7,11 +8,16 @@ import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.WindowEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class JFrameDebugTarget implements DebugTarget {
 
@@ -19,7 +25,7 @@ public class JFrameDebugTarget implements DebugTarget {
     public static final int GRAY = VisualisationUtils.makeRgb(128, 128, 128);
     public static final int BLACK = VisualisationUtils.makeRgb(0, 0, 0);
     public static final int RED = VisualisationUtils.makeRgb(255, 0, 0);
-    public static final double OUTPUT_SCALE_FACTOR = 4.0;
+    public static final double OUTPUT_SCALE_FACTOR = 2.0;
 
     private SupaBot agent;
 
@@ -89,8 +95,8 @@ public class JFrameDebugTarget implements DebugTarget {
                     placeable -> placeable ? WHITE : RED,
                     (existingValue, newValue) -> newValue == RED ? newValue : existingValue);
         });
-        if (data.enemyAwareness().getLargestEnemyArmy().isPresent()) {
-            baselineThreat = Math.max(100f, data.enemyAwareness().getLargestEnemyArmy().get().threat());
+        if (data.enemyAwareness().getPotentialEnemyArmy().isPresent()) {
+            baselineThreat = Math.max(100f, data.enemyAwareness().getPotentialEnemyArmy().get().threat());
         } else {
             baselineThreat = Math.max(100f, baselineThreat * 0.95);
         }
@@ -213,6 +219,26 @@ public class JFrameDebugTarget implements DebugTarget {
 
         panel.add(placementPanel);
         panel.add(placementPanel2);
+
+        JPanel armyPanel = new JPanel(new BorderLayout());
+        data.enemyAwareness().getPotentialEnemyArmy().ifPresent(potentialEnemyArmy -> {
+            Map<UnitType, Integer> composition = potentialEnemyArmy.compositionAsMap();
+            StringBuilder stringBuilder = new StringBuilder("<html>EnemyComposition:<br />");
+            List<UnitType> keys = composition.keySet().stream()
+                    .sorted(Comparator.comparing(UnitType::toString))
+                    .collect(Collectors.toList());
+            keys.forEach(unitType -> {
+                stringBuilder.append(unitType + ": " + composition.get(unitType) + "<br />");
+            });
+            stringBuilder.append("</html>");
+            JLabel text = new JLabel(stringBuilder.toString());
+            text.setMinimumSize(new Dimension(200, 10));
+            armyPanel.add(text);
+        });
+
+        panel.add(armyPanel);
+
+        frame.setMaximumSize(new Dimension(800, 600));
 
         frame.pack();
     }
