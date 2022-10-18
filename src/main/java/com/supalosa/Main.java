@@ -17,7 +17,7 @@ public class Main {
         LauncherUtils.startSC2(
                 args,
                 supaBot,
-                LocalMap.of(Paths.get("BerlingradAIE.SC2Map")),
+                LocalMap.of(Paths.get("2000AtmospheresAIE.SC2Map")),
                 false,
                 new PlayerSettings[]{opponent});
     }

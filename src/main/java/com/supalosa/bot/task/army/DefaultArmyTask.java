@@ -125,12 +125,12 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 data.mapAwareness().getRegionDataForPoint(position).map(RegionData::region));
         // TODO if regrouping, is current region valid? It will end up thinking the unit is in a region halfway between
         // the clumps.
-        currentRegion = centreOfMass.flatMap(centre ->
-                data.mapAwareness().getRegionDataForPoint(centre).map(RegionData::region));
+        Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> data.mapAwareness().getRegionDataForPoint(centre));
+        currentRegion = currentRegionData.map(RegionData::region);
         if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
                 currentRegion.get().equals(regionWaypoints.get(0)) ||
-                        (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 2.5f)
-        )) {
+                        (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 7.5f))
+                && shouldMoveFromRegion(currentRegionData.get(), regionWaypoints)) {
             // Arrived at the head waypoint.
             regionWaypoints.remove(0);
             if (regionWaypoints.size() > 0) {
@@ -140,6 +140,18 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 waypointsCalculatedTo = Optional.empty();
                 waypointsCalculatedFrom = Optional.empty();
             }
+        }
+    }
+
+    /**
+     * Override this to decide if we should stay in the current region or not.
+     */
+    protected boolean shouldMoveFromRegion(RegionData current, List<Region> waypoints) {
+        if (aggressionState == AggressionState.ATTACKING) {
+            // Always stay if there's an enemy base here.
+            return current.hasEnemyBase() == false;
+        } else {
+            return true;
         }
     }
 

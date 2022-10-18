@@ -26,14 +26,16 @@ public class GraphUtils {
             RegionData regionData = allRegionData.get(region.regionId());
             edgeExtractor.apply(region).forEach(connectedRegionId -> {
                 Region otherRegion = analysisResults.getRegion(connectedRegionId);
-                RegionData otherRegionData = allRegionData.get(otherRegion.regionId());
+                if (otherRegion != null) {
+                    RegionData otherRegionData = allRegionData.get(otherRegion.regionId());
 
-                double distance = region.centrePoint().distance(otherRegion.centrePoint());
-                Double factor = regionMapper.apply(regionData, otherRegionData);
-                if (factor != null && !regionData.isBlocked() && !otherRegionData.isBlocked()) {
-                    g.addEdge(region, otherRegion);
-                    distance *= factor;
-                    g.setEdgeWeight(region, otherRegion, distance);
+                    double distance = region.centrePoint().distance(otherRegion.centrePoint());
+                    Double factor = regionMapper.apply(regionData, otherRegionData);
+                    if (factor != null && !regionData.isBlocked() && !otherRegionData.isBlocked()) {
+                        g.addEdge(region, otherRegion);
+                        distance *= factor;
+                        g.setEdgeWeight(region, otherRegion, distance);
+                    }
                 }
                 //System.out.println("Weight = " + g.getEdgeWeight(g.getEdge(region, otherRegion)));
             });

@@ -135,9 +135,9 @@ public class TaskManagerImpl implements TaskManager {
                 }
                 // DEBUG
                 if (task instanceof TaskWithUnits) {
-                    if (!((TaskWithUnits)task).hasUnit(tag) && (unitInPool) != null || unitsInPassengers.contains(tag)) {
+                    if (!((TaskWithUnits)task).hasUnit(tag) && (unitInPool != null || unitsInPassengers.contains(tag))) {
                         System.out.println("Warning: Task " +task.getKey() + " doesn't think it has unit " + tag);
-                        //missingUnits.add(tag);
+                        missingUnits.add(tag);
                     }
                 }
             });

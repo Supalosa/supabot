@@ -225,6 +225,17 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     }
 
                 });
+                // Handle nearby effects.
+                observationInterface.getEffects().forEach(effectLocation -> {
+                    effectLocation.getPositions().forEach(position -> {
+                        float distance = 20f;
+                        if (centreOfMass.get().distance(position) < distance) {
+                            if (effectLocation.getEffect() == Effects.LURKER_MP) {
+                                requestScannerSweep(data, position, scanRequiredBefore);
+                            }
+                        }
+                    });
+                });
             }
             // unload medivacs (in case they came from a disbanded harass task)
             Function<Set<Tag>, Stream<Unit>> unitsStream = units -> units.stream().map(tag ->
@@ -237,7 +248,8 @@ public class TerranBioArmyTask extends DefaultArmyTask {
             if (airUnitsNotEmpty.size() > 0) {
                 for (Unit unit : airUnitsNotEmpty) {
                     actionInterface.unitCommand(unit, Abilities.UNLOAD_ALL_AT_MEDIVAC, unit.getPosition().toPoint2d(), false);
-                }            }
+                }
+            }
         }
         return parentState;
     }
