@@ -388,7 +388,12 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         if (armyUnits.size() == 0) {
             return AggressionState.REGROUPING;
         } else {
-            return AggressionState.ATTACKING;
+            if (aggressionLevel != AggressionLevel.FULL_AGGRESSION && maybeEnemyArmy.isPresent() &&
+                    predictFightAgainst(maybeEnemyArmy.get()) == FightPerformance.BADLY_LOSING) {
+                return AggressionState.RETREATING;
+            } else {
+                return AggressionState.ATTACKING;
+            }
         }
     }
 

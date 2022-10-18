@@ -17,8 +17,17 @@ public interface Army {
      * The position of the army, if known.
      */
     Optional<Point2d> position();
-    float size();
-    double threat();
+
+    @Value.Default
+    default float size() {
+        return 0f;
+    }
+
+    @Value.Default
+    default double threat() {
+        return 0.0;
+    }
+
     List<UnitType> composition();
     Set<Tag> unitTags();
 
@@ -30,7 +39,7 @@ public interface Army {
      * Returns this army plus another army. Note that the position will be unknown.
      */
     default Army plus(Army other) {
-        return ImmutableArmy.builder()
+        return ImmutableArmy.builder().from(this)
                 .addAllComposition(other.composition())
                 .addAllUnitTags(other.unitTags())
                 .size(this.size() + other.size())

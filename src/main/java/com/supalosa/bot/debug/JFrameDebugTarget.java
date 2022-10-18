@@ -6,6 +6,7 @@ import com.supalosa.bot.AgentData;
 import com.supalosa.bot.SupaBot;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
+import com.supalosa.bot.awareness.Army;
 
 import javax.swing.*;
 import javax.swing.border.Border;
@@ -223,7 +224,7 @@ public class JFrameDebugTarget implements DebugTarget {
         JPanel armyPanel = new JPanel(new BorderLayout());
         data.enemyAwareness().getPotentialEnemyArmy().ifPresent(potentialEnemyArmy -> {
             Map<UnitType, Integer> composition = potentialEnemyArmy.compositionAsMap();
-            StringBuilder stringBuilder = new StringBuilder("<html>EnemyComposition:<br />");
+            StringBuilder stringBuilder = new StringBuilder("<html>BiggestArmyPotential: --------------<br />");
             List<UnitType> keys = composition.keySet().stream()
                     .sorted(Comparator.comparing(UnitType::toString))
                     .collect(Collectors.toList());
@@ -232,9 +233,21 @@ public class JFrameDebugTarget implements DebugTarget {
             });
             stringBuilder.append("</html>");
             JLabel text = new JLabel(stringBuilder.toString());
-            text.setMinimumSize(new Dimension(200, 10));
             armyPanel.add(text);
         });
+
+        Army enemyArmy = data.enemyAwareness().getOverallEnemyArmy();
+        Map<UnitType, Integer> composition = enemyArmy.compositionAsMap();
+        StringBuilder stringBuilder = new StringBuilder("<html>All Army Potential -----------<br />");
+        List<UnitType> keys = composition.keySet().stream()
+                .sorted(Comparator.comparing(UnitType::toString))
+                .collect(Collectors.toList());
+        keys.forEach(unitType -> {
+            stringBuilder.append(unitType + ": " + composition.get(unitType) + "<br />");
+        });
+        stringBuilder.append("</html>");
+        JLabel text = new JLabel(stringBuilder.toString());
+        armyPanel.add(text);
 
         panel.add(armyPanel);
 

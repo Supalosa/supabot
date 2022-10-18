@@ -57,6 +57,8 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                     case PROTOSS_MOTHERSHIP:
                     case PROTOSS_CARRIER:
                     case TERRAN_PLANETARY_FORTRESS:
+                    case ZERG_INFESTOR: // TODO - based on energy
+                    case PROTOSS_HIGH_TEMPLAR:
                         return amount * 10.0;
                     case TERRAN_THOR:
                     case ZERG_BROODLORD:
@@ -65,6 +67,7 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                     case PROTOSS_PHOTON_CANNON:
                     case TERRAN_BUNKER:
                     case ZERG_SPORE_CRAWLER:
+                    case PROTOSS_ARCHON:
                         return amount * 5.0;
                     case ZERG_QUEEN:
                         return amount * 3.5;

@@ -974,4 +974,10 @@ public class SupaBot extends S2Agent implements AgentData {
     public EnemyAwareness enemyAwareness() {
         return enemyAwareness;
     }
+
+    @Override
+    public void onUnitDestroyed(UnitInPool unit) {
+        enemyAwareness.onUnitDestroyed(unit);
+    }
+
 }

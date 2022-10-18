@@ -86,6 +86,7 @@ public class Constants {
             Units.ZERG_BANELING,
             Units.ZERG_HYDRALISK,
             Units.ZERG_LURKER_MP,
+            Units.ZERG_INFESTOR,
             Units.ZERG_ULTRALISK,
             Units.ZERG_MUTALISK,
             Units.ZERG_CORRUPTOR,
