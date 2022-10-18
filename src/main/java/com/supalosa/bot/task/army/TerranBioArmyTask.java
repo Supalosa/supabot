@@ -66,17 +66,29 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
         if (gameLoop > desiredCompositionUpdatedAt + 22L) {
             desiredCompositionUpdatedAt = gameLoop;
-            updateBioArmyComposition();
+            updateBioArmyComposition(data);
         }
     }
 
-    private void updateBioArmyComposition() {
+    private void updateBioArmyComposition(AgentData data) {
         List<UnitTypeRequest> result = new ArrayList<>();
+        int maxBio = 80;
+        int targetMarines = 40;
+        int targetMarauders = 40;
+        Army enemyArmy = data.enemyAwareness().getOverallEnemyArmy();
+
+        targetMarauders +=
+                enemyArmy.composition().getOrDefault(Units.ZERG_ROACH, 0) +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_STALKER, 0) +
+                enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK, 0) * 3 +
+                enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK_SIEGED, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.ZERG_ULTRALISK, 0) * 5;
+
         result.add(ImmutableUnitTypeRequest.builder()
                 .unitType(Units.TERRAN_MARINE)
                 .productionAbility(Abilities.TRAIN_MARINE)
                 .producingUnitType(Units.TERRAN_BARRACKS)
-                .amount(40)
+                .amount(Math.max(0, maxBio - targetMarauders))
                 .build()
         );
         if (armyUnits.size() > 5) {
@@ -85,7 +97,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .productionAbility(Abilities.TRAIN_MARAUDER)
                     .producingUnitType(Units.TERRAN_BARRACKS)
                     .needsTechLab(true)
-                    .amount(40)
+                    .amount(Math.max(0, maxBio -  targetMarines))
                     .build()
             );
         }
@@ -100,12 +112,29 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .build()
             );
         }
+
+        int targetVikings =
+                enemyArmy.composition().getOrDefault(Units.ZERG_BROODLORD, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.TERRAN_BATTLECRUISER, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_CARRIER, 0) * 2;
+        if (targetVikings > 0) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_VIKING_FIGHTER)
+                    .alternateForm(Units.TERRAN_VIKING_ASSAULT)
+                    .productionAbility(Abilities.TRAIN_VIKING_FIGHTER)
+                    .producingUnitType(Units.TERRAN_STARPORT)
+                    .needsTechLab(true)
+                    .amount(targetVikings)
+                    .build()
+            );
+        }
         if (numMedivacs <= armyUnits.size() * 0.1) {
+            int targetMedivacs = (int)Math.min(12, Math.ceil(armyUnits.size() * 0.1));
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_MEDIVAC)
                     .productionAbility(Abilities.TRAIN_MEDIVAC)
                     .producingUnitType(Units.TERRAN_STARPORT)
-                    .amount((int)(Math.min(12, Math.ceil(armyUnits.size() * 0.1))))
+                    .amount(targetMedivacs)
                     .build()
             );
         }

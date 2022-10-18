@@ -223,7 +223,7 @@ public class JFrameDebugTarget implements DebugTarget {
 
         JPanel armyPanel = new JPanel(new BorderLayout());
         data.enemyAwareness().getPotentialEnemyArmy().ifPresent(potentialEnemyArmy -> {
-            Map<UnitType, Integer> composition = potentialEnemyArmy.compositionAsMap();
+            Map<UnitType, Integer> composition = potentialEnemyArmy.composition();
             StringBuilder stringBuilder = new StringBuilder("<html>BiggestArmyPotential: --------------<br />");
             List<UnitType> keys = composition.keySet().stream()
                     .sorted(Comparator.comparing(UnitType::toString))
@@ -237,7 +237,7 @@ public class JFrameDebugTarget implements DebugTarget {
         });
 
         Army enemyArmy = data.enemyAwareness().getOverallEnemyArmy();
-        Map<UnitType, Integer> composition = enemyArmy.compositionAsMap();
+        Map<UnitType, Integer> composition = enemyArmy.composition();
         StringBuilder stringBuilder = new StringBuilder("<html>All Army Potential -----------<br />");
         List<UnitType> keys = composition.keySet().stream()
                 .sorted(Comparator.comparing(UnitType::toString))

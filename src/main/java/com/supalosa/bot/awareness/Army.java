@@ -27,8 +27,7 @@ public interface Army {
     default double threat() {
         return 0.0;
     }
-
-    List<UnitType> composition();
+    Map<UnitType, Integer> composition();
     Set<Tag> unitTags();
 
     default double calculateThreat(ThreatCalculator threatCalculator) {
@@ -39,18 +38,20 @@ public interface Army {
      * Returns this army plus another army. Note that the position will be unknown.
      */
     default Army plus(Army other) {
-        return ImmutableArmy.builder().from(this)
-                .addAllComposition(other.composition())
+        ImmutableArmy.Builder builder = ImmutableArmy.builder().from(this)
                 .addAllUnitTags(other.unitTags())
                 .size(this.size() + other.size())
                 .threat(this.threat() + other.threat())
-                .position(Optional.empty())
-                .build();
+                .position(Optional.empty());
+        other.composition().forEach((unitType, amount) -> {
+            builder.putComposition(unitType, composition().getOrDefault(unitType, 0) + amount);
+        });
+        return builder.build();
     }
 
-    default Map<UnitType, Integer> compositionAsMap() {
+    static Map<UnitType, Integer> createComposition(Iterable<UnitType> compositionList) {
         Map<UnitType, Integer> result = new HashMap<>();
-        composition().forEach(unitType -> {
+        compositionList.forEach(unitType -> {
             result.put(unitType, result.getOrDefault(unitType, 0) + 1);
         });
         return result;

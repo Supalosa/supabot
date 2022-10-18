@@ -93,6 +93,8 @@ public class Constants {
             Units.ZERG_RAVAGER,
             Units.ZERG_QUEEN, // thanks to queen bot
             Units.ZERG_SPINE_CRAWLER,
+            Units.ZERG_BROODLORD,
+            Units.ZERG_BROODLORD_COCOON,
             Units.PROTOSS_ZEALOT,
             Units.PROTOSS_ADEPT,
             Units.PROTOSS_ADEPT_PHASE_SHIFT,

@@ -59,31 +59,8 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                             .alliance(Alliance.ENEMY)
                             .unitTypes(Constants.ARMY_UNIT_TYPES)
                             .build());
-            Set<Tag> seenTags = allEnemyUnits.stream().map(unitInPool ->
-                    unitInPool.getTag()).collect(Collectors.toSet());;
-
-            // Update units that we knew about, but can't see anymore.
-            Collection<UnitInPool> previousKnownEnemyUnits = knownUnitsToClusters.values();
-            previousKnownEnemyUnits.forEach(previousKnownEnemyUnit -> {
-               if (missingEnemyUnits.contains(previousKnownEnemyUnit)) {
-                   // Remove and add it again (which will refresh the object).
-                   missingEnemyUnits.remove(previousKnownEnemyUnit);
-                   missingEnemyUnits.add(previousKnownEnemyUnit);
-               } else if (!seenTags.contains(previousKnownEnemyUnit.getTag())) {
-                    missingEnemyUnits.add(previousKnownEnemyUnit);
-                }
-            });
-            destroyedUnits.forEach(unitInPool -> {
-                if (unitInPool.unit().getAlliance() == Alliance.ENEMY) {
-                    missingEnemyUnits.remove(unitInPool.getTag());
-                }
-            });
-            // Stop tracking missing units after 1 minute.
-            missingEnemyUnits = missingEnemyUnits.stream()
-                    .filter(unitInPool -> gameLoop < unitInPool.getLastSeenGameLoop() + 60 * 22L)
-                    .filter(unitInPool -> observationInterface.getUnit(unitInPool.getTag()) == null)
-                    .collect(Collectors.toSet());
-            destroyedUnits.clear();
+            // Store this before we wipe knownUnitsToClusters.
+            Collection<UnitInPool> previousKnownEnemyUnits = new ArrayList<>(knownUnitsToClusters.values());
 
             // Update clusters by merging, splitting etc.
             Map<Point, List<UnitInPool>> clusters = Expansions.cluster(allEnemyUnits, 10f);
@@ -105,7 +82,7 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                         ImmutableArmy army = ImmutableArmy.builder()
                                 .position(point.toPoint2d())
                                 .size(units.size())
-                                .composition(composition)
+                                .composition(Army.createComposition(composition))
                                 .threat(threat)
                                 .unitTags(entry.getValue().stream().map(UnitInPool::getTag).collect(Collectors.toSet()))
                                 .build();
@@ -128,7 +105,7 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                     List<UnitType> unknownArmyComposition = missingEnemyUnits.stream().map(unitInPool -> unitInPool.unit().getType())
                             .collect(Collectors.toList());
                     missingEnemyArmy = Optional.of(ImmutableArmy.builder()
-                            .composition(unknownArmyComposition)
+                            .composition(Army.createComposition(unknownArmyComposition))
                             .position(Optional.empty())
                             .size(missingEnemyUnits.size())
                             .threat(threatCalculator.calculateThreat(unknownArmyComposition))
@@ -139,19 +116,18 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                 } else {
                     potentialEnemyArmy = this.maybeLargestEnemyArmy.map(Function.identity());
                 }
-                List<UnitType> fullArmyComposition = allEnemyUnits.stream().map(unitInPool -> unitInPool.unit().getType())
-                        .collect(Collectors.toList());
-                fullEnemyArmy = ImmutableArmy.builder()
-                        .position(Optional.empty())
-                        .composition(fullArmyComposition)
-                        .threat(threatCalculator.calculateThreat(fullArmyComposition))
-                        .size(fullArmyComposition.size())
-                        .build();
-                if (missingEnemyArmy.isPresent()) {
-                    fullEnemyArmy = fullEnemyArmy.plus(missingEnemyArmy.get());
-                }
             }
-
+            List<UnitType> fullArmyComposition = allEnemyUnits.stream().map(unitInPool -> unitInPool.unit().getType())
+                    .collect(Collectors.toList());
+            fullEnemyArmy = ImmutableArmy.builder()
+                    .position(Optional.empty())
+                    .composition(Army.createComposition(fullArmyComposition))
+                    .threat(threatCalculator.calculateThreat(fullArmyComposition))
+                    .size(fullArmyComposition.size())
+                    .build();
+            if (missingEnemyArmy.isPresent()) {
+                fullEnemyArmy = fullEnemyArmy.plus(missingEnemyArmy.get());
+            }
             // Army threat decays slowly, unless we can see it.
             if (maybeLargestEnemyArmy.flatMap(Army::position).isPresent() &&
                     observationInterface.getVisibility(maybeLargestEnemyArmy.flatMap(Army::position).get()) == Visibility.VISIBLE) {
@@ -163,6 +139,35 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                         .withSize(army.size() * 0.999f)
                         .withThreat(army.threat() * 0.999f));
             }
+
+            Set<Tag> seenTags = allEnemyUnits.stream().map(unitInPool ->
+                    unitInPool.getTag()).collect(Collectors.toSet());;
+
+            // If a unit was known on the last update, but not in this update, track it.
+            previousKnownEnemyUnits.forEach(previousKnownEnemyUnit -> {
+                if (!seenTags.contains(previousKnownEnemyUnit.getTag())) {
+                    /*if (missingEnemyUnits.add(previousKnownEnemyUnit)) {
+                        System.out.println("A " + previousKnownEnemyUnit.unit().getType() + " is missing.");
+                    }*/
+                } else {
+                    /*if (missingEnemyUnits.contains(previousKnownEnemyUnit)) {
+                        System.out.println("We found a " + previousKnownEnemyUnit.unit().getType() + " that went missing.");
+                    }*/
+                }
+            });
+            destroyedUnits.forEach(unitInPool -> {
+                if (unitInPool.unit().getAlliance() == Alliance.ENEMY) {
+                    /*if (missingEnemyUnits.remove(unitInPool.getTag())) {
+                        System.out.println("Removed a destroyed " + unitInPool.unit().getType() + " from missing set");
+                    }*/
+                }
+            });
+            // Stop tracking missing units after 2 minutes or if we saw them on this tick.
+            missingEnemyUnits = missingEnemyUnits.stream()
+                    .filter(unitInPool -> gameLoop < unitInPool.getLastSeenGameLoop() + 120 * 22L)
+                    .filter(unitInPool -> !seenTags.contains(unitInPool.getTag()))
+                    .collect(Collectors.toSet());
+            destroyedUnits.clear();
         }
     }
 
