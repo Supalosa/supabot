@@ -327,6 +327,7 @@ public class SupaBot extends S2Agent implements AgentData {
                 this.taskManager.debug(this);
             }
             this.mapAwareness().debug(this);
+            this.enemyAwareness.debug(this);
             this.structurePlacementCalculator.ifPresent(spc -> spc.debug(this));
             this.fightManager.debug(this);
             int miningBases = countMiningBases();

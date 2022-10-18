@@ -409,8 +409,6 @@ public class MapAwarenessImpl implements MapAwareness {
             });
         }
 
-        //debug().debugIgnoreMineral();
-
         // One-time heavyweight method to calculate and score expansions based on known enemy start location.
         if (expansionLocations.isEmpty() &&
                 startPosition.isPresent() &&
@@ -459,12 +457,6 @@ public class MapAwarenessImpl implements MapAwareness {
                 Point regionCentrePoint = Point.of(regionData.region().centrePoint().getX(), regionData.region().centrePoint().getY(), z2);
                 agent.debug().debugLineOut(regionCentrePoint, point, Color.RED);
             });
-            /*
-           regionData.borderTilesTowardsEnemy().forEach(borderTileTowardsEnemy -> {
-               float z = agent.observation().terrainHeight(borderTileTowardsEnemy);
-               Point point = Point.of(borderTileTowardsEnemy.getX(), borderTileTowardsEnemy.getY(), z);
-               agent.debug().debugSphereOut(point, 0.5f, Color.RED);
-           });*/
         });
     }
 

@@ -270,42 +270,40 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         // Overrides for the value returned by the respective command.
         // Retreat -> Regroup.
         // Analyse our performance in the fight and decide what to do next.
-        if (previousEnemyArmyObservation.isPresent() && enemyArmy.isPresent()) {
-            currentFightPerformance = calculateFightPerformance(
-                    agent.observation().getGameLoop(),
-                    previousEnemyArmyObservation.get(),
-                    enemyArmy.get(),
-                    previousComposition,
-                    currentComposition);
-            boolean shouldRetreat = (currentFightPerformance == FightPerformance.BADLY_LOSING);
-            boolean isWinning = (currentFightPerformance == FightPerformance.WINNING);
-            boolean shouldRegroup = shouldRegroup(agent.observation());
-            switch (aggressionLevel) {
-                case BALANCED:
-                    if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
-                        // System.out.println(armyName + ": Forced Retreat (Losing)");
-                        aggressionState = AggressionState.RETREATING;
-                    } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
-                        // System.out.println(armyName + ": Forced Regroup (Dispersed)");
-                        aggressionState = AggressionState.REGROUPING;
-                    }
-                    break;
-                case FULL_AGGRESSION:
-                    // never retreat or regroup!
-                    break;
-                case FULL_RETREAT:
-                    if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
-                        // System.out.println(armyName + ": Forced Retreat (Losing)");
-                        aggressionState = AggressionState.RETREATING;
-                    } else if (!isWinning && aggressionState != AggressionState.RETREATING) {
-                        // System.out.println(armyName + ": Forced Retreat (Not winning)");
-                        aggressionState = AggressionState.RETREATING;
-                    } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
-                        // System.out.println(armyName + ": Forced Regroup (Dispersed)");
-                        aggressionState = AggressionState.REGROUPING;
-                    }
-                    break;
-            }
+        currentFightPerformance = calculateFightPerformance(
+                agent.observation().getGameLoop(),
+                previousEnemyArmyObservation,
+                enemyArmy,
+                previousComposition,
+                currentComposition);
+        boolean shouldRetreat = (currentFightPerformance == FightPerformance.BADLY_LOSING);
+        boolean isWinning = (currentFightPerformance == FightPerformance.WINNING);
+        boolean shouldRegroup = shouldRegroup(agent.observation());
+        switch (aggressionLevel) {
+            case BALANCED:
+                if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
+                    // System.out.println(armyName + ": Forced Retreat (Losing)");
+                    aggressionState = AggressionState.RETREATING;
+                } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
+                    // System.out.println(armyName + ": Forced Regroup (Dispersed)");
+                    aggressionState = AggressionState.REGROUPING;
+                }
+                break;
+            case FULL_AGGRESSION:
+                // never retreat or regroup!
+                break;
+            case FULL_RETREAT:
+                if (shouldRetreat && aggressionState != AggressionState.RETREATING) {
+                    // System.out.println(armyName + ": Forced Retreat (Losing)");
+                    aggressionState = AggressionState.RETREATING;
+                } else if (!isWinning && aggressionState != AggressionState.RETREATING) {
+                    // System.out.println(armyName + ": Forced Retreat (Not winning)");
+                    aggressionState = AggressionState.RETREATING;
+                } else if (shouldRegroup && aggressionState != AggressionState.REGROUPING) {
+                    // System.out.println(armyName + ": Forced Regroup (Dispersed)");
+                    aggressionState = AggressionState.REGROUPING;
+                }
+                break;
         }
         previousEnemyArmyObservation = enemyArmy;
         previousComposition = new HashMap<>(currentComposition);
@@ -327,13 +325,13 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
      */
     protected FightPerformance calculateFightPerformance(
             long gameLoop,
-            Army previousEnemyObservation,
-            Army currentEnemyObservation,
+            Optional<Army> previousEnemyObservation,
+            Optional<Army> currentEnemyObservation,
             Map<UnitType, Integer> previousComposition,
             Map<UnitType, Integer> currentComposition) {
-        double currentEnemyThreat = currentEnemyObservation.threat();
+        double currentEnemyThreat = currentEnemyObservation.map(Army::threat).orElse(0.0);
         double threatDelta = currentEnemyThreat -
-                previousEnemyObservation.threat();
+                previousEnemyObservation.map(Army::threat).orElse(0.0);;
         double currentPower = threatCalculator.calculatePower(currentComposition);
         double powerDelta = currentPower -
                 threatCalculator.calculatePower(previousComposition);
