@@ -91,7 +91,7 @@ public class SupaBot extends S2Agent implements AgentData {
     public void onGameStart() {
         this.debugTarget.initialise(this);
         this.unitTypeData = observation().getUnitTypeData(true);
-        mapAnalysis = observation().getGameInfo().getStartRaw().map(startRaw -> AnalyseMap.analyse(
+        mapAnalysis = observation().getGameInfo(true).getStartRaw().map(startRaw -> AnalyseMap.analyse(
                 observation(),
                 gameData,
                 startRaw));

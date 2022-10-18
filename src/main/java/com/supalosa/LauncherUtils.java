@@ -7,11 +7,13 @@ import com.github.ocraft.s2client.protocol.game.LocalMap;
 import com.github.ocraft.s2client.protocol.game.Race;
 import com.supalosa.bot.SupaBot;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class LauncherUtils {
-
     public static void startLadder(String[] pArgs, SupaBot pBot) {
         S2Coordinator vS2Coordinator = S2Coordinator.setup()
                 .setTimeoutMS(300000)
@@ -26,10 +28,24 @@ public class LauncherUtils {
         executeCoordinator(vS2Coordinator);
     }
 
+    public static void startLocal(String[] pArgs, String[] agentArgs, SupaBot pBot) throws InterruptedException {
+        S2Coordinator vS2Coordinator = S2Coordinator.setup()
+                .setTimeoutMS(300000)
+                .setRawAffectsSelection(true)
+                .setShowCloaked(true)
+                .setShowBurrowed(true)
+                .setRealtime(false)
+                .loadSettings(pArgs)
+                .setParticipants(S2Coordinator.createParticipant(Race.TERRAN, pBot))
+                .launchStarcraft();
+        vS2Coordinator.setupPorts(2, () -> 8644, false);
+        vS2Coordinator.joinGame();
+        executeCoordinator(vS2Coordinator);
+    }
+
     public static void startSC2(String[] pArgs, SupaBot pBot, BattlenetMap pMap, boolean pRealtime, PlayerSettings[] pAI) {
         PlayerSettings[] participants = new PlayerSettings[2];
         participants[0] = S2Coordinator.createParticipant(Race.TERRAN, pBot, "supabot");
-        participants[1] = pAI[0];
         S2Coordinator vS2Coordinator = S2Coordinator.setup().setRealtime(pRealtime).setRawAffectsSelection(false)
                 .loadSettings(pArgs)
                 .setShowCloaked(true)
