@@ -146,6 +146,7 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
             // If a unit was known on the last update, but not in this update, track it.
             previousKnownEnemyUnits.forEach(previousKnownEnemyUnit -> {
                 if (!seenTags.contains(previousKnownEnemyUnit.getTag())) {
+                    missingEnemyUnits.add(previousKnownEnemyUnit);
                     /*if (missingEnemyUnits.add(previousKnownEnemyUnit)) {
                         System.out.println("A " + previousKnownEnemyUnit.unit().getType() + " is missing.");
                     }*/
