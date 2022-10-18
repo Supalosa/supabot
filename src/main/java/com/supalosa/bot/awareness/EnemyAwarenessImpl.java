@@ -9,6 +9,7 @@ import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.DisplayType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
@@ -164,8 +165,10 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                 }
             });
             // Stop tracking missing units after 2 minutes or if we saw them on this tick.
+            // Snapshots are forgotten after 30 seconds because the tag changes.
             missingEnemyUnits = missingEnemyUnits.stream()
-                    .filter(unitInPool -> gameLoop < unitInPool.getLastSeenGameLoop() + 120 * 22L)
+                    .filter(unitInPool -> gameLoop < unitInPool.getLastSeenGameLoop() +
+                            (unitInPool.unit().getDisplayType() == DisplayType.SNAPSHOT ? 30 : 120) * 22L)
                     .filter(unitInPool -> !seenTags.contains(unitInPool.getTag()))
                     .collect(Collectors.toSet());
             destroyedUnits.clear();

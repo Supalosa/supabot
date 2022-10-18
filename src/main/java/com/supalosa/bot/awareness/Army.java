@@ -38,15 +38,16 @@ public interface Army {
      * Returns this army plus another army. Note that the position will be unknown.
      */
     default Army plus(Army other) {
-        ImmutableArmy.Builder builder = ImmutableArmy.builder().from(this)
+        ImmutableArmy.Builder builder = ImmutableArmy.builder()
                 .addAllUnitTags(other.unitTags())
                 .size(this.size() + other.size())
                 .threat(this.threat() + other.threat())
                 .position(Optional.empty());
+        Map<UnitType, Integer> composition = new HashMap<>(composition());
         other.composition().forEach((unitType, amount) -> {
-            builder.putComposition(unitType, composition().getOrDefault(unitType, 0) + amount);
+            composition.put(unitType, composition.getOrDefault(unitType, 0) + amount);
         });
-        return builder.build();
+        return builder.putAllComposition(composition).build();
     }
 
     static Map<UnitType, Integer> createComposition(Iterable<UnitType> compositionList) {

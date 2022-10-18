@@ -32,7 +32,7 @@ public class RegionGraph extends SimpleWeightedGraph<Region, DefaultWeightedEdge
         } catch (Exception ex) {
             System.err.println("ERROR in pathfinder");
             ex.printStackTrace();
-            System.out.println(this.toString());
+            //System.out.println(this.toString());
             return Optional.empty();
         }
     }
