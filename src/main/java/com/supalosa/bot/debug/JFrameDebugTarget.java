@@ -28,6 +28,8 @@ public class JFrameDebugTarget implements DebugTarget {
 
     private long lastFrameUpdate = 0L;
 
+    private double baselineThreat = 0L;
+
     @Override
     public void initialise(SupaBot agent) {
         this.agent = agent;
@@ -87,11 +89,12 @@ public class JFrameDebugTarget implements DebugTarget {
                     placeable -> placeable ? WHITE : RED,
                     (existingValue, newValue) -> newValue == RED ? newValue : existingValue);
         });
-        double maybeThreat = 50f;
         if (data.mapAwareness().getLargestEnemyArmy().isPresent()) {
-            maybeThreat = data.mapAwareness().getLargestEnemyArmy().get().threat();
+            baselineThreat = Math.max(100f, data.mapAwareness().getLargestEnemyArmy().get().threat());
+        } else {
+            baselineThreat = Math.max(100f, baselineThreat * 0.95);
         }
-        final double baseThreat = maybeThreat;
+
         data.mapAwareness().getAllRegionData().forEach(regionData -> {
             VisualisationUtils.renderTileSet(
                     regionBmp,
@@ -100,19 +103,19 @@ public class JFrameDebugTarget implements DebugTarget {
                         if (regionData.isBlocked()) {
                             return VisualisationUtils.makeRgb(128, 128, 128);
                         }
-                        double playerThreatFactor = Math.min(1.0, regionData.playerThreat() / baseThreat);
-                        double enemyThreatFactor = Math.min(1.0, regionData.enemyThreat() / baseThreat);
+                        double playerThreatFactor = Math.min(1.0, regionData.playerThreat() / baselineThreat);
+                        double diffuseThreatFactor = Math.min(1.0, regionData.diffuseEnemyThreat() / baselineThreat);
                         double visibilityFactor = Math.min(1.0, 0.15 + (regionData.decayingVisibilityPercent() * 0.85));
                         double red = (255 - (int) (255 * playerThreatFactor)) * visibilityFactor;
-                        double green = (255 - (int) (255 * enemyThreatFactor)) * visibilityFactor;
-                        double blue = (255 - (int)(128 * playerThreatFactor) - (int)(127 * enemyThreatFactor)) * visibilityFactor;
+                        double green = (255 - (int) (255 * diffuseThreatFactor)) * visibilityFactor;
+                        double blue = (255 - (int)(128 * playerThreatFactor) - (int)(127 * diffuseThreatFactor)) * visibilityFactor;
                         return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     },
                     (_prevVal) -> {
-                        double diffuseThreatFactor = Math.min(1.0, regionData.diffuseEnemyThreat() / baseThreat);
+                        double currentThreatFactor = Math.min(1.0, regionData.enemyThreat() / baselineThreat);
                         double red = 255;
-                        double green = (255 - (int) (255 * diffuseThreatFactor));
-                        double blue = (255 - (int) (255 * diffuseThreatFactor));
+                        double green = (255 - (int) (255 * currentThreatFactor));
+                        double blue = (255 - (int) (255 * currentThreatFactor));
                         return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     });
             /*
@@ -142,23 +145,35 @@ public class JFrameDebugTarget implements DebugTarget {
 
         // Draw other metadata for regions.
         data.mapAwareness().getAllRegionData().forEach(regionData -> {
-            g.setColor(Color.RED);
-            if (regionData.killzoneFactor() > 2.0) {
-                int x = scaleX(regionData.region().centrePoint().getX());
-                int y = scaleY(regionData.region().centrePoint().getY(),  mapHeight);
-                drawCross(g, x, y, (int) (1 * regionData.killzoneFactor()));
-            }
-            g.setColor(Color.WHITE);
             int x = scaleX(regionData.region().centrePoint().getX());
             int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
-            Font lastFont = g.getFont();
-            g.setFont(lastFont.deriveFont(10.0f));
-            String regionText = String.format("%.2f / %.2f", regionData.enemyThreat(), regionData.diffuseEnemyThreat());
-            if (regionData.hasEnemyBase()) {
-                regionText += "B";
+            g.setColor(Color.RED);
+            if (regionData.killzoneFactor() > 2.0) {
+                drawCross(g, x, y, (int) (1 * regionData.killzoneFactor()));
             }
-            g.drawString(regionText, x, y);
-            g.setFont(lastFont);
+            /*g.setColor(Color.GRAY);
+            regionData.region().nearbyRegions().forEach(nearbyRegionId -> {
+                data.mapAwareness().getRegionDataForId(nearbyRegionId).ifPresent(nearbyRegion -> {
+                    int x2 = scaleX(nearbyRegion.region().centrePoint().getX());
+                    int y2 = scaleY(nearbyRegion.region().centrePoint().getY(), mapHeight);
+                    g.drawLine(x, y, x2, y2);
+                });
+            });*/
+            if (regionData.region().getRampId().isEmpty()) {
+                Font lastFont = g.getFont();
+                g.setFont(lastFont.deriveFont(10.0f));
+                String regionText = String.format("%.1f [%.1f]", regionData.diffuseEnemyThreat(), regionData.enemyThreat());
+                if (regionData.hasEnemyBase()) {
+                    regionText += "B";
+                }
+                int width = g.getFontMetrics().stringWidth(regionText);
+                int height = g.getFontMetrics().getHeight();
+                g.setColor(Color.BLACK);
+                g.drawString(regionText, x+1 - (width / 2), y+1 - (height / 2));
+                g.setColor(Color.WHITE);
+                g.drawString(regionText, x - (width / 2), y - (height / 2));
+                g.setFont(lastFont);
+            }
         });
 
         // Draw army metadata.

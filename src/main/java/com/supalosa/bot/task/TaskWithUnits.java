@@ -30,6 +30,11 @@ public interface TaskWithUnits extends Task {
     boolean hasUnit(Tag unitTag);
 
     /**
+     * Removes the unit (if we have it) and returns true if it was removed.
+     */
+    boolean removeUnit(Tag unitTag);
+
+    /**
      * Returns an arbitrary value of priority, with higher figures getting units first.
      */
     int getPriority();

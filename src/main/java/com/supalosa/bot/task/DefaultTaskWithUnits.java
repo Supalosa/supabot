@@ -1,8 +1,10 @@
 package com.supalosa.bot.task;
 
 import com.github.ocraft.s2client.bot.S2Agent;
+import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.UnitType;
+import com.github.ocraft.s2client.protocol.unit.PassengerUnit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
@@ -15,6 +17,7 @@ import com.supalosa.bot.task.army.TerranBioArmyTask;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public abstract class DefaultTaskWithUnits implements TaskWithUnits {
 
@@ -29,12 +32,28 @@ public abstract class DefaultTaskWithUnits implements TaskWithUnits {
     @Override
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         currentComposition.clear();
+        Set<Tag> myPassengers = armyUnits.stream().flatMap(tag -> {
+                    UnitInPool unit = agent.observation().getUnit(tag);
+                    if (unit != null) {
+                        return unit.unit().getPassengers().stream().map(PassengerUnit::getTag);
+                    } else {
+                        return Stream.empty();
+                    }
+                }).collect(Collectors.toSet());
         armyUnits = armyUnits.stream().filter(tag -> {
                     UnitInPool unit = agent.observation().getUnit(tag);
                     if (unit != null) {
                         currentComposition.put(
                                 unit.unit().getType(),
                                 currentComposition.getOrDefault(unit.unit().getType(), 0) + 1);
+                        unit.unit().getPassengers().forEach(passengerUnit -> {
+                            currentComposition.put(
+                                unit.unit().getType(),
+                                currentComposition.getOrDefault(passengerUnit.getType(), 0) + 1);
+                        });
+                    }
+                    if (myPassengers.contains(tag)) {
+                        return true;
                     }
                     return (unit != null && unit.isAlive());
                 })
@@ -65,6 +84,11 @@ public abstract class DefaultTaskWithUnits implements TaskWithUnits {
     }
 
     @Override
+    public boolean removeUnit(Tag unitTag) {
+        return armyUnits.remove(unitTag);
+    }
+
+    @Override
     public boolean hasUnit(Tag unitTag) {
         return armyUnits.contains(unitTag);
     }
@@ -82,11 +106,10 @@ public abstract class DefaultTaskWithUnits implements TaskWithUnits {
     /**
      * Take all units from the other task.
      */
-    public void takeAllFrom(DefaultTaskWithUnits otherArmy) {
+    public void takeAllFrom(TaskManager taskManager, ObservationInterface observationInterface, DefaultTaskWithUnits otherArmy) {
         if (otherArmy == this) {
             return;
         }
-        this.armyUnits.addAll(otherArmy.armyUnits);
-        otherArmy.armyUnits.clear();
+        taskManager.reassignUnits(otherArmy, this, observationInterface, _unit -> true);
     }
 }

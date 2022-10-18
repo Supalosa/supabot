@@ -67,6 +67,7 @@ public class RegionDataCalculator {
         Map<Integer, Double> regionToVisibility = new HashMap<>();
         Map<Integer, Double> regionToCreep = new HashMap<>();
         Map<Integer, Double> regionToDecayingVisibility = new HashMap<>();
+        Map<Integer, Double> regionToPreviousDiffuseThreat = new HashMap<>();
 
         for (Region region : analysisResults.getRegions()) {
             Optional<RegionData> previousData = Optional.ofNullable(previousRegionData.get(region.regionId()));
@@ -90,6 +91,8 @@ public class RegionDataCalculator {
             regionToVisibility.put(region.regionId(), currentVisibility);
             regionToDecayingVisibility.put(region.regionId(), decayingVisibilityValue);
             regionToCreep.put(region.regionId(), currentCreep);
+            // This is calculated later.
+            regionToPreviousDiffuseThreat.put(region.regionId(), previousData.map(RegionData::diffuseEnemyThreat).orElse(0.0));
             if (threatValue > maxEnemyThreat) {
                 maxEnemyThreat = threatValue;
             }
@@ -127,6 +130,10 @@ public class RegionDataCalculator {
             double decayingVisibilityPercent = regionToDecayingVisibility.get(region.regionId());
             double enemyArmyFactor = 1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat);
             double killzoneFactor = 1.0f + killzoneThreat.map(threat -> threat / Math.max(1.0, finalMaxEnemyThreat/2)).orElse(0.0);
+            double visibilityDecay = 0.75 + 0.25 * (1.0 - visibilityPercent);
+            double decayingDefuseThreat = Math.max(
+                    diffuseThreat.orElse(0.0),
+                    regionToPreviousDiffuseThreat.get(region.regionId()) * 0.75 - 1.0 * visibilityDecay);
             double regionCreepPercentage = regionToCreep.get(region.regionId());
             Set<Point2d> borderTilesTowardsEnemy = calculateBorderTilesTowardsEnemy(region, previousRegionData);
             OptionalDouble averageX = borderTilesTowardsEnemy.stream().mapToDouble(point -> point.getX()).average();
@@ -146,7 +153,7 @@ public class RegionDataCalculator {
                     .playerThreat(currentSelfThreat)
                     .visibilityPercent(visibilityPercent)
                     .decayingVisibilityPercent(decayingVisibilityPercent)
-                    .diffuseEnemyThreat(diffuseThreat.orElse(0.0))
+                    .diffuseEnemyThreat(decayingDefuseThreat)
                     .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()))
                     .estimatedCreepPercentage(regionCreepPercentage)
                     .borderTilesTowardsEnemy(borderTilesTowardsEnemy)

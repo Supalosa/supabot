@@ -96,4 +96,10 @@ public interface TaskManager {
      * @return A list of promises from tasks that responded.
      */
     List<TaskPromise> dispatchMessage(Task task, TaskMessage message);
+
+    /**
+     * Move units (matching a predicate) from one task to another.
+     * @return The amount of units moved.
+     */
+    int reassignUnits(TaskWithUnits from, TaskWithUnits to, ObservationInterface observationInterface, Predicate<Unit> predicate);
 }

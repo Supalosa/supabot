@@ -204,7 +204,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
 
     @Override
     public String getKey() {
-        return null;
+        return "OCMgr";
     }
 
     @Override

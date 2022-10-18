@@ -10,6 +10,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
@@ -29,7 +30,9 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * A permanent bio army that constantly asks for reinforcements.
@@ -97,12 +100,12 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .build()
             );
         }
-        if (armyUnits.size() > 10 && numMedivacs < armyUnits.size() * 0.1) {
+        if (numMedivacs <= armyUnits.size() * 0.1) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_MEDIVAC)
                     .productionAbility(Abilities.TRAIN_MEDIVAC)
                     .producingUnitType(Units.TERRAN_STARPORT)
-                    .amount((int)(Math.min(10, armyUnits.size() * 0.1)))
+                    .amount((int)(Math.min(12, Math.ceil(armyUnits.size() * 0.1))))
                     .build()
             );
         }
@@ -223,6 +226,18 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
                 });
             }
+            // unload medivacs (in case they came from a disbanded harass task)
+            Function<Set<Tag>, Stream<Unit>> unitsStream = units -> units.stream().map(tag ->
+                    agent.observation().getUnit(tag)).filter(unit -> unit != null).map(UnitInPool::unit);
+
+            List<Unit> airUnitsNotEmpty = unitsStream.apply(armyUnits)
+                    .filter(unit -> unit.getFlying().orElse(false))
+                    .filter(unit -> unit.getCargoSpaceTaken().orElse(0) > 0)
+                    .collect(Collectors.toList());
+            if (airUnitsNotEmpty.size() > 0) {
+                for (Unit unit : airUnitsNotEmpty) {
+                    actionInterface.unitCommand(unit, Abilities.UNLOAD_ALL_AT_MEDIVAC, unit.getPosition().toPoint2d(), false);
+                }            }
         }
         return parentState;
     }

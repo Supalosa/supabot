@@ -139,4 +139,11 @@ public class GameData {
             return structureTypes.get(unitType);
         }
     }
+
+    /**
+     * Return the size of the unit when it's in cargo.
+     */
+    public Optional<Integer> getUnitCargoSize(UnitType type) {
+        return Optional.ofNullable(getOrInitUnitTypeData().get(type)).flatMap(unitTypeData -> unitTypeData.getCargoSize());
+    }
 }

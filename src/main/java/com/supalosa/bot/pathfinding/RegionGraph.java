@@ -11,11 +11,12 @@ import java.util.List;
 import java.util.Optional;
 
 public class RegionGraph extends SimpleWeightedGraph<Region, DefaultWeightedEdge> {
+
     public RegionGraph(Class<? extends DefaultWeightedEdge> edgeClass) {
         super(edgeClass);
     }
 
-    public Optional<List<Region>> findPath(Region startRegion, Region endRegion) {
+    public Optional<RegionGraphPath> findPath(Region startRegion, Region endRegion) {
         AStarShortestPath<Region, DefaultWeightedEdge> pathfinder = new AStarShortestPath<>(
                 this, (sourceVertex, targetVertex) -> sourceVertex.centrePoint().distance(targetVertex.centrePoint()));
 
@@ -24,7 +25,10 @@ public class RegionGraph extends SimpleWeightedGraph<Region, DefaultWeightedEdge
             if (path == null || path.getEndVertex() == null || !path.getEndVertex().equals(endRegion)) {
                 return Optional.empty();
             }
-            return Optional.of(new ArrayList<>(path.getVertexList()));
+            return Optional.of(ImmutableRegionGraphPath.builder()
+                    .path(path.getVertexList())
+                    .weight(path.getWeight())
+                    .build());
         } catch (Exception ex) {
             System.err.println("ERROR in pathfinder");
             ex.printStackTrace();

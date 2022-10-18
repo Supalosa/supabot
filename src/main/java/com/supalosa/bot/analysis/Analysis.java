@@ -8,6 +8,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.SetMultimap;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
+import com.supalosa.bot.analysis.utils.VisualisationUtils;
 import org.apache.logging.log4j.util.TriConsumer;
 
 import java.util.*;
@@ -240,6 +241,9 @@ public class Analysis {
         });
 
         Grid<Integer> distanceTransformGrid = distanceTransform(pathing, result);
+        VisualisationUtils.writeToFile("rawDistanceTransform.bmp", VisualisationUtils.renderNewGrid(distanceTransformGrid, VisualisationUtils.getRawDistanceTransformRenderer()));
+
+
         Set<Point2d> confirmedMaxima = findLocalMaximumAndConfirmedMaxima(distanceTransformGrid, result);
         Map<Integer, Region> regions = floodFillRegions(confirmedMaxima, mapOfRamps, result);
 
@@ -251,11 +255,30 @@ public class Analysis {
         // Using L1 distance transformation.
         for (int x = 0; x < result.getWidth(); ++x) {
             for (int y = 0; y < result.getHeight(); ++y) {
-                if ((pathing.get(x, y) & 0xFF) == 0) {
-                    result.set(x, y, 0);
-                } else {
+                //if ((pathing.get(x, y) & 0xFF) == 0) {
+                boolean isPathable = (pathing.get(x, y) & 0xFF) > 0;
+                    boolean hasPathableNeighbour = false;
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        for (int dy = -1; dy <= 1; ++dy) {
+                            int xx = x + dx;
+                            int yy = y + dy;
+                            if (pathing.isInBounds(xx, yy) && (pathing.get(xx, yy) & 0xFF) > 0) {
+                                hasPathableNeighbour = true;
+                                break;
+                            }
+                        }
+                        if (hasPathableNeighbour) {
+                            break;
+                        }
+                    }
+                    if (!isPathable && hasPathableNeighbour) {
+                        result.set(x, y, 0);
+                    } else {
+                        result.set(x, y, 255);
+                    }
+                /*} else {
                     result.set(x, y, 255);
-                }
+                }*/
             }
         }
 
@@ -404,6 +427,16 @@ public class Analysis {
             }*/
             centrePoints.put(value.regionId, Point2d.of(maxima.getX(), maxima.getY()));
         });
+        Multimap<Integer, Integer> nearbyRegions = HashMultimap.create();
+        centrePoints.forEach((regionId, centrePoint) -> {
+            centrePoints.forEach((otherRegionId, otherCentrePoint) -> {
+                if (regionId != otherRegionId) {
+                    if (centrePoint.distance(otherCentrePoint) < 50f) {
+                        nearbyRegions.put(regionId, otherRegionId);
+                    }
+                }
+            });
+        });
         // Add ramps as their own regions.
         Multimap<Integer, Tile> regions = ArrayListMultimap.create();
         Multimap<Integer, Tile> allBorderTiles = ArrayListMultimap.create();
@@ -431,7 +464,7 @@ public class Analysis {
             if (alreadyEnqueued.contains(tile)) {
                 return;
             }
-            if (!tile.pathable) {
+            if (tile.distanceToBorder == 0) {
                 return;
             }
             if (tile.regionId == -1) {
@@ -506,6 +539,7 @@ public class Analysis {
                     .tiles(tiles)
                     .rampId(Optional.ofNullable(regionIdToRampId.get(regionId)))
                     .connectedRegions(connectedRegions.get(regionId))
+                    .nearbyRegions(nearbyRegions.get(regionId))
                     .centrePoint(centrePoints.get(regionId))
                     .addAllOnHighGroundOfRegions(regionIsOnHighGroundOf.get(regionId))
                     .addAllOnLowGroundOfRegions(regionIsOnLowGroundOf.get(regionId))

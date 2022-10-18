@@ -166,7 +166,10 @@ public class VisualisationUtils {
                 img.setRGB((int)startLocation.getX()* TILE_SIZE +2, (int)startLocation.getY()* TILE_SIZE +2, red);
             });
         });*/
+        writeToFile(filename, img);
+    }
 
+    public static void writeToFile(String filename, BufferedImage img) {
         File outputFile = new File(filename);
         try {
             ImageIO.write(img, "bmp", outputFile);
@@ -305,7 +308,7 @@ public class VisualisationUtils {
 
     public static Function<Tile, Integer> getDistanceTransformRenderer() {
         return tile -> {
-            if (!tile.pathable && !tile.placeable) {
+            if (!tile.pathable && !tile.placeable && tile.regionId < 0) {
                 return BLACK;
             }
             if (tile.isPostFilteredLocalMaximum) {
@@ -314,7 +317,7 @@ public class VisualisationUtils {
             if (tile.isLocalMaximum) {
                 return GRAY;
             }
-            if (tile.distanceToBorder == 1) {
+            if (tile.distanceToBorder == 0) {
                 return WHITE;
             }
             float dbRatio = tile.distanceToBorder / 20f;
@@ -323,15 +326,23 @@ public class VisualisationUtils {
         };
     }
 
+    public static Function<Integer, Integer> getRawDistanceTransformRenderer() {
+        return tile -> {
+            float dbRatio = tile / 20f;
+            int colComponent = (int)(255 * dbRatio);
+            return VisualisationUtils.makeRgb(0, colComponent, colComponent);
+        };
+    }
+
     public static Function<Tile, Integer> getRegionMapRenderer() {
         return tile -> {
-            if (!tile.pathable && !tile.placeable) {
+            if (!tile.pathable && !tile.placeable && tile.regionId < 0) {
                 return BLACK;
             }
             if (tile.isPostFilteredLocalMaximum) {
                 return GREEN;
             }
-            if (tile.distanceToBorder == 1) {
+            if (tile.distanceToBorder == 0) {
                 return WHITE;
             }
             int colComponent = (int)(tile.regionId);

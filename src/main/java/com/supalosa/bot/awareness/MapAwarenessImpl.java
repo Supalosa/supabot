@@ -13,18 +13,16 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
-import com.supalosa.bot.analysis.Tile;
 import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.pathfinding.GraphUtils;
 import com.supalosa.bot.pathfinding.RegionGraph;
+import com.supalosa.bot.pathfinding.RegionGraphPath;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
@@ -67,6 +65,7 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<RegionGraph> normalGraph = Optional.empty();
     private Optional<RegionGraph> avoidArmyGraph = Optional.empty();
     private Optional<RegionGraph> avoidKillzoneGraph = Optional.empty();
+    private Optional<RegionGraph> airAvoidArmyGraph = Optional.empty();
 
     private Optional<AnalysisResults> mapAnalysisResults = Optional.empty();
 
@@ -104,12 +103,14 @@ public class MapAwarenessImpl implements MapAwareness {
     }
 
     @Override
-    public Optional<List<Region>> generatePath(Region startRegion, Region endRegion, PathRules rules) {
+    public Optional<RegionGraphPath> generatePath(Region startRegion, Region endRegion, PathRules rules) {
         switch (rules) {
             case AVOID_ENEMY_ARMY:
                 return avoidArmyGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
             case AVOID_KILL_ZONE:
                 return avoidKillzoneGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+            case AIR_AVOID_ENEMY_ARMY:
+                return airAvoidArmyGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
             case NORMAL:
             default:
                 return normalGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
@@ -237,15 +238,18 @@ public class MapAwarenessImpl implements MapAwareness {
             AnalysisResults analysisResults = data.mapAnalysis().get();
             regionData = regionDataCalculator.calculateRegionData(agent, analysisResults, regionData, knownEnemyBases);
 
-            normalGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
+            normalGraph = Optional.of(GraphUtils.createGraph(analysisResults, Region::connectedRegions, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.weight()));
 
             // Edges are weighted by the diffuse enemy threat.
-            avoidArmyGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
+            avoidArmyGraph = Optional.of(GraphUtils.createGraph(analysisResults, Region::connectedRegions, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.diffuseEnemyThreat()));
 
-            avoidKillzoneGraph = Optional.of(GraphUtils.createGraph(analysisResults, regionData,
+            avoidKillzoneGraph = Optional.of(GraphUtils.createGraph(analysisResults, Region::connectedRegions, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.killzoneFactor() < 10.0f ? destinationRegion.killzoneFactor() : null));
+
+            airAvoidArmyGraph = Optional.of(GraphUtils.createGraph(analysisResults, Region::nearbyRegions, regionData,
+                    (sourceRegion, destinationRegion) -> destinationRegion.diffuseEnemyThreat()));
         }
     }
 

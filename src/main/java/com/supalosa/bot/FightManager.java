@@ -104,7 +104,16 @@ public class FightManager {
         }
         if (agent.observation().getArmyCount() > 40) {
             // Start a harass force.
-            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harrass", 100);
+            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass1", 100);
+            if (taskManager.addTask(harassTask, 1)) {
+                harassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
+                harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);
+                armyTasks.add(harassTask);
+            }
+        }
+        if (agent.observation().getArmyCount() > 70) {
+            // Start a harass force.
+            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass2", 100);
             if (taskManager.addTask(harassTask, 1)) {
                 harassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
                 harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);
@@ -230,7 +239,7 @@ public class FightManager {
                 }
             }
             isDefending = true;
-        } else if (agent.observation().getFoodCap() < 50) { // TODO: This is a hardcoded hack
+        } else {
             data.structurePlacementCalculator().ifPresent(spc -> {
                 // Defend from behind the barracks, or else the position of the barracks.
                 Optional<Point2d> defencePosition = spc
@@ -239,12 +248,10 @@ public class FightManager {
                         .orElse(spc.getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d()));
                 this.setDefencePosition(defencePosition);
             });
-        } else {
-            this.setDefencePosition(data.mapAwareness().getDefenceLocation());
         }
         // hack, maybe?
         if (!isDefending && (reserveArmy.getSize()) >= getTargetMarines()) {
-            attackingArmy.takeAllFrom(reserveArmy);
+            attackingArmy.takeAllFrom(data.taskManager(), agent.observation(), reserveArmy);
         }
     }
 

@@ -1,0 +1,12 @@
+{
+  "Bots": {
+    "supabot": {
+      "Race": "Terran",
+      "Type": "Java",
+      "RootPath": "./",
+      "FileName": "supabot.jar",
+      "Debug": true,
+      "SurrenderPhrase": "pineapple"
+    }
+  }
+}

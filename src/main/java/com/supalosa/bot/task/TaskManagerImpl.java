@@ -6,15 +6,15 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.PassengerUnit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.task.message.TaskMessage;
-import com.supalosa.bot.task.message.TaskMessageResponse;
 import com.supalosa.bot.task.message.TaskPromise;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -123,11 +123,25 @@ public class TaskManagerImpl implements TaskManager {
         if (gameLoop > unitToTaskMapCleanedAt + 22L) {
             unitToTaskMapCleanedAt = gameLoop;
             Set<Tag> missingUnits = new HashSet<>();
-            unitToTaskMap.keySet().forEach(tag -> {
-                if (agent.observation().getUnit(tag) == null) {
+            Set<Tag> unitsInPassengers = new HashSet<>();
+            unitToTaskMap.forEach((tag, task) -> {
+                UnitInPool unitInPool = agent.observation().getUnit(tag);
+                if (unitInPool == null) {
                     missingUnits.add(tag);
+                } else if (unitInPool.unit().getPassengers().size() > 0) {
+                    for (PassengerUnit passengerUnit : unitInPool.unit().getPassengers()) {
+                        unitsInPassengers.add(passengerUnit.getTag());
+                    }
+                }
+                // DEBUG
+                if (task instanceof TaskWithUnits) {
+                    if (!((TaskWithUnits)task).hasUnit(tag) && (unitInPool) != null || unitsInPassengers.contains(tag)) {
+                        System.out.println("Warning: Task " +task.getKey() + " doesn't think it has unit " + tag);
+                        //missingUnits.add(tag);
+                    }
                 }
             });
+            missingUnits.removeAll(unitsInPassengers);
             missingUnits.forEach(missingUnitTag -> unitToTaskMap.remove(missingUnitTag));
         }
     }
@@ -166,6 +180,7 @@ public class TaskManagerImpl implements TaskManager {
             UnitInPool unitInPool = agent.observation().getUnit(entry.getKey());
             if (unitInPool != null) {
                 agent.debug().debugSphereOut(unitInPool.unit().getPosition(), 0.5f, Color.YELLOW);
+                agent.debug().debugTextOut(entry.getValue().getKey(), unitInPool.unit().getPosition(), Color.WHITE, 8);
             }
         }
     }
@@ -191,5 +206,25 @@ public class TaskManagerImpl implements TaskManager {
             }
         });
         return responses;
+    }
+
+    @Override
+    public int reassignUnits(TaskWithUnits from, TaskWithUnits to, ObservationInterface observationInterface, Predicate<Unit> predicate) {
+        AtomicInteger moved = new AtomicInteger();
+        unitToTaskMap.forEach((tag, task) -> {
+            if (task == from) {
+                UnitInPool unitInPool = observationInterface.getUnit(tag);
+                if (unitInPool == null) {
+                    return;
+                }
+                Unit unit = unitInPool.unit();
+                if (from.removeUnit(tag) && predicate.test(unit) && to.wantsUnit(unit)) {
+                    to.addUnit(tag);
+                    moved.incrementAndGet();
+                    unitToTaskMap.put(tag, to);
+                }
+            }
+        });
+        return moved.get();
     }
 }

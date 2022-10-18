@@ -5,12 +5,15 @@ import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
 import org.jgrapht.graph.DefaultWeightedEdge;
 
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class GraphUtils {
 
     public static RegionGraph createGraph(AnalysisResults analysisResults,
+                                                                 Function<Region, List<Integer>> edgeExtractor,
                                                                  Map<Integer, RegionData> allRegionData,
                                                                  BiFunction<RegionData, RegionData, Double> regionMapper) {
         RegionGraph g = new RegionGraph(DefaultWeightedEdge.class);
@@ -21,7 +24,7 @@ public class GraphUtils {
 
         analysisResults.getRegions().forEach(region -> {
             RegionData regionData = allRegionData.get(region.regionId());
-            region.connectedRegions().forEach(connectedRegionId -> {
+            edgeExtractor.apply(region).forEach(connectedRegionId -> {
                 Region otherRegion = analysisResults.getRegion(connectedRegionId);
                 RegionData otherRegionData = allRegionData.get(otherRegion.regionId());
 

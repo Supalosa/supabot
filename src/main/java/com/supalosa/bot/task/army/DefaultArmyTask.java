@@ -16,6 +16,7 @@ import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.ThreatCalculator;
+import com.supalosa.bot.pathfinding.RegionGraphPath;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -73,14 +74,12 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         super.onStep(taskManager, data, agent);
         List<Point2d> armyPositions = new ArrayList<>();
-        armyUnits = armyUnits.stream().filter(tag -> {
-                    UnitInPool unit = agent.observation().getUnit(tag);
-                    if (unit != null) {
-                        armyPositions.add(unit.unit().getPosition().toPoint2d());
-                    }
-                    return (unit != null && unit.isAlive());
-                })
-                .collect(Collectors.toSet());
+        for (Tag tag : armyUnits) {
+            UnitInPool unit = agent.observation().getUnit(tag);
+            if (unit != null) {
+                armyPositions.add(unit.unit().getPosition().toPoint2d());
+            }
+        }
 
         long gameLoop = agent.observation().getGameLoop();
 
@@ -108,11 +107,11 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 retreatRegion :
                 targetRegion;
         if (currentRegion.isPresent() && destinationRegion.isPresent() && !currentRegion.equals(destinationRegion)) {
-            Optional<List<Region>> maybePath = data
+            Optional<RegionGraphPath> maybePath = data
                     .mapAwareness()
                     .generatePath(currentRegion.get(), destinationRegion.get(), pathRules);
             maybePath.ifPresent(path -> {
-                regionWaypoints = path;
+                regionWaypoints = new ArrayList<>(path.getPath());
                 waypointsCalculatedFrom = currentRegion;
                 waypointsCalculatedTo = destinationRegion;
             });
@@ -475,7 +474,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
 
     @Override
     public String getKey() {
-        return "ATTACK." + armyName;
+        return "Army." + armyName;
     }
 
     @Override

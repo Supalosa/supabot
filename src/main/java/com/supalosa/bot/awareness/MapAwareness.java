@@ -7,6 +7,7 @@ import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.pathfinding.RegionGraphPath;
 
 import java.util.Collection;
 import java.util.List;
@@ -26,13 +27,18 @@ public interface MapAwareness {
         /**
          * Path by avoiding 'killzones' (low ground, siege tanks, liberators)
          */
-        AVOID_KILL_ZONE
+        AVOID_KILL_ZONE,
+
+        /**
+         * Air units can path more freely, but if you want to avoid enemy army, use this.
+         */
+        AIR_AVOID_ENEMY_ARMY
     }
 
     Optional<RegionData> getRegionDataForPoint(Point2d point);
     Optional<RegionData> getRegionDataForId(int regionId);
 
-    Optional<List<Region>> generatePath(Region startRegion, Region endRegion, PathRules rules);
+    Optional<RegionGraphPath> generatePath(Region startRegion, Region endRegion, PathRules rules);
 
     Collection<RegionData> getAllRegionData();
 

@@ -15,6 +15,7 @@ import java.util.Set;
 public interface Region extends TileSet {
     int regionId();
     List<Integer> connectedRegions();
+    List<Integer> nearbyRegions();
     List<Integer> onLowGroundOfRegions();
     List<Integer> onHighGroundOfRegions();
     Optional<Integer> getRampId();
