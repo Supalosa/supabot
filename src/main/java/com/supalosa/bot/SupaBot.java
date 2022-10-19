@@ -219,8 +219,12 @@ public class SupaBot extends S2Agent implements AgentData {
             // TODO better logic to prevent starvation.
             // Here we just wait until we have the highest mineral cost.
             // However that will lead to lower costs being starved.
-            int maxMineralCost = requestedUnitTypes.stream().mapToInt(request ->
-                    gameData.getUnitMineralCost(request.unitType()).orElse(50)).max().orElse(50);
+            int maxMineralCost = requestedUnitTypes.stream()
+                    .filter(request -> request.amount() > 0)
+                    .mapToInt(request ->
+                        gameData.getUnitMineralCost(request.unitType()).orElse(50))
+                    .max()
+                    .orElse(50);
             //System.out.println("Waiting for " + maxMineralCost + " minerals");
             if (observation().getMinerals() > maxMineralCost) {
                 Collections.shuffle(requestedUnitTypes);
@@ -318,7 +322,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (isDebug) {
             if (isSlow) {
                 try {
-                    Thread.sleep(200);
+                    Thread.sleep(250);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -498,7 +502,9 @@ public class SupaBot extends S2Agent implements AgentData {
 
     private boolean needsSupplyDepot() {
         // If we are not supply capped, don't build a supply depot.
-        if (observation().getFoodUsed() <= observation().getFoodCap() - 2) {
+        int productionCapableBuildings = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
+        productionCapableBuildings += countUnitType(Units.TERRAN_BARRACKS, Units.TERRAN_FACTORY, Units.TERRAN_STARPORT);
+        if (observation().getFoodUsed() <= observation().getFoodCap() - productionCapableBuildings) {
             return false;
         }
         return observation().getFoodCap() < 200;
@@ -566,7 +572,9 @@ public class SupaBot extends S2Agent implements AgentData {
             return false;
         }
         AtomicInteger amountNeeded = new AtomicInteger(maximum.orElse(1000) - count);
-        observation().getUnits(Alliance.SELF, UnitInPool.isUnit(buildFrom)).forEach(structure -> {
+        observation()
+                .getUnits(UnitFilter.builder().alliance(Alliance.SELF).unitType(buildFrom).build())
+                .forEach(structure -> {
             boolean reactor = false;
             boolean techLab = false;
             if (structure.unit().getBuildProgress() < 1.0f) {
@@ -604,7 +612,9 @@ public class SupaBot extends S2Agent implements AgentData {
                     .orElse(false);
             if (orders.isEmpty() || (reactor && orders.size() < 2)) {
                 // Hack here - need prioritsation.
-                if (structureInHighThreat || observation().getMinerals() > 600/* || !needsCommandCentre()*/) {
+                if (structureInHighThreat ||
+                        (observation().getMinerals() > taskManager.totalReservedMinerals() &&
+                                observation().getVespene() > taskManager.totalReservedVespene())) {
                     actions().unitCommand(structure.unit(), abilityToCast, false);
                     amountNeeded.decrementAndGet();
                 }
@@ -622,23 +632,29 @@ public class SupaBot extends S2Agent implements AgentData {
         if (!needsRefinery()) {
             return false;
         }
-        List<Unit> commandCentres = observation().getUnits(unitInPool ->
-                        unitInPool.unit().getAlliance() == Alliance.SELF &&
-                                (Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType()))).stream()
+        List<Unit> commandCentres = observation().getUnits(
+                    UnitFilter.builder()
+                            .alliance(Alliance.SELF)
+                            .unitTypes(Constants.TERRAN_CC_TYPES).build())
+                .stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
-        List<Unit> refineries = observation().getUnits(unitInPool ->
-                        unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                                unitInPool.unit().getType().equals(Units.TERRAN_REFINERY) &&
-                                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
-                ).stream()
+        List<Unit> refineries = observation().getUnits(
+                    UnitFilter.builder()
+                            .alliance(Alliance.SELF)
+                            .unitType(Units.TERRAN_REFINERY)
+                            .filter(unit -> hasUnitNearby(unit, commandCentres, 10f))
+                            .build())
+                .stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
-        List<Unit> neutralGeysers = observation().getUnits(unitInPool ->
-                        unitInPool.unit().getAlliance().equals(Alliance.NEUTRAL) &&
-                                Constants.VESPENE_GEYSER_TYPES.contains(unitInPool.unit().getType()) &&
-                                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
-                ).stream()
+        List<Unit> neutralGeysers = observation().getUnits(
+                    UnitFilter.builder()
+                            .alliance(Alliance.NEUTRAL)
+                            .unitTypes(Constants.VESPENE_GEYSER_TYPES)
+                            .filter(unit -> hasUnitNearby(unit, commandCentres, 10f))
+                            .build())
+                .stream()
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
         for (Unit commandCentre : commandCentres) {
@@ -786,7 +802,15 @@ public class SupaBot extends S2Agent implements AgentData {
                 gameData.getUnitMineralCost(unitTypeForStructure),
                 gameData.getUnitVespeneCost(unitTypeForStructure),
                 Optional.empty());
-        return taskManager.addTask(maybeTask, maxParallel);
+        if (taskManager.addTask(maybeTask, maxParallel)) {
+            long gameLoop = observation().getGameLoop();
+            long currentMinerals = observation().getMinerals();
+            long currentSupply = observation().getFoodUsed();
+            System.out.println("Task for " + unitTypeForStructure + " started at " + gameLoop + " (mins " + currentMinerals + ", supply " + currentSupply + ")");
+            return true;
+        } else {
+            return false;
+        }
     }
 
     private Predicate<UnitInPool> doesBuildWith(Ability abilityTypeForStructure) {

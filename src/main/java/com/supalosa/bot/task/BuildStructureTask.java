@@ -18,6 +18,7 @@ import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,9 +33,12 @@ public class BuildStructureTask implements Task {
     private final Optional<Integer> minimumMinerals;
     private final Optional<Integer> minimumVespene;
     private final UnitType targetUnitType;
-    private final Optional<Point2d> location;
+    private Optional<Point2d> location;
     private final Optional<Unit> specificTarget;
     private final Optional<PlacementRules> placementRules;
+
+    private long nextAssignedWorkerAttempt = 0L;
+    private int numWorkersUsed = 0;
 
     private Optional<Tag> matchingUnitAtLocation = Optional.empty();
     private Optional<Tag> assignedWorker = Optional.empty();
@@ -73,21 +77,20 @@ public class BuildStructureTask implements Task {
             return;
         }
         Optional<UnitInPool> worker = Optional.empty();
+        long gameLoop = agent.observation().getGameLoop();
         if (assignedWorker.isEmpty()) {
-            assignedWorker = taskManager.findFreeUnitForTask(
-                    this,
-                    agent.observation(),
-                    unitInPool -> unitInPool.unit() != null &&
-                            unitInPool.unit().getType().equals(Units.TERRAN_SCV)).map(unitInPool -> unitInPool.getTag());
-            // Resume the construction if applicable.
-            assignedWorker.ifPresent(theWorker -> {
-                matchingUnitAtLocation.ifPresent(tag -> {
-                    UnitInPool unit = agent.observation().getUnit(tag);
-                    if (unit != null) {
-                        agent.actions().unitCommand(theWorker, Abilities.SMART, unit.unit(), false);
-                    }
+            if (gameLoop > nextAssignedWorkerAttempt) {
+                assignedWorker = findWorker(taskManager, agent);
+                // Resume the construction if applicable.
+                assignedWorker.ifPresent(theWorker -> {
+                    matchingUnitAtLocation.ifPresent(tag -> {
+                        UnitInPool unit = agent.observation().getUnit(tag);
+                        if (unit != null) {
+                            agent.actions().unitCommand(theWorker, Abilities.SMART, unit.unit(), false);
+                        }
+                    });
                 });
-            });
+            }
         } else {
             agent.observation().getActionErrors().stream().forEach(actionError -> {
                 if (actionError.getUnitTag().equals(assignedWorker)) {
@@ -104,6 +107,8 @@ public class BuildStructureTask implements Task {
                 if (assignedWorker.isPresent()) {
                     // Worker was assigned but not found - the worker probably died.
                     ++buildAttempts;
+                    nextAssignedWorkerAttempt = gameLoop + (numWorkersUsed) * 22L;
+                    ++numWorkersUsed;
                 }
                 assignedWorker = Optional.empty();
             }
@@ -126,7 +131,6 @@ public class BuildStructureTask implements Task {
             matchingUnitAtLocation = matchingUnitAtLocation.filter(tag -> agent.observation().getUnit(tag) != null);
         }
 
-        long gameLoop = agent.observation().getGameLoop();
         List<ActionError> actionErrors = agent.observation().getActionErrors();
         if (buildAttempts > MAX_BUILD_ATTEMPTS || actionErrors.stream().anyMatch(actionError -> {
             if (actionError.getUnitTag().equals(assignedWorker) &&
@@ -160,8 +164,8 @@ public class BuildStructureTask implements Task {
                 if (specificTarget.isPresent()) {
                     agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
                 } else {
-                    Optional<Point2d> randomTarget = resolveLocation(worker.get(), data.structurePlacementCalculator());
-                    randomTarget.ifPresent(target ->
+                    location = resolveLocation(worker.get(), data.structurePlacementCalculator());
+                    location.ifPresent(target ->
                         agent.actions().unitCommand(assignedWorker.get(), ability, target, false)
                     );
                 }
@@ -188,6 +192,27 @@ public class BuildStructureTask implements Task {
         }
         //System.out.println("Onstep for task " + targetUnitType.toString() + " (Worker: " + worker + ",
         // MatchingUnit: " + matchingUnitAtLocation + ")");
+    }
+
+    private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent) {
+        if (location.isPresent()) {
+            // If location is known, find closest unit to that location.
+            return taskManager.findFreeUnitForTask(
+                    this,
+                    agent.observation(),
+                    unitInPool -> unitInPool.unit() != null &&
+                            unitInPool.unit().getType().equals(Units.TERRAN_SCV),
+                    Comparator.comparing((UnitInPool unitInPool) ->
+                            unitInPool.unit().getPosition().toPoint2d().distance(location.get())).reversed()
+            ).map(unitInPool -> unitInPool.getTag());
+        } else {
+            return taskManager.findFreeUnitForTask(
+                    this,
+                    agent.observation(),
+                    unitInPool -> unitInPool.unit() != null &&
+                            unitInPool.unit().getType().equals(Units.TERRAN_SCV)
+            ).map(unitInPool -> unitInPool.getTag());
+        }
     }
 
     private boolean isWorkerOrderQueued(UnitInPool worker) {
@@ -279,5 +304,15 @@ public class BuildStructureTask implements Task {
             this.aborted = true;
         }
         return Optional.empty();
+    }
+
+    @Override
+    public int reservedMinerals() {
+        return matchingUnitAtLocation.isEmpty() ? minimumMinerals.orElse(0) : 0;
+    }
+
+    @Override
+    public int reservedVespene() {
+        return matchingUnitAtLocation.isPresent() ? minimumVespene.orElse(0) : 0;
     }
 }

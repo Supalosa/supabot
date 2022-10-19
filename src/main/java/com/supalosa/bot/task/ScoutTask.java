@@ -58,7 +58,7 @@ public class ScoutTask implements Task {
             }
             return;
         }
-        if (usedScouters >= maxScouters) {
+        if (usedScouters > maxScouters) {
             isComplete = true;
             return;
         }

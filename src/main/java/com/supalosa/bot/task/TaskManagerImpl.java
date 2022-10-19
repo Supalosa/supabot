@@ -227,4 +227,14 @@ public class TaskManagerImpl implements TaskManager {
         });
         return moved.get();
     }
+
+    @Override
+    public int totalReservedMinerals() {
+        return taskSet.values().stream().mapToInt(Task::reservedMinerals).sum();
+    }
+
+    @Override
+    public int totalReservedVespene() {
+        return taskSet.values().stream().mapToInt(Task::reservedVespene).sum();
+    }
 }

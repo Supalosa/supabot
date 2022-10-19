@@ -20,6 +20,10 @@ public abstract class UnitFilter implements Predicate<UnitInPool> {
     public abstract Optional<Point2d> inRangeOf();
     public abstract Optional<Float> range();
     public abstract Optional<Predicate<Unit>> filter();
+    @Value.Default
+    public boolean includeIncomplete() {
+        return false;
+    }
 
     public static ImmutableUnitFilter.Builder builder() {
         return ImmutableUnitFilter.builder();
@@ -61,6 +65,9 @@ public abstract class UnitFilter implements Predicate<UnitInPool> {
             if (!filter().get().test(unitInPool.unit())) {
                 return false;
             }
+        }
+        if (!includeIncomplete() && unitInPool.unit().getBuildProgress() < 1.0) {
+            return false;
         }
         return true;
     }

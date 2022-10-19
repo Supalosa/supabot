@@ -102,4 +102,8 @@ public interface TaskManager {
      * @return The amount of units moved.
      */
     int reassignUnits(TaskWithUnits from, TaskWithUnits to, ObservationInterface observationInterface, Predicate<Unit> predicate);
+
+    int totalReservedMinerals();
+
+    int totalReservedVespene();
 }

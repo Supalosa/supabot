@@ -52,4 +52,18 @@ public interface Task {
      * task is resolved (successfully or not).
      */
     Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message);
+
+    /**
+     * Return the amount of minerals that this task requires.
+     */
+    default int reservedMinerals() {
+        return 0;
+    }
+
+    /**
+     * Return the amount of vespene that this task requires.
+     */
+    default int reservedVespene() {
+        return 0;
+    }
 }
