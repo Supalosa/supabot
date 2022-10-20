@@ -286,7 +286,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 }
                 // Do not expand where the enemy is.
                 Optional<RegionData> region = getRegionDataForPoint(expansion.position().toPoint2d());
-                if (region.isPresent() && region.get().enemyThreat() > region.get().playerThreat()) {
+                if (region.isPresent() && region.get().diffuseEnemyThreat() > region.get().playerThreat()) {
                     continue;
                 }
                 int remainingMinerals = expansion.resourcePositions().stream().mapToInt(point2d -> {
