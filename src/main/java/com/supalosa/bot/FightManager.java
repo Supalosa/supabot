@@ -104,7 +104,7 @@ public class FightManager {
         }
         if (agent.observation().getArmyCount() > 40) {
             // Start a harass force.
-            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass1", 100);
+            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass1", 100, 50);
             if (taskManager.addTask(harassTask, 1)) {
                 harassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
                 harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);
@@ -113,7 +113,7 @@ public class FightManager {
         }
         if (agent.observation().getArmyCount() > 70) {
             // Start a harass force.
-            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass2", 100);
+            DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass2", 100, 100);
             if (taskManager.addTask(harassTask, 1)) {
                 harassTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
                 harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);

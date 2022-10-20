@@ -4,12 +4,10 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.*;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.UnitAttribute;
-import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
-import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
@@ -36,7 +34,8 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
     private Set<Point2d> unscoutedLocations = new HashSet<>();
     private long unscoutedLocationsNextResetAt = 0L;
-    private final Map<Expansion, Long> expansionLastAttempted = new HashMap<>();
+    private final Map<Expansion, Long> expansionNextValidAt = new HashMap<>();
+    private static final long EXPANSION_BACKOFF_TIME = (15 * 22L);
     LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
     private Optional<List<Expansion>> expansionLocations = Optional.empty();
     private Optional<Point2d> defenceLocation = Optional.empty();
@@ -155,7 +154,7 @@ public class MapAwarenessImpl implements MapAwareness {
      */
     @Override
     public void onExpansionAttempted(Expansion expansion, long whenGameLoop) {
-        expansionLastAttempted.put(expansion, whenGameLoop);
+        expansionNextValidAt.put(expansion, whenGameLoop + EXPANSION_BACKOFF_TIME);
     }
 
     @Override
@@ -286,7 +285,8 @@ public class MapAwarenessImpl implements MapAwareness {
                 }
                 // Do not expand where the enemy is.
                 Optional<RegionData> region = getRegionDataForPoint(expansion.position().toPoint2d());
-                if (region.isPresent() && region.get().diffuseEnemyThreat() > region.get().playerThreat()) {
+                // TODO: maybe we need a diffuse player threat to counteract that.
+                if (region.isPresent() && region.get().diffuseEnemyThreat() > region.get().playerThreat() + 10f) {
                     continue;
                 }
                 int remainingMinerals = expansion.resourcePositions().stream().mapToInt(point2d -> {
@@ -299,7 +299,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 //System.out.println("Expansion at " + expansion.position() + " has " + remainingMinerals + " remaining");
                 if (remainingMinerals > 0 &&
                         queryInterface.placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
-                    if (gameLoop > expansionLastAttempted.getOrDefault(expansion, 0L) + (15 * 22L)) {
+                    if (gameLoop > expansionNextValidAt.getOrDefault(expansion, 0L)) {
                         this.validExpansionLocations.add(expansion);
                     }
                 }
@@ -451,6 +451,13 @@ public class MapAwarenessImpl implements MapAwareness {
         this.regionData.values().forEach(regionData -> {
             regionData.bestTileTowardsEnemy().ifPresent(bestTileTowardsEnemy -> {
             });
+        });
+        final long gameLoop = agent.observation().getGameLoop();
+        this.expansionNextValidAt.forEach((expansion, time) -> {
+            long loopsLeft = (time - gameLoop);
+            if (loopsLeft > 0) {
+                agent.debug().debugTextOut("Ignoring: " + loopsLeft, expansion.position(), Color.RED, 10);
+            }
         });
     }
 

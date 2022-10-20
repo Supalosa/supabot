@@ -81,7 +81,8 @@ public class TaskManagerImpl implements TaskManager {
     public void onStep(AgentData data, S2Agent agent) {
         List<Task> tasksFinishedThisStep = new ArrayList<>();
         Set<Tag> unitsReleasedThisStep = new HashSet<>();
-        taskSet.forEach((key, task) -> {
+        List<Task> tasksForStep = new ArrayList<>(taskSet.values());
+        tasksForStep.forEach(task -> {
             if (!task.isComplete()) {
                 task.onStep(this, data, agent);
             } else {

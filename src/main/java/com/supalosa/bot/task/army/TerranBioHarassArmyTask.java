@@ -53,8 +53,11 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
     private LoadingState loadingState = LoadingState.MOVING;
     private long loadingStateChangedAt = 0L;
 
-    public TerranBioHarassArmyTask(String armyName, int basePriority) {
+    private int deleteAtArmyCount = 200;
+
+    public TerranBioHarassArmyTask(String armyName, int basePriority, int deleteAtArmyCount) {
         super(armyName, basePriority);
+        this.deleteAtArmyCount = deleteAtArmyCount;
     }
 
     @Override
@@ -67,7 +70,7 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
             updateBioArmyComposition();
         }
         // This army disappears if the overall army is small.
-        if (harassMode == HarassMode.GROUND && agent.observation().getArmyCount() < 24) {
+        if (harassMode == HarassMode.GROUND && agent.observation().getArmyCount() < deleteAtArmyCount) {
             this.isComplete = true;
         }
 
