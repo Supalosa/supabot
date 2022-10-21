@@ -104,7 +104,9 @@ public class StructurePlacementCalculator {
         int yStart = (int)Math.ceil(y - h / 2);
         for (int xx = xStart; xx < xStart + w; ++xx) {
             for (int yy = yStart; yy < yStart + h; ++yy) {
-                grid.set(xx, yy, false);
+                if (grid.isInBounds(xx, yy)) {
+                    grid.set(xx, yy, false);
+                }
             }
         }
     }
@@ -360,8 +362,8 @@ public class StructurePlacementCalculator {
                 }
                 if (mutableFreePlacementGrid.get(x, y) == false) {
                     agent.debug().debugBoxOut(
-                            point3d.sub(-0.1f, -0.1f, 0.1f),
-                            point3d.sub(-0.9f, -0.9f, -0.1f), Color.of(156, 156, 156));
+                            point3d.sub(-0.1f, -0.1f, 0.2f),
+                            point3d.sub(-0.9f, -0.9f, -0.2f), Color.of(156, 156, 156));
                 }
             }
         }
@@ -479,8 +481,8 @@ public class StructurePlacementCalculator {
                     unitType);
             int x = (int)modifiedFootprint.getLeft().getX();
             int y = (int)modifiedFootprint.getLeft().getY();
-            int width = (int)modifiedFootprint.getRight().getX();
-            int height = (int)modifiedFootprint.getRight().getY();
+            int width = (int)(modifiedFootprint.getRight().getX());
+            int height = (int)(modifiedFootprint.getRight().getY());
             updatePlacementGridWithFootprint(mutableFreePlacementGrid, x, y, width, height);
         });
     }
@@ -543,10 +545,10 @@ public class StructurePlacementCalculator {
                 unitType == Units.TERRAN_FACTORY ||
                 unitType == Units.TERRAN_STARPORT) {
             // Modify the footprint of terran production buildings to be larger,
-            // to accommodate the addon and pathing space for units.
+            // to accommodate the addon.
             return Pair.of(
-                    existingPosition.add(1f, 1f),
-                    existingFootprint.add(2f, 1f));
+                    existingPosition.add(1f, 0f),
+                    existingFootprint.add(2f, 0f));
         }
         return Pair.of(existingPosition, existingFootprint);
     }

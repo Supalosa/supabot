@@ -22,7 +22,7 @@ public interface TaskWithUnits extends Task {
      * Returns false if the unit is already in the army.
      * Note: If a unit is in multiple armies, both armies will end up controlling it.
      */
-    boolean addUnit(Tag unitTag);
+    boolean addUnit(Unit unitTag);
 
     /**
      * Returns true if this army has the given unit in it.
@@ -32,7 +32,7 @@ public interface TaskWithUnits extends Task {
     /**
      * Removes the unit (if we have it) and returns true if it was removed.
      */
-    boolean removeUnit(Tag unitTag);
+    boolean removeUnit(Unit unitTag);
 
     /**
      * Returns an arbitrary value of priority, with higher figures getting units first.

@@ -71,6 +71,8 @@ public class GameData {
             return Optional.of(Point2d.of(2f, 1f));
         } else if (Constants.VESPENE_GEYSER_TYPES.contains(unitType)) {
             return Optional.of(Point2d.of(2f, 2f));
+        } else if (Constants.ALL_TOWN_HALL_TYPES.contains(unitType)) {
+            return Optional.of(Point2d.of(5f, 5f));
         } else {
             Optional<Ability> maybeAbility = unitTypeData.getAbility();
             if (maybeAbility.isEmpty()) {

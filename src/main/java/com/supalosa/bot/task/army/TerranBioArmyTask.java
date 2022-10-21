@@ -27,7 +27,6 @@ import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -293,13 +292,13 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
     @Override
     protected AggressionState retreatCommand(S2Agent agent,
-                                            AgentData data,
-                                            Optional<Point2d> centreOfMass,
-                                            Optional<Point2d> suggestedAttackMovePosition,
-                                            Optional<Point2d> suggestedRetreatMovePosition,
-                                            Optional<Army> maybeEnemyArmy) {
+                                             AgentData data,
+                                             Optional<Point2d> centreOfMass,
+                                             Optional<Point2d> suggestedAttackMovePosition,
+                                             Optional<Point2d> suggestedRetreatMovePosition,
+                                             Optional<Army> enemyArmy, Optional<Army> maybeEnemyArmy) {
         AggressionState parentState = super.retreatCommand(agent, data, centreOfMass,
-                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
+                suggestedAttackMovePosition, suggestedRetreatMovePosition, enemyArmy, maybeEnemyArmy);
 
         ObservationInterface observationInterface = agent.observation();
         ActionInterface actionInterface = agent.actions();

@@ -6,20 +6,13 @@ import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.ChatReceived;
-import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
-import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.github.ocraft.s2client.protocol.unit.UnitOrder;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.*;
 import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
@@ -33,13 +26,6 @@ import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
 
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 public class SupaBot extends S2Agent implements AgentData {
 
@@ -89,7 +75,7 @@ public class SupaBot extends S2Agent implements AgentData {
         this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
         mapAnalysis.ifPresent(analysis -> this.mapAwareness.setMapAnalysisResults(analysis));
 
-        dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemy(), 1));
+        dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemyBase(), 1));
         dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
         dispatchTaskOnce(1, new BaseTerranTask());
     }

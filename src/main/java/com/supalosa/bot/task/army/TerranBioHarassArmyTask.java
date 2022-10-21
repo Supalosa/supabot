@@ -161,9 +161,9 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
                                              Optional<Point2d> centreOfMass,
                                              Optional<Point2d> suggestedAttackMovePosition,
                                              Optional<Point2d> suggestedRetreatMovePosition,
-                                             Optional<Army> maybeEnemyArmy) {
+                                             Optional<Army> enemyArmy, Optional<Army> maybeEnemyArmy) {
         AggressionState parentState = super.retreatCommand(agent, data, centreOfMass,
-                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
+                suggestedAttackMovePosition, suggestedRetreatMovePosition, enemyArmy, maybeEnemyArmy);
 
         ObservationInterface observationInterface = agent.observation();
         ActionInterface actionInterface = agent.actions();

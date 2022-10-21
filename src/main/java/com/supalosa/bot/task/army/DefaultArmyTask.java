@@ -139,6 +139,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 // Finished path.
                 waypointsCalculatedTo = Optional.empty();
                 waypointsCalculatedFrom = Optional.empty();
+                // Await a new target.
+                targetPosition = Optional.empty();
             }
         }
     }
@@ -238,6 +240,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                 suggestedAttackMovePosition :
                 retreatPosition;
         Optional<Army> enemyArmy = centreOfMass.flatMap(point2d -> data.enemyAwareness().getMaybeEnemyArmy(point2d));
+        Optional<Army> potentialWholeArmy = data.enemyAwareness().getPotentialEnemyArmy();
         switch (aggressionState) {
             case ATTACKING:
             default:
@@ -265,7 +268,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                         centreOfMass,
                         suggestedAttackMovePosition,
                         suggestedRetreatMovePosition,
-                        enemyArmy);
+                        enemyArmy,
+                        potentialWholeArmy);
         }
         // Overrides for the value returned by the respective command.
         // Retreat -> Regroup.
@@ -390,6 +394,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         } else {
             if (aggressionLevel != AggressionLevel.FULL_AGGRESSION && maybeEnemyArmy.isPresent() &&
                     predictFightAgainst(maybeEnemyArmy.get()) == FightPerformance.BADLY_LOSING) {
+                // Lose the target.
+                targetPosition = Optional.empty();
                 return AggressionState.RETREATING;
             } else {
                 return AggressionState.ATTACKING;
@@ -437,7 +443,8 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
                                              Optional<Point2d> centreOfMass,
                                              Optional<Point2d> suggestedAttackMovePosition,
                                              Optional<Point2d> suggestedRetreatMovePosition,
-                                             Optional<Army> maybeEnemyArmy) {
+                                             Optional<Army> nearbyEnemyArmy,
+                                             Optional<Army> entireEnemyArmy) {
         ObservationInterface observationInterface = agent.observation();
         ActionInterface actionInterface = agent.actions();
         if (!armyUnits.isEmpty() && retreatPosition.isPresent()) {
@@ -469,7 +476,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             }
         }
         // Temporary logic to go back into the ATTACKING state.
-        if (maybeEnemyArmy.isEmpty() || predictFightAgainst(maybeEnemyArmy.get()) == FightPerformance.WINNING) {
+        if (nearbyEnemyArmy.isPresent() && predictFightAgainst(nearbyEnemyArmy.get()) == FightPerformance.WINNING) {
             // System.out.println(armyName + " Retreat -> Attack");
             return AggressionState.ATTACKING;
         } else {
@@ -516,7 +523,11 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
 
     @Override
     public void setTargetPosition(Optional<Point2d> targetPosition) {
-        this.targetPosition = targetPosition;
+        // Only accept the attack order if we're not already attacking somewhere.
+        // We clear the targetPosition if we can't attack that location anymore.
+        if (this.targetPosition.isEmpty()) {
+            this.targetPosition = targetPosition;
+        }
     }
 
     public void setAggressionLevel(AggressionLevel aggressionLevel) {

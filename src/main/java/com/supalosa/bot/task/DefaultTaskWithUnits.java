@@ -79,13 +79,27 @@ public abstract class DefaultTaskWithUnits implements TaskWithUnits {
     }
 
     @Override
-    public boolean addUnit(Tag unitTag) {
-        return armyUnits.add(unitTag);
+    public boolean addUnit(Unit unit) {
+        if (armyUnits.add(unit.getTag())) {
+            currentComposition.put(
+                    unit.getType(),
+                    currentComposition.getOrDefault(unit.getType(), 0) + 1);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
-    public boolean removeUnit(Tag unitTag) {
-        return armyUnits.remove(unitTag);
+    public boolean removeUnit(Unit unit) {
+        if (armyUnits.remove(unit.getTag())) {
+            currentComposition.put(
+                    unit.getType(),
+                    currentComposition.getOrDefault(unit.getType(), 0) - 1);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override

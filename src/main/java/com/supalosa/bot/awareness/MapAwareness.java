@@ -73,12 +73,12 @@ public interface MapAwareness {
     /**
      * Returns a proposed position near the enemy (or, if none is found, starts scouting for a location).
      */
-    Optional<Point2d> getMaybeEnemyPositionNearEnemy();
+    Optional<Point2d> getMaybeEnemyPositionNearEnemyBase();
 
     /**
      * Returns a proposed position of an enemy near our own 'base' (starting location), if applicable.
      */
-    Optional<Point2d> getMaybeEnemyPositionNearBase();
+    Optional<Point2d> getMaybeEnemyPositionNearOwnBase();
 
     /**
      * Returns true if we should defend a given location.

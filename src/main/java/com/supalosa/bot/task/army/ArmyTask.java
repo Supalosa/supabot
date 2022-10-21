@@ -21,11 +21,13 @@ public interface ArmyTask extends TaskWithUnits {
 
     /**
      * Sets the target position that this army is trying to move towards.
+     * Note: the army may not accept the order.
      */
     void setTargetPosition(Optional<Point2d> targetPosition);
 
     /**
      * Sets the position that this army should try to retreat towards, if its micro state allows it.
+     * Note: the army may not accept the order.
      */
     void setRetreatPosition(Optional<Point2d> retreatPosition);
 

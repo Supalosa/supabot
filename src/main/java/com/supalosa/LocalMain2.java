@@ -20,7 +20,7 @@ public class LocalMain2 {
     public static void main(String[] args) throws InterruptedException, IOException {
 
         //Path gameRoot = Paths.get("D:\\StarCraft II\\Versions\\Base75689\\SC2_x64.exe");
-        Path gameRoot = Paths.get("D:\\StarCraft II\\Versions\\Base88500\\SC2_x64.exe");
+        Path gameRoot = Path.of("D:\\StarCraft II\\Versions\\Base88500\\SC2_x64.exe");
         List<String> processArgs = List.of(
                 gameRoot.toString(),
                 "-listen", "127.0.0.1",

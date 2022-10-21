@@ -190,7 +190,7 @@ public class TaskManagerImpl implements TaskManager {
     public void dispatchUnit(Unit unit) {
         for (TaskWithUnits task : orderedTasksNeedingUnits) {
             if (!task.isComplete() && task.wantsUnit(unit)) {
-                task.addUnit(unit.getTag());
+                task.addUnit(unit);
                 reserveUnit(unit.getTag(), task);
                 return;
             }
@@ -219,8 +219,8 @@ public class TaskManagerImpl implements TaskManager {
                     return;
                 }
                 Unit unit = unitInPool.unit();
-                if (from.removeUnit(tag) && predicate.test(unit) && to.wantsUnit(unit)) {
-                    to.addUnit(tag);
+                if (from.removeUnit(unit) && predicate.test(unit) && to.wantsUnit(unit)) {
+                    to.addUnit(unit);
                     moved.incrementAndGet();
                     unitToTaskMap.put(tag, to);
                 }

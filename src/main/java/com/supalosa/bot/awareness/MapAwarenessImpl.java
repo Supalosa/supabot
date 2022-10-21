@@ -260,12 +260,12 @@ public class MapAwarenessImpl implements MapAwareness {
     }
 
     @Override
-    public Optional<Point2d> getMaybeEnemyPositionNearEnemy() {
+    public Optional<Point2d> getMaybeEnemyPositionNearEnemyBase() {
         return maybeEnemyPositionNearEnemy;
     }
 
     @Override
-    public Optional<Point2d> getMaybeEnemyPositionNearBase() {
+    public Optional<Point2d> getMaybeEnemyPositionNearOwnBase() {
         return maybeEnemyPositionNearBase;
     }
 
