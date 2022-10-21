@@ -14,6 +14,7 @@ import com.google.common.collect.Multimap;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.*;
+import com.supalosa.bot.builds.ThreeRaxStimCombatConcussivePush;
 import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.engagement.ThreatCalculator;
@@ -21,6 +22,7 @@ import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.terran.BaseTerranTask;
 import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
+import com.supalosa.bot.task.terran.SimpleBuildOrderTask;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
@@ -78,6 +80,7 @@ public class SupaBot extends S2Agent implements AgentData {
         dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemyBase(), 1));
         dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
         dispatchTaskOnce(1, new BaseTerranTask());
+        dispatchTaskOnce(1, new SimpleBuildOrderTask(new ThreeRaxStimCombatConcussivePush()));
     }
 
     @Override

@@ -24,6 +24,27 @@ public class Constants {
     );
     public static final UnitType[] TERRAN_CC_TYPES_ARRAY = TERRAN_CC_TYPES.toArray(new UnitType[]{});
 
+    public static final Set<UnitType> TERRAN_ADDON_TYPES = Set.of(
+            Units.TERRAN_BARRACKS_TECHLAB,
+            Units.TERRAN_FACTORY_TECHLAB,
+            Units.TERRAN_STARPORT_TECHLAB,
+            Units.TERRAN_BARRACKS_REACTOR,
+            Units.TERRAN_FACTORY_REACTOR,
+            Units.TERRAN_STARPORT_REACTOR
+    );
+
+    public static final Set<UnitType> TERRAN_TECHLAB_TYPES = Set.of(
+            Units.TERRAN_BARRACKS_TECHLAB,
+            Units.TERRAN_FACTORY_TECHLAB,
+            Units.TERRAN_STARPORT_TECHLAB
+    );
+
+    public static final Set<UnitType> TERRAN_REACTOR_TYPES = Set.of(
+            Units.TERRAN_BARRACKS_TECHLAB,
+            Units.TERRAN_FACTORY_TECHLAB,
+            Units.TERRAN_STARPORT_TECHLAB
+    );
+
     public static final Set<UnitType> ALL_TOWN_HALL_TYPES = Set.of(
             Units.TERRAN_ORBITAL_COMMAND,
             Units.TERRAN_COMMAND_CENTER,

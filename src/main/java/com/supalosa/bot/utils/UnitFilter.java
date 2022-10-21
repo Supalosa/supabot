@@ -1,5 +1,6 @@
 package com.supalosa.bot.utils;
 
+import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -20,6 +21,7 @@ public abstract class UnitFilter implements Predicate<UnitInPool> {
     public abstract Optional<Point2d> inRangeOf();
     public abstract Optional<Float> range();
     public abstract Optional<Predicate<Unit>> filter();
+
     @Value.Default
     public boolean includeIncomplete() {
         return false;
@@ -33,15 +35,26 @@ public abstract class UnitFilter implements Predicate<UnitInPool> {
         return ImmutableUnitFilter.builder().filter(predicate).build();
     }
 
-    @Override
-    public boolean test(UnitInPool unitInPool) {
+    public static UnitFilter mine(UnitType unitType) {
+        return ImmutableUnitFilter.builder().alliance(Alliance.SELF).unitType(unitType).build();
+    }
+
+    public static UnitFilter mine(Set<UnitType> unitTypes) {
+        return ImmutableUnitFilter.builder().alliance(Alliance.SELF).unitTypes(unitTypes).build();
+    }
+
+    @Value.Check
+    protected void validate() {
         if (unitType().isPresent() && unitTypes().isPresent()) {
-            throw new IllegalArgumentException("Cannot use unitType and unitTypes");
+            throw new IllegalArgumentException("Cannot use unitType and unitTypes at the same time.");
         }
         if (inRangeOf().isPresent() ^ range().isPresent()) {
-            throw new IllegalArgumentException("Both range and inRangeOf need to be present, if one is used");
+            throw new IllegalArgumentException("Both range and inRangeOf need to be present at the same time.");
         }
+    }
 
+    @Override
+    public boolean test(UnitInPool unitInPool) {
         if (alliance().isPresent()) {
             if (unitInPool.unit().getAlliance() != alliance().get()) {
                 return false;

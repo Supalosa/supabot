@@ -38,7 +38,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
- * The default Terran behaviour.
+ * The default Terran behaviour. Although this task works to start a game from scratch,
+ * it's probably better to start from a build order task.
  */
 public class BaseTerranTask implements Task {
 
