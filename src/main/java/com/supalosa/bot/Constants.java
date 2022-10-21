@@ -1,5 +1,7 @@
 package com.supalosa.bot;
 
+import com.github.ocraft.s2client.protocol.data.Abilities;
+import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 
@@ -40,9 +42,9 @@ public class Constants {
     );
 
     public static final Set<UnitType> TERRAN_REACTOR_TYPES = Set.of(
-            Units.TERRAN_BARRACKS_TECHLAB,
-            Units.TERRAN_FACTORY_TECHLAB,
-            Units.TERRAN_STARPORT_TECHLAB
+            Units.TERRAN_BARRACKS_REACTOR,
+            Units.TERRAN_FACTORY_REACTOR,
+            Units.TERRAN_STARPORT_REACTOR
     );
 
     public static final Set<UnitType> ALL_TOWN_HALL_TYPES = Set.of(
@@ -84,6 +86,12 @@ public class Constants {
             Units.TERRAN_SCV,
             Units.ZERG_DRONE,
             Units.PROTOSS_PROBE
+    );
+
+    public static final Set<Ability> BUILD_GAS_STRUCTURE_ABILITIES = Set.of(
+            Abilities.BUILD_REFINERY,
+            Abilities.BUILD_EXTRACTOR,
+            Abilities.BUILD_ASSIMILATOR
     );
 
     /**

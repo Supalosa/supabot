@@ -79,8 +79,9 @@ public class SupaBot extends S2Agent implements AgentData {
 
         dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemyBase(), 1));
         dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
-        dispatchTaskOnce(1, new BaseTerranTask());
-        dispatchTaskOnce(1, new SimpleBuildOrderTask(new ThreeRaxStimCombatConcussivePush()));
+        dispatchTaskOnce(1, new SimpleBuildOrderTask(
+                new ThreeRaxStimCombatConcussivePush(),
+                new BaseTerranTask()));
     }
 
     @Override
@@ -130,7 +131,7 @@ public class SupaBot extends S2Agent implements AgentData {
         if (isDebug) {
             if (isSlow) {
                 try {
-                    Thread.sleep(250);
+                    Thread.sleep(100);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

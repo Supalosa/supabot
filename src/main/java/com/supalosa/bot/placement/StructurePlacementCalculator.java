@@ -9,7 +9,6 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
-import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
@@ -20,6 +19,7 @@ import com.supalosa.bot.analysis.Tile;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
+import com.supalosa.bot.task.PlacementRules;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -365,6 +365,17 @@ public class StructurePlacementCalculator {
                             point3d.sub(-0.1f, -0.1f, 0.2f),
                             point3d.sub(-0.9f, -0.9f, -0.2f), Color.of(156, 156, 156));
                 }
+                /*int width = 2;
+                int h = 2;
+                int xStart = (int)Math.ceil(x - width / 2);
+                int yStart = (int)Math.ceil(y - h / 2);
+                if (canPlaceAt(point2d, 2, 2)) {
+                    Point p1 = Point.of(xStart, yStart, height);
+                    Point p2 = Point.of(xStart + width, yStart + h, height);
+                    agent.debug().debugBoxOut(
+                            p1,
+                            p2, Color.GREEN);
+                }*/
             }
         }
     }
@@ -394,6 +405,10 @@ public class StructurePlacementCalculator {
             }
             if (expansion.resourcePositions().size() > 0) {
                 updatePlacementGridWithRectangle(staticFreePlacementGrid, minX, minY, maxX - minX, maxY - minY);
+                expansion.resourcePositions().forEach(position -> {
+                   // TODO: use the correct footprint for the resource.
+                   updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)position.getX(), (int)position.getY(), 3, 3);
+                });
             }
         });
     }
@@ -401,9 +416,26 @@ public class StructurePlacementCalculator {
     private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
 
     // does NOT query for placement but will never suggest something that overlaps with a reserved tile.
-    public Optional<Point2d> suggestLocationForFreePlacement(Point2d origin, int searchRadius, int structureWidth, int structureHeight) {
+    public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
+                                                             Point2d origin,
+                                                             int searchRadius,
+                                                             int structureWidth,
+                                                             int structureHeight,
+                                                             Optional<PlacementRules> placementRules) {
+        int actualSearchRadius = placementRules.map(PlacementRules::maxVariation).orElse(searchRadius);
+        PlacementRules.Region region = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.ANY_PLAYER_OWNED);
+        switch (region) {
+            case ANY_PLAYER_OWNED:
+                return findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight);
+            case EXPANSION:
+                return findExpansionPlacement(origin, structureWidth, structureHeight, data);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Point2d> findAnyPlacement(Point2d origin, int actualSearchRadius, int structureWidth, int structureHeight) {
         List<Point2d> nearbyStructures = myStructures.stream().filter(myStructurePoint2d -> {
-            return myStructurePoint2d.distance(origin) < searchRadius;
+            return myStructurePoint2d.distance(origin) < actualSearchRadius;
         }).collect(Collectors.toList());
         for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
             // prefer to place next to an existing structure but swapping on alternating queries
@@ -414,7 +446,7 @@ public class StructurePlacementCalculator {
             } else {
                 // Initially we will search closer to the querying worker. The longer we search, the more willing we
                 // are to place something far away.
-                int testedRadius = (int)Math.max(1, searchRadius * Math.min(1f, (float)i / (float)MAX_FREE_PLACEMENT_ITERATIONS));
+                int testedRadius = (int)Math.max(1, actualSearchRadius * Math.min(1f, (float)i / (float)MAX_FREE_PLACEMENT_ITERATIONS));
                 candidate = origin.add(
                         Point2d.of(
                                 getRandomInteger(-testedRadius, testedRadius),
@@ -428,7 +460,25 @@ public class StructurePlacementCalculator {
         return Optional.empty();
     }
 
-    public Optional<Point2d> suggestLocationForFreePlacement(Point2d position, int searchRadius, Ability ability, UnitType unitType) {
+    private Optional<Point2d> findExpansionPlacement(Point2d origin, int structureWidth, int structureHeight, AgentData data) {
+        if (data.mapAwareness().getValidExpansionLocations().isEmpty()) {
+            return Optional.empty();
+        }
+        for (Expansion validExpansionLocation : data.mapAwareness().getValidExpansionLocations().get()) {
+            Point2d candidate = validExpansionLocation.position().toPoint2d();
+            if (canPlaceAtIgnoringStaticGrid(candidate, structureWidth, structureHeight)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
+                                                             Point2d position,
+                                                             int searchRadius,
+                                                             Ability ability,
+                                                             UnitType unitType,
+                                                             Optional<PlacementRules> placementRules) {
         // assume the worst for radius = 5x5.
         float radius = gameData.getAbilityRadius(ability).orElse(2.5f);
         int width = (int)(radius * 2);
@@ -439,20 +489,29 @@ public class StructurePlacementCalculator {
                 unitType);
         Point2d outputOffset = modifiedFootprint.getLeft();
         Point2d newFootprint = modifiedFootprint.getRight();
-        return suggestLocationForFreePlacement(position, searchRadius,
+        return suggestLocationForFreePlacement(data, position, searchRadius,
                 (int)newFootprint.getX(),
-                (int)newFootprint.getY()).map(outputPosition ->
+                (int)newFootprint.getY(),
+                placementRules).map(outputPosition ->
                 outputPosition/*.add(outputOffset)*/);
     }
 
     private boolean canPlaceAt(Point2d origin, int width, int height) {
+        return canPlaceAt(origin, width, height, true);
+    }
+
+    private boolean canPlaceAtIgnoringStaticGrid(Point2d origin, int width, int height) {
+        return canPlaceAt(origin, width, height, false);
+    }
+
+    private boolean canPlaceAt(Point2d origin, int width, int height, boolean checkStatic) {
         int x = (int)origin.getX();
         int y = (int)origin.getY();
         int xStart = (int)Math.ceil(x - width / 2);
         int yStart = (int)Math.ceil(y - height / 2);
-        for (int xx = xStart; xx < xStart + width; ++xx) {
-            for (int yy = yStart; yy < yStart + height; ++yy) {
-                if (staticFreePlacementGrid.get(xx, yy) == false) {
+        for (int xx = xStart; xx <= xStart + width; ++xx) {
+            for (int yy = yStart; yy <= yStart + height; ++yy) {
+                if (checkStatic && staticFreePlacementGrid.get(xx, yy) == false) {
                     return false;
                 }
                 if (mutableFreePlacementGrid.get(xx, yy) == false) {

@@ -19,10 +19,7 @@ import com.supalosa.bot.Expansion;
 import com.supalosa.bot.SupaBot;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.task.BuildStructureTask;
-import com.supalosa.bot.task.Task;
-import com.supalosa.bot.task.TaskManager;
-import com.supalosa.bot.task.TaskResult;
+import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitFilter;
@@ -38,10 +35,11 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
- * The default Terran behaviour. Although this task works to start a game from scratch,
- * it's probably better to start from a build order task.
+ * The default Terran build behaviour behaviour.
+ * Although this task works to start a game from scratch, it's probably better to start from
+ * a build order task.
  */
-public class BaseTerranTask implements Task {
+public class BaseTerranTask implements BehaviourTask {
 
     // expected amount before we start pulling workers from gas back to minerals.
     public static final int MINIMUM_MINERAL_WORKERS_PER_CC = 14;
@@ -199,7 +197,7 @@ public class BaseTerranTask implements Task {
         }
         rebalanceWorkers(agent, data);
 
-        mineGas(agent, data);
+        mineGas(agent);
 
         // Open or close the ramp.
         data.structurePlacementCalculator().ifPresent(spc -> {
@@ -623,120 +621,23 @@ public class BaseTerranTask implements Task {
         if (!needsRefinery(agent, data)) {
             return false;
         }
-        List<Unit> commandCentres = agent.observation().getUnits(
-                        UnitFilter.builder()
-                                .alliance(Alliance.SELF)
-                                .unitTypes(Constants.TERRAN_CC_TYPES).build())
-                .stream()
-                .map(UnitInPool::unit)
-                .collect(Collectors.toList());
-        List<Unit> refineries = agent.observation().getUnits(
-                        UnitFilter.builder()
-                                .alliance(Alliance.SELF)
-                                .unitType(Units.TERRAN_REFINERY)
-                                .filter(unit -> hasUnitNearby(unit, commandCentres, 10f))
-                                .build())
-                .stream()
-                .map(UnitInPool::unit)
-                .collect(Collectors.toList());
-        List<Unit> neutralGeysers = agent.observation().getUnits(
-                        UnitFilter.builder()
-                                .alliance(Alliance.NEUTRAL)
-                                .unitTypes(Constants.VESPENE_GEYSER_TYPES)
-                                .filter(unit -> hasUnitNearby(unit, commandCentres, 10f))
-                                .build())
-                .stream()
-                .map(UnitInPool::unit)
-                .collect(Collectors.toList());
-        for (Unit commandCentre : commandCentres) {
-            List<Unit> refineriesNear = refineries.stream()
-                    .filter(refinery -> refinery.getPosition().distance(commandCentre.getPosition()) < 10.0f)
-                    .collect(Collectors.toList());
-            Set<Point2d> refineriesNearPositions = unitsToPointSet(refineriesNear);
-            List<Unit> geysersNear = neutralGeysers.stream()
-                    .filter(neutralGeyser -> neutralGeyser.getPosition().distance(commandCentre.getPosition()) < 10.0f)
-                    .collect(Collectors.toList());
-            if (refineriesNear.size() < geysersNear.size()) {
-                for (Unit geyser : geysersNear) {
-                    Point2d geyserPosition = geyser.getPosition().toPoint2d();
-                    if (!refineriesNearPositions.contains(geyserPosition)) {
-                        tryBuildStructureAtTarget(agent, data, Abilities.BUILD_REFINERY, Units.TERRAN_REFINERY, Units.TERRAN_SCV,
-                                1, Optional.of(geyser));
-                        return true;
-                    }
-                }
-                break;
-            }
-        }
+        Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agent.observation());
+        freeGeyserNearCc.ifPresent(geyser -> tryBuildStructureAtTarget(
+                agent, data, Abilities.BUILD_REFINERY, Units.TERRAN_REFINERY, Units.TERRAN_SCV,
+                    1, Optional.of(geyser)));
         return true;
     }
 
-    void mineGas(S2Agent agent, AgentData data) {
+    void mineGas(S2Agent agent) {
         long gameLoop = agent.observation().getGameLoop();
 
         if (gameLoop < lastGasCheck + GAS_CHECK_INTERVAL) {
             return;
         }
         lastGasCheck = gameLoop;
-        List<Unit> commandCentres = agent.observation().getUnits(unitInPool ->
-                        unitInPool.unit().getAlliance() == Alliance.SELF &&
-                                (Constants.ALL_TOWN_HALL_TYPES.contains(unitInPool.unit().getType()))).stream()
-                .map(UnitInPool::unit)
-                .collect(Collectors.toList());
-        List<Unit> refineries = agent.observation().getUnits(unitInPool ->
-                        unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                                unitInPool.unit().getType().equals(Units.TERRAN_REFINERY) &&
-                                hasUnitNearby(unitInPool.unit(), commandCentres, 10f)
-                ).stream()
-                .map(UnitInPool::unit)
-                .collect(Collectors.toList());
-        Set<Unit> ccsDoneThisRun = new HashSet<>();
-        refineries.forEach(refinery -> {
-            if (refinery.getAssignedHarvesters().isPresent() &&
-                    refinery.getIdealHarvesters().isPresent()) {
-                Optional<Unit> nearCc = commandCentres.stream().filter(cc -> cc.getPosition().distance(refinery.getPosition()) < 10f).findAny();
-                int delta = refinery.getIdealHarvesters().get() - refinery.getAssignedHarvesters().get();
-                if (nearCc.isPresent()) {
-                    int desiredHarvesters = Math.min(MINIMUM_MINERAL_WORKERS_PER_CC, nearCc.get().getIdealHarvesters().orElse(0));
-                    int currentHarvesters = nearCc.get().getAssignedHarvesters().orElse(0);
-                    if (currentHarvesters <= desiredHarvesters) {
-                        // remove harvesters
-                        delta = -(desiredHarvesters - currentHarvesters);
-                    }
-                    if (ccsDoneThisRun.contains(nearCc.get())) {
-                        return;
-                    }
-                }
-                if (delta > 0) {
-                    List<Unit> nearbyScvs = agent.observation().getUnits(unitInPool ->
-                                    unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                                            unitInPool.unit().getType() == Units.TERRAN_SCV &&
-                                            UnitInPool.isCarryingMinerals().test(unitInPool) &&
-                                            unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
-                            .stream().map(UnitInPool::unit).collect(Collectors.toList());
-                    for (int i = 0; i < Math.min(nearbyScvs.size(), delta); ++i) {
-                        agent.actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, refinery, false);
-                    }
-                    ccsDoneThisRun.add(nearCc.get());
-                } else if (nearCc.isPresent() && delta < 0) {
-                    List<Unit> nearbyScvs = agent.observation().getUnits(unitInPool ->
-                                    unitInPool.unit().getOrders().stream().anyMatch(order -> order.getTargetedUnitTag().equals(Optional.of(refinery.getTag()))) &&
-                                            unitInPool.unit().getAlliance().equals(Alliance.SELF) &&
-                                            unitInPool.unit().getType() == Units.TERRAN_SCV &&
-                                            unitInPool.unit().getPosition().distance(refinery.getPosition()) < 8.0f)
-                            .stream().map(UnitInPool::unit).collect(Collectors.toList());
-
-                    Optional<Unit> nearMinerals = Utils.findNearestMineralPatch(agent.observation(), nearCc.get().getPosition().toPoint2d());
-                    for (int i = 0; i < Math.min(nearbyScvs.size(), Math.abs(delta)); ++i) {
-                        agent.actions().unitCommand(nearbyScvs.get(i), Abilities.SMART, nearMinerals.get(), false);
-                    }
-                    ccsDoneThisRun.add(nearCc.get());
-                }
-            }
-        });
+        int minMineralWorkersPerCc = MINIMUM_MINERAL_WORKERS_PER_CC;
+        BuildUtils.reassignGasWorkers(agent, minMineralWorkersPerCc, Integer.MAX_VALUE);
     }
-
-
 
     private void rebalanceWorkers(S2Agent agent, AgentData data) {
         long gameLoop = agent.observation().getGameLoop();

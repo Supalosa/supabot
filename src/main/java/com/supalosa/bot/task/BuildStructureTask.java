@@ -13,6 +13,8 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.Constants;
+import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
@@ -80,7 +82,7 @@ public class BuildStructureTask implements Task {
         long gameLoop = agent.observation().getGameLoop();
         if (assignedWorker.isEmpty()) {
             if (gameLoop > nextAssignedWorkerAttempt) {
-                assignedWorker = findWorker(taskManager, agent);
+                assignedWorker = findWorker(taskManager, agent, data, placementRules);
                 // Resume the construction if applicable.
                 assignedWorker.ifPresent(theWorker -> {
                     matchingUnitAtLocation.ifPresent(tag -> {
@@ -143,6 +145,7 @@ public class BuildStructureTask implements Task {
             if (actionError.getUnitTag().equals(assignedWorker) || actionError.getAbility().equals(Optional.of(ability))) {
                 System.out.println("Action error: " + actionError.getActionResult());
             }
+            System.out.println("General Action error: " + actionError.getActionResult());
             return false;
         })) {
             agent.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
@@ -164,7 +167,7 @@ public class BuildStructureTask implements Task {
                 if (specificTarget.isPresent()) {
                     agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
                 } else {
-                    location = resolveLocation(worker.get(), data.structurePlacementCalculator());
+                    location = resolveLocation(worker.get(), data);
                     location.ifPresent(target ->
                         agent.actions().unitCommand(assignedWorker.get(), ability, target, false)
                     );
@@ -194,24 +197,29 @@ public class BuildStructureTask implements Task {
         // MatchingUnit: " + matchingUnitAtLocation + ")");
     }
 
-    private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent) {
+    private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
         if (location.isPresent()) {
             // If location is known, find closest unit to that location.
             return taskManager.findFreeUnitForTask(
                     this,
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
-                            unitInPool.unit().getType().equals(Units.TERRAN_SCV),
+                            Constants.WORKER_TYPES.contains(unitInPool.unit().getType()),
                     Comparator.comparing((UnitInPool unitInPool) ->
-                            unitInPool.unit().getPosition().toPoint2d().distance(location.get())).reversed()
+                            unitInPool.unit().getPosition().toPoint2d().distance(location.get()))
             ).map(unitInPool -> unitInPool.getTag());
         } else {
+            boolean nearBaseOnly = placementRules.isPresent() ? placementRules.equals(PlacementRules.Region.ANY_PLAYER_OWNED) : false;
             return taskManager.findFreeUnitForTask(
                     this,
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
-                            unitInPool.unit().getType().equals(Units.TERRAN_SCV)
-            ).map(unitInPool -> unitInPool.getTag());
+                            Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            (!nearBaseOnly ||
+                                    data.mapAwareness()
+                                            .getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())
+                                            .map(RegionData::playerThreat).orElse(0.0) > 0.0))
+                    .map(unitInPool -> unitInPool.getTag());
         }
     }
 
@@ -222,13 +230,15 @@ public class BuildStructureTask implements Task {
                 .anyMatch(unitOrder -> ability.equals(unitOrder.getAbility()));
     }
 
-    private Optional<Point2d> resolveLocation(UnitInPool worker, Optional<StructurePlacementCalculator> structurePlacementCalculator) {
+    private Optional<Point2d> resolveLocation(UnitInPool worker, AgentData data) {
         //System.out.println("Worker: " + worker);
-        return location.or(() -> structurePlacementCalculator.flatMap(spc -> spc.suggestLocationForFreePlacement(
+        return location.or(() -> data.structurePlacementCalculator().flatMap(spc -> spc.suggestLocationForFreePlacement(
+                data,
                 worker.unit().getPosition().toPoint2d(),
                 20,
                 ability,
-                targetUnitType)));
+                targetUnitType,
+                placementRules)));
     }
 
     private float getRandomScalar() {

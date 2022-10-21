@@ -43,6 +43,8 @@ public abstract class SimpleBuildOrderStage {
     @Value.Parameter
     public abstract Optional<UnitFilter> unitFilter();
 
+    public abstract Optional<Integer> gasMiners();
+
     /**
      * Required because addons are tag-only.
      */
@@ -55,46 +57,7 @@ public abstract class SimpleBuildOrderStage {
                 (Constants.TERRAN_ADDON_TYPES.contains(addonType().get())),
                 "Only tech lab/reactor types are supported",
                 addonType());
-    }
-
-    static SimpleBuildOrderStage atSupply(int supply, UnitType unitType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .unitFilter(UnitFilter.mine(unitType))
-                .build();
-    }
-
-    static SimpleBuildOrderStage atSupply(int supply, UnitType unitType, UnitType addonType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .addonType(addonType)
-                .unitFilter(UnitFilter.mine(unitType))
-                .build();
-    }
-
-    static SimpleBuildOrderStage atSupplyRepeat(int supply, UnitType unitType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .unitFilter(UnitFilter.mine(unitType))
-                .repeat(true).build();
-    }
-
-    static SimpleBuildOrderStage atSupplyRepeat(int supply, UnitType unitType, UnitType addonType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .addonType(addonType)
-                .unitFilter(UnitFilter.mine(unitType))
-                .repeat(true).build();
-    }
-    static SimpleBuildOrderStage stopWorkerProductionAt(int supply) {
-        return ImmutableSimpleBuildOrderStage.builder().supplyTrigger(supply).stopWorkerProduction(true).build();
-    }
-
-    static SimpleBuildOrderStage resumeWorkerProductionAt(int supply) {
-        return ImmutableSimpleBuildOrderStage.builder().supplyTrigger(supply).stopWorkerProduction(false).build();
+        Validate.isTrue(ability().isPresent() || gasMiners().isPresent() || expand(),
+                "Order does not do anything.");
     }
 }
