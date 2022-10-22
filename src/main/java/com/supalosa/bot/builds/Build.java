@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.supalosa.bot.Constants;
+import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.ArrayList;
@@ -54,13 +55,14 @@ public class Build {
         // Generic stages go here.
 
         /**
-         * Builds a structure with the appropriate worker type for the race.
+         * Builds a structure with the appropriate worker type for the race, in the player's base regions only.
          */
         public Builder buildStructure(Abilities ability) {
             this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(builder.workerType))
+                    .placementRules(PlacementRules.inBase())
                     .build());
             return builder;
         }
@@ -117,7 +119,7 @@ public class Build {
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(builder.workerType))
-                    .expand(true)
+                    .placementRules(PlacementRules.expansion())
                     .build());
             return builder;
         }

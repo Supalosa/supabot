@@ -104,15 +104,11 @@ public class SimpleBuildOrder implements BuildOrder {
     }
 
     private BuildOrderOutput convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
-        Optional<PlacementRules> placementRules = simpleBuildOrderStage.expand() ? Optional.of(ImmutablePlacementRules.builder()
-                .regionType(PlacementRules.Region.EXPANSION)
-                .maxVariation(0)
-                .build()) : Optional.empty();
         return ImmutableBuildOrderOutput.builder()
                 .abilityToUse(simpleBuildOrderStage.ability())
                 .eligibleUnitTypes(simpleBuildOrderStage.unitFilter())
                 .addonRequired(simpleBuildOrderStage.addonType())
-                .placementRules(placementRules)
+                .placementRules(simpleBuildOrderStage.placementRules())
                 .build();
     }
 

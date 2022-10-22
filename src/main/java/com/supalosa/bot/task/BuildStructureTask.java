@@ -15,7 +15,6 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.awareness.RegionData;
-import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -198,6 +197,10 @@ public class BuildStructureTask implements Task {
     }
 
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
+        // This should probably be a preidcate associated to the PlacementRules it itself.
+        boolean nearBaseOnly = placementRules.isPresent() ?
+                placementRules.get().regionType().equals(PlacementRules.Region.ANY_PLAYER_BASE) :
+                false;
         if (location.isPresent()) {
             // If location is known, find closest unit to that location.
             return taskManager.findFreeUnitForTask(
@@ -208,18 +211,30 @@ public class BuildStructureTask implements Task {
                     Comparator.comparing((UnitInPool unitInPool) ->
                             unitInPool.unit().getPosition().toPoint2d().distance(location.get()))
             ).map(unitInPool -> unitInPool.getTag());
-        } else {
-            boolean nearBaseOnly = placementRules.isPresent() ? placementRules.equals(PlacementRules.Region.ANY_PLAYER_OWNED) : false;
+        } else if (nearBaseOnly) {
+            // If the placement rules require the structure in the base, search near the base only.
+            Point2d baseLocation = data.mapAwareness()
+                    .getDefenceLocation()
+                    .orElse(agent.observation().getStartLocation().toPoint2d());
             return taskManager.findFreeUnitForTask(
                     this,
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
-                            (!nearBaseOnly ||
-                                    data.mapAwareness()
-                                            .getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())
-                                            .map(RegionData::playerThreat).orElse(0.0) > 0.0))
-                    .map(unitInPool -> unitInPool.getTag());
+                            data.mapAwareness()
+                                    .getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())
+                                    .map(RegionData::isPlayerBase).orElse(false),
+                    Comparator.comparing((UnitInPool unitInPool) ->
+                            unitInPool.unit().getPosition().toPoint2d().distance(baseLocation))
+            ).map(unitInPool -> unitInPool.getTag());
+        } else {
+            // Take any worker.
+            return taskManager.findFreeUnitForTask(
+                    this,
+                    agent.observation(),
+                    unitInPool -> unitInPool.unit() != null &&
+                            Constants.WORKER_TYPES.contains(unitInPool.unit().getType())
+            ).map(unitInPool -> unitInPool.getTag());
         }
     }
 

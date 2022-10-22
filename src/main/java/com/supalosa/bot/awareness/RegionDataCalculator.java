@@ -9,9 +9,11 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.engagement.ThreatCalculator;
+import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.function.Function;
@@ -19,8 +21,11 @@ import java.util.stream.Collectors;
 
 public class RegionDataCalculator {
 
-    // This is the expected distance between each region.
+    // This is the expected distance between each region. It is a bit of a magic number.
     static final double DIFFUSE_THREAT_CONSTANT = 5.0;
+
+    // Number of structures per region before it's considered a (player) base.
+    public static final int BASE_STRUCTURES_PER_REGION = 5;
 
     private final ThreatCalculator threatCalculator;
 
@@ -45,7 +50,7 @@ public class RegionDataCalculator {
             if (!isEnemy && !isSelf)
                 return;
             analysisResults.getTile((int)point2d.getX(), (int)point2d.getY()).ifPresent(tile -> {
-                if (tile.regionId > 0) {
+                if (tile.regionId >= 0) {
                     if (isEnemy) {
                         regionIdToEnemyUnits.put(tile.regionId, unit);
                     } else if (isSelf) {
@@ -57,11 +62,12 @@ public class RegionDataCalculator {
         Set<Integer> regionIdsWithEnemyBases = new HashSet<>();
         knownEnemyBases.forEach(point2d -> {
             analysisResults.getTile((int)point2d.getX(), (int)point2d.getY()).ifPresent(tile -> {
-                if (tile.regionId > 0) {
+                if (tile.regionId >= 0) {
                     regionIdsWithEnemyBases.add(tile.regionId);
                 }
             });
         });
+        Set<Integer> regionIdsWithPlayerBases = calculatePlayerBases(regionIdToSelfUnits);
         double maxEnemyThreat = 0;
         Map<Integer, Double> regionToEnemyThreat = new HashMap<>();
         Map<Integer, Double> regionToVisibility = new HashMap<>();
@@ -155,11 +161,31 @@ public class RegionDataCalculator {
                     .decayingVisibilityPercent(decayingVisibilityPercent)
                     .diffuseEnemyThreat(decayingDefuseThreat)
                     .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()))
+                    .isPlayerBase(regionIdsWithPlayerBases.contains(region.regionId()))
                     .estimatedCreepPercentage(regionCreepPercentage)
                     .borderTilesTowardsEnemy(borderTilesTowardsEnemy)
                     .bestTileTowardsEnemy(averageBorderTileTowardsEnemy);
 
             result.put(region.regionId(), builder.build());
+        });
+        return result;
+    }
+
+    private Set<Integer> calculatePlayerBases(Multimap<Integer, UnitInPool> regionIdToSelfUnits) {
+        Set<Integer> result = new HashSet<>();
+        Map<Integer, Integer> regionIdToStructureCount = new HashMap<>();
+        regionIdToSelfUnits.forEach((regionId, unit) -> {
+            // Any region with a town hall is considered a base.
+            if (Constants.ALL_TOWN_HALL_TYPES.contains(unit.unit().getType())) {
+                result.add(regionId);
+            }
+            // Any region with more than 5 structures is considered a base.
+            if (Constants.STRUCTURE_UNIT_TYPES.contains(unit.unit().getType())) {
+                regionIdToStructureCount.compute(regionId, (k, v) -> v == null ? 1 : v + 1);
+                if (regionIdToStructureCount.getOrDefault(regionId, 0) >= BASE_STRUCTURES_PER_REGION) {
+                    result.add(regionId);
+                }
+            }
         });
         return result;
     }

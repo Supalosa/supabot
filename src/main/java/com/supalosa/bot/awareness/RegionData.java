@@ -103,6 +103,9 @@ public interface RegionData {
     }
 
     @Value.Default
+    default boolean isPlayerBase() { return false; }
+
+    @Value.Default
     default double estimatedCreepPercentage() { return 0.0; }
 
     /**

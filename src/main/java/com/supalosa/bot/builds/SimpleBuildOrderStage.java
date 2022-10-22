@@ -4,6 +4,7 @@ import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.supalosa.bot.Constants;
+import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.Validate;
 import org.immutables.value.Value;
@@ -20,10 +21,7 @@ public abstract class SimpleBuildOrderStage {
     @Value.Parameter
     public abstract Optional<Ability> ability();
 
-    @Value.Default
-    public boolean expand() {
-        return false;
-    }
+    public abstract Optional<PlacementRules> placementRules();
 
     @Value.Default
     public boolean stopWorkerProduction() {
@@ -57,7 +55,7 @@ public abstract class SimpleBuildOrderStage {
                 (Constants.TERRAN_ADDON_TYPES.contains(addonType().get())),
                 "Only tech lab/reactor types are supported",
                 addonType());
-        Validate.isTrue(ability().isPresent() || gasMiners().isPresent() || expand(),
+        Validate.isTrue(ability().isPresent() || gasMiners().isPresent(),
                 "Order does not do anything.");
     }
 }

@@ -173,6 +173,9 @@ public class JFrameDebugTarget implements DebugTarget {
                 if (regionData.hasEnemyBase()) {
                     regionText += "B";
                 }
+                if (regionData.isPlayerBase()) {
+                    regionText += "P";
+                }
                 int width = g.getFontMetrics().stringWidth(regionText);
                 int height = g.getFontMetrics().getHeight();
                 g.setColor(Color.BLACK);

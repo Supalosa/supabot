@@ -423,9 +423,9 @@ public class StructurePlacementCalculator {
                                                              int structureHeight,
                                                              Optional<PlacementRules> placementRules) {
         int actualSearchRadius = placementRules.map(PlacementRules::maxVariation).orElse(searchRadius);
-        PlacementRules.Region region = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.ANY_PLAYER_OWNED);
+        PlacementRules.Region region = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.ANY_PLAYER_BASE);
         switch (region) {
-            case ANY_PLAYER_OWNED:
+            case ANY_PLAYER_BASE:
                 return findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight);
             case EXPANSION:
                 return findExpansionPlacement(origin, structureWidth, structureHeight, data);

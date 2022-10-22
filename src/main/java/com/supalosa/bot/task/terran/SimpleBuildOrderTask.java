@@ -126,8 +126,8 @@ public class SimpleBuildOrderTask implements BehaviourTask {
         });
         if (this.simpleBuildOrder.isComplete()) {
             if (taskManager.addTask(nextBehaviourTask, 1)) {
-                agent.actions().sendChat("Build order terminated at " +
-                        simpleBuildOrder.getCurrentStageNumber() + "/" + simpleBuildOrder.getTotalStages(), ActionChat.Channel.TEAM);
+                agent.actions().sendChat("tag:buildorder-terminated-" +
+                        simpleBuildOrder.getCurrentStageNumber() + "/" + simpleBuildOrder.getTotalStages() + "/" + gameLoop, ActionChat.Channel.TEAM);
                 this.isComplete = true;
             } else {
                 throw new IllegalStateException("Could not dispatch the next behaviour task.");
