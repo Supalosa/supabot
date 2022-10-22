@@ -8,6 +8,7 @@ import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
@@ -16,6 +17,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -142,6 +144,34 @@ public class BuildUtils {
                     ccsDoneThisRun.add(nearCc.get());
                 }
             }
+        });
+    }
+
+    public static void defaultTerranRamp(AgentData data, S2Agent agent) {
+        // Open or close the ramp.
+        data.structurePlacementCalculator().ifPresent(spc -> {
+            AtomicBoolean rampClosed = new AtomicBoolean(false);
+            spc.getFirstSupplyDepot(agent.observation()).ifPresent(supplyDepot -> {
+                if (agent.observation().getUnits(Alliance.ENEMY).stream()
+                        .anyMatch(enemyUnit -> enemyUnit
+                                .getUnit()
+                                .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < 8)
+                                .isPresent())) {
+                    rampClosed.set(true);
+                }
+                if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
+                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
+                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
+                }
+            });
+            spc.getSecondSupplyDepot(agent.observation()).ifPresent(supplyDepot -> {
+                if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
+                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
+                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
+                }
+            });
         });
     }
 }

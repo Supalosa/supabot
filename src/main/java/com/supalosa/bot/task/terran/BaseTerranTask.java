@@ -16,7 +16,6 @@ import com.google.common.cache.LoadingCache;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
-import com.supalosa.bot.SupaBot;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.task.*;
@@ -199,31 +198,7 @@ public class BaseTerranTask implements BehaviourTask {
 
         mineGas(agent);
 
-        // Open or close the ramp.
-        data.structurePlacementCalculator().ifPresent(spc -> {
-            AtomicBoolean rampClosed = new AtomicBoolean(false);
-            spc.getFirstSupplyDepot(agent.observation()).ifPresent(supplyDepot -> {
-                if (agent.observation().getUnits(Alliance.ENEMY).stream()
-                        .anyMatch(enemyUnit -> enemyUnit
-                                .getUnit()
-                                .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < 8)
-                                .isPresent())) {
-                    rampClosed.set(true);
-                }
-                if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
-                } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
-                }
-            });
-            spc.getSecondSupplyDepot(agent.observation()).ifPresent(supplyDepot -> {
-                if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
-                } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
-                }
-            });
-        });
+        BuildUtils.defaultTerranRamp(data, agent);
     }
 
     @Override
@@ -385,7 +360,7 @@ public class BaseTerranTask implements BehaviourTask {
 
         if (numBarracks == 0 && data.structurePlacementCalculator().isPresent()) {
             position = data.structurePlacementCalculator().get()
-                    .getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d());
+                    .getFirstBarracksWithAddonLocation();
         }
 
         int maxParallel = Math.max(1, agent.observation().getMinerals() / 150);

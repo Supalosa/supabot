@@ -50,6 +50,9 @@ public class Ramp implements TileSet {
         return topOfRampTiles;
     }
 
+    /**
+     * Returns the direction of this ramp. The direction is relative to the upwards direction.
+     */
     public RampDirection getRampDirection() {
         return rampDirection;
     }

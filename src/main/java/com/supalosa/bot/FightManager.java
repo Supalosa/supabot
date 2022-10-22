@@ -190,7 +190,7 @@ public class FightManager {
                 // Defend from behind the barracks, or else the position of the barracks.
                 return spc.getMainRamp()
                         .map(ramp -> ramp.projection(5.0f))
-                        .orElse(spc.getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d()));
+                        .orElse(spc.getFirstBarracksWithAddonLocation());
             });
         }
 
@@ -327,7 +327,7 @@ public class FightManager {
                 Optional<Point2d> defencePosition = spc
                         .getMainRamp()
                         .map(ramp -> ramp.projection(5.0f))
-                        .orElse(spc.getFirstBarracksLocation(agent.observation().getStartLocation().toPoint2d()));
+                        .orElse(spc.getFirstBarracksWithAddonLocation());
                 this.setDefencePosition(defencePosition);
             });
         }

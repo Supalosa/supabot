@@ -124,6 +124,10 @@ public class SimpleBuildOrderTask implements BehaviourTask {
                 }
             }
         });
+
+        // TODO move this to a task.
+        BuildUtils.defaultTerranRamp(data, agent);
+
         if (this.simpleBuildOrder.isComplete()) {
             if (taskManager.addTask(nextBehaviourTask, 1)) {
                 agent.actions().sendChat("tag:buildorder-terminated-" +

@@ -46,7 +46,7 @@ public class StructurePlacementCalculator {
 
     private Optional<Optional<Point2d>> firstSupplyDepotLocation = Optional.empty();
     private Optional<Optional<Point2d>> secondSupplyDepotLocation = Optional.empty();
-    private Optional<Optional<Point2d>> barracksLocation = Optional.empty();
+    private Optional<Optional<Point2d>> barracksWithAddonLocation = Optional.empty();
 
     private List<Point2d> myStructures = new ArrayList<>();
     private long myStructuresUpdatedAt = 0L;
@@ -86,9 +86,9 @@ public class StructurePlacementCalculator {
                 updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 2, 2);
             });
         }
-        if (barracksLocation.isPresent()) {
+        if (barracksWithAddonLocation.isPresent()) {
             // has been calculated
-            Optional<Point2d> maybeLocation = barracksLocation.get();
+            Optional<Point2d> maybeLocation = barracksWithAddonLocation.get();
             maybeLocation.ifPresent(location -> {
                 updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 3, 3);
             });
@@ -195,12 +195,12 @@ public class StructurePlacementCalculator {
         return secondSupplyDepotLocation.get();
     }
 
-    public Optional<Point2d> getFirstBarracksLocation(Point2d start) {
-        if (barracksLocation.isEmpty()) {
-            barracksLocation = Optional.of(calculateBarracksLocation(start));
+    public Optional<Point2d> getFirstBarracksWithAddonLocation() {
+        if (barracksWithAddonLocation.isEmpty()) {
+            barracksWithAddonLocation = Optional.of(calculateBarracksWithAddonLocation(start));
             updateFreePlacementGrid();
         }
-        return barracksLocation.get();
+        return barracksWithAddonLocation.get();
     }
 
     Optional<Ramp> getRamp(Point2d start) {
@@ -218,7 +218,7 @@ public class StructurePlacementCalculator {
         return Optional.of(theRamp);
     }
 
-    Optional<Point2d> calculateBarracksLocation(Point2d start) {
+    Optional<Point2d> calculateBarracksWithAddonLocation(Point2d start) {
         Optional<Ramp> maybeRamp = getRamp(start);
         //System.out.println("The ramp has " + theRamp.getRampTiles().size() + " tiles and " + theRamp.getTopOfRampTiles().size() + " top of ramp tiles");
         //System.out.println("The ramp is pointing " + theRamp.getRampDirection().name());
@@ -236,14 +236,20 @@ public class StructurePlacementCalculator {
         // TODO: check the shape of the top of the ramp complies with the standard.
         Point2d northTile = getNorthmostTile(ramp.getTopOfRampTiles());
         Point2d southTile = getSouthmostTile(ramp.getTopOfRampTiles());
-        // Origin of 2x2 buildings seems to be the northeast tile.
+        // West-facing ramps
         switch (ramp.getRampDirection()) {
-            case SOUTH_WEST:
             case SOUTH_EAST:
+                // This is ideal because there is always space for the addon.
                 return Optional.of(northTile.add(0, -3));
+            case SOUTH_WEST:
+                // We shift this one over to create space for the addon. Unfortunately it leaves a gap in the wall.
+                return Optional.of(northTile.add(-2, -3));
             case NORTH_EAST:
-            case NORTH_WEST:
+                // This is ideal because there is always space for the addon.
                 return Optional.of(southTile.add(0, 3));
+            case NORTH_WEST:
+                // We shift this one over to create space for the addon. Unfortunately it leaves a gap in the wall.
+                return Optional.of(southTile.add(-2, 3));
         }
         return Optional.empty();
     }
@@ -413,8 +419,6 @@ public class StructurePlacementCalculator {
         });
     }
 
-    private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
-
     // does NOT query for placement but will never suggest something that overlaps with a reserved tile.
     public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
                                                              Point2d origin,
@@ -423,15 +427,49 @@ public class StructurePlacementCalculator {
                                                              int structureHeight,
                                                              Optional<PlacementRules> placementRules) {
         int actualSearchRadius = placementRules.map(PlacementRules::maxVariation).orElse(searchRadius);
-        PlacementRules.Region region = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.ANY_PLAYER_BASE);
+        PlacementRules.Region region = placementRules
+                .map(PlacementRules::regionType)
+                .orElse(PlacementRules.Region.ANY_PLAYER_BASE);
+        // Reserve the location after we suggest it. It will be wiped clear in the next structure grid update if
+        // it doesn't actually get used.
+        Optional<Point2d> suggestedLocation = Optional.empty();
         switch (region) {
             case ANY_PLAYER_BASE:
-                return findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight);
+                suggestedLocation = findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight);
+                break;
             case EXPANSION:
-                return findExpansionPlacement(origin, structureWidth, structureHeight, data);
+                suggestedLocation = findExpansionPlacement(origin, structureWidth, structureHeight, data);
+                break;
+            case MAIN_RAMP_SUPPLY_DEPOT_1:
+                suggestedLocation = getFirstSupplyDepotLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight))
+                        .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
+                break;
+            case MAIN_RAMP_SUPPLY_DEPOT_2:
+                suggestedLocation = getSecondSupplyDepotLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight))
+                        .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
+                break;
+            case MAIN_RAMP_BARRACKS_WITH_ADDON:
+                suggestedLocation = getFirstBarracksWithAddonLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight))
+                        .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported placement region logic: " + region);
         }
-        return Optional.empty();
+        if (suggestedLocation.isPresent()) {
+            updatePlacementGridWithFootprint(mutableFreePlacementGrid,
+                    (int)suggestedLocation.get().getX(),
+                    (int)suggestedLocation.get().getY(),
+                    structureWidth,
+                    structureHeight);
+        }
+        return suggestedLocation;
     }
+
+    private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
+    private static final int MAX_ADJACENT_PLACEMENT_ITERATIONS = 10;
 
     private Optional<Point2d> findAnyPlacement(Point2d origin, int actualSearchRadius, int structureWidth, int structureHeight) {
         List<Point2d> nearbyStructures = myStructures.stream().filter(myStructurePoint2d -> {
@@ -440,9 +478,16 @@ public class StructurePlacementCalculator {
         for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
             // prefer to place next to an existing structure.
             Point2d candidate;
-            if (nearbyStructures.size() > 0 && i <= MAX_FREE_PLACEMENT_ITERATIONS / 2) {
-                candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
-                        .add((structureWidth + i) * getRandomSign(), (structureHeight + i) * getRandomSign());
+            if (nearbyStructures.size() > 0 && i < MAX_ADJACENT_PLACEMENT_ITERATIONS) {
+                if (ThreadLocalRandom.current().nextBoolean()) {
+                    // up-down
+                    candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
+                            .add(0, (structureHeight) * getRandomSign());
+                } else {
+                    // left-right
+                    candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
+                            .add((structureWidth) * getRandomSign(), 0);
+                }
             } else {
                 // Initially we will search closer to the querying worker. The longer we search, the more willing we
                 // are to place something far away.
@@ -469,6 +514,16 @@ public class StructurePlacementCalculator {
             if (canPlaceAtIgnoringStaticGrid(candidate, structureWidth, structureHeight)) {
                 return Optional.of(candidate);
             }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Use for when we calculated a position ahead of time.
+     */
+    private Optional<Point2d> checkSpecificPlacement(Point2d point, int structureWidth, int structureHeight) {
+        if (canPlaceAtIgnoringStaticGrid(point, structureWidth, structureHeight)) {
+            return Optional.of(point);
         }
         return Optional.empty();
     }

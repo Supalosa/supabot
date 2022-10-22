@@ -7,6 +7,8 @@ import com.github.ocraft.s2client.protocol.data.Units;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.utils.UnitFilter;
+import org.apache.commons.lang3.NotImplementedException;
+import org.apache.commons.lang3.Validate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +38,16 @@ public class Build {
 
         public BuilderWithCondition atSupply(int supply) {
             return new BuilderWithCondition(this, new SimpleBuildOrderCondition.AtSupplyCondition(supply));
+        }
+
+        // Mutators (which modify the previously added stage) go here.
+        public Builder at(PlacementRules rules) {
+            Validate.isTrue(stages.size() > 0);
+            stages.set(stages.size() - 1, ImmutableSimpleBuildOrderStage.builder()
+                    .from(stages.get(stages.size() - 1))
+                    .placementRules(rules)
+                    .build());
+            return this;
         }
 
         public List<SimpleBuildOrderStage> build() {
@@ -153,6 +165,18 @@ public class Build {
                     .repeat(true)
                     .build());
             return builder;
+        }
+
+        public Builder startRepeatingStructure(Abilities ability) {
+            throw new NotImplementedException("Repeating structure not supported yet (it causes infinite tasks to be created");
+            /*
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(builder.workerType))
+                    .repeat(true)
+                    .build());
+            return builder;*/
         }
 
         public Builder startRepeatingUnitWithAddon(Set<UnitType> unitTypes, UnitType addonType, Abilities ability) {

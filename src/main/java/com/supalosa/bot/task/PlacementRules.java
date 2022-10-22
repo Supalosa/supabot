@@ -12,7 +12,19 @@ public interface PlacementRules {
         /**
          * Place it on an expansion only.
          */
-        EXPANSION
+        EXPANSION,
+        /**
+         * Place it on the terran ramp.
+         */
+        MAIN_RAMP_SUPPLY_DEPOT_1,
+        /**
+         * Place it on the terran ramp.
+         */
+        MAIN_RAMP_SUPPLY_DEPOT_2,
+        /**
+         * Place it on the terran ramp with space for the addon.
+         */
+        MAIN_RAMP_BARRACKS_WITH_ADDON,
     }
 
     Region regionType();
@@ -27,4 +39,15 @@ public interface PlacementRules {
         return ImmutablePlacementRules.builder().regionType(Region.ANY_PLAYER_BASE).maxVariation(20).build();
     }
 
+    static PlacementRules mainRampSupplyDepot1() {
+        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_SUPPLY_DEPOT_1).maxVariation(0).build();
+    }
+
+    static PlacementRules mainRampSupplyDepot2() {
+        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_SUPPLY_DEPOT_2).maxVariation(0).build();
+    }
+
+    static PlacementRules mainRampBarracksWithAddon() {
+        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_BARRACKS_WITH_ADDON).maxVariation(0).build();
+    }
 }
