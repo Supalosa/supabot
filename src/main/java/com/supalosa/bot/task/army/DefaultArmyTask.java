@@ -135,13 +135,13 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             regionWaypoints.remove(0);
             if (regionWaypoints.size() > 0) {
                 waypointsCalculatedFrom = Optional.of(regionWaypoints.get(0));
-            } else {
-                // Finished path.
-                waypointsCalculatedTo = Optional.empty();
-                waypointsCalculatedFrom = Optional.empty();
-                // Await a new target.
-                targetPosition = Optional.empty();
             }
+        }
+        if (currentRegion.isPresent() && regionWaypoints.size() == 0 && shouldMoveFromRegion(currentRegionData.get(), regionWaypoints)) {
+            // Finished path.
+            waypointsCalculatedTo = Optional.empty();
+            waypointsCalculatedFrom = Optional.empty();
+            targetPosition = Optional.empty();
         }
     }
 

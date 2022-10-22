@@ -438,11 +438,11 @@ public class StructurePlacementCalculator {
             return myStructurePoint2d.distance(origin) < actualSearchRadius;
         }).collect(Collectors.toList());
         for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
-            // prefer to place next to an existing structure but swapping on alternating queries
+            // prefer to place next to an existing structure.
             Point2d candidate;
-            if (nearbyStructures.size() > 0 && i % 2 == 0) {
+            if (nearbyStructures.size() > 0 && i <= MAX_FREE_PLACEMENT_ITERATIONS / 2) {
                 candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
-                        .add((structureWidth + 1) * getRandomSign(), (structureHeight + 1) * getRandomSign());
+                        .add((structureWidth + i) * getRandomSign(), (structureHeight + i) * getRandomSign());
             } else {
                 // Initially we will search closer to the querying worker. The longer we search, the more willing we
                 // are to place something far away.
