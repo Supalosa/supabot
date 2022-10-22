@@ -15,7 +15,7 @@ import java.util.Set;
 @Value.Immutable
 public abstract class SimpleBuildOrderStage {
     @Value.Parameter
-    public abstract int supplyTrigger();
+    public abstract SimpleBuildOrderCondition trigger();
 
     @Value.Parameter
     public abstract Optional<Ability> ability();

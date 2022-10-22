@@ -1,9 +1,14 @@
 package com.supalosa.bot.builds;
 
 import com.github.ocraft.s2client.protocol.data.Abilities;
+import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
+import com.github.ocraft.s2client.protocol.data.Units;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.utils.UnitFilter;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -11,69 +16,165 @@ import java.util.Set;
  */
 public class Build {
 
-    static SimpleBuildOrderStage atSupply(int supply, UnitType unitType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .unitFilter(UnitFilter.mine(unitType))
-                .build();
+    private List<SimpleBuildOrderStage> stages;
+
+    private Build(List<SimpleBuildOrderStage> stages) {
+        this.stages = stages;
     }
 
-    static SimpleBuildOrderStage atSupply(int supply, UnitType unitType, UnitType addonType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .addonType(addonType)
-                .unitFilter(UnitFilter.mine(unitType))
-                .build();
+    public static class Builder {
+        private List<SimpleBuildOrderStage> stages;
+        private Units workerType;
+        private Set<UnitType> townHallTypes;
+
+        private Builder(Units workerType, Set<UnitType> townHallTypes) {
+            this.stages = new ArrayList<>();
+            this.workerType = workerType;
+            this.townHallTypes = townHallTypes;
+        }
+
+        public BuilderWithCondition atSupply(int supply) {
+            return new BuilderWithCondition(this, new SimpleBuildOrderCondition.AtSupplyCondition(supply));
+        }
+
+        public List<SimpleBuildOrderStage> build() {
+            return stages;
+        }
     }
 
-    static SimpleBuildOrderStage atSupplySetGasMiners(int supply, int miners) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .gasMiners(miners)
-                .build();
+    public static class BuilderWithCondition {
+        private Builder builder;
+        private SimpleBuildOrderCondition condition;
+
+        private BuilderWithCondition(Builder builder, SimpleBuildOrderCondition condition) {
+            this.builder = builder;
+            this.condition = condition;
+        }
+
+        // Generic stages go here.
+
+        /**
+         * Builds a structure with the appropriate worker type for the race.
+         */
+        public Builder buildStructure(Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(builder.workerType))
+                    .build());
+            return builder;
+        }
+
+        public Builder useAbility(UnitType unitType, Abilities ability) {
+            // Currently this is just a proxy for trainUnit, but in theory we might
+            // have custom logic e.g swapping addons around.
+            return trainUnit(unitType, ability);
+        }
+
+        public Builder trainUnit(UnitType unitType, Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(unitType))
+                    .build());
+            return builder;
+        }
+
+        public Builder trainUnitUsingAddon(UnitType unitType, UnitType addonType, Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(unitType))
+                    .addonType(addonType)
+                    .build());
+            return builder;
+        }
+
+        public Builder setGasMiners(int miners) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .gasMiners(miners)
+                    .build());
+            return builder;
+        }
+
+        public Builder expand() {
+            Ability ability;
+            switch (builder.workerType) {
+                case TERRAN_SCV:
+                    ability = Abilities.BUILD_COMMAND_CENTER;
+                    break;
+                case ZERG_DRONE:
+                    ability = Abilities.BUILD_HATCHERY;
+                    break;
+                case PROTOSS_PROBE:
+                    ability = Abilities.BUILD_NEXUS;
+                    break;
+                default:
+                    throw new IllegalStateException("Invalid worker type, cannot determine expansion ability to use.");
+            }
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(builder.workerType))
+                    .expand(true)
+                    .build());
+            return builder;
+        }
+
+        public Builder startRepeatingUnit(UnitType unitType, Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(unitType))
+                    .repeat(true)
+                    .build());
+            return builder;
+        }
+
+        public Builder startRepeatingUnit(Set<UnitType> unitTypes, Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .unitFilter(UnitFilter.mine(unitTypes))
+                    .repeat(true)
+                    .build());
+            return builder;
+        }
+
+        public Builder startRepeatingUnitWithAddon(UnitType unitType, UnitType addonType, Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .addonType(addonType)
+                    .unitFilter(UnitFilter.mine(unitType))
+                    .repeat(true)
+                    .build());
+            return builder;
+        }
+
+        public Builder startRepeatingUnitWithAddon(Set<UnitType> unitTypes, UnitType addonType, Abilities ability) {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .ability(ability)
+                    .addonType(addonType)
+                    .unitFilter(UnitFilter.mine(unitTypes))
+                    .repeat(true)
+                    .build());
+            return builder;
+        }
+
+        // Race-specific helpers go here.
+        public Builder buildSupplyDepot() {
+            return buildStructure(Abilities.BUILD_SUPPLY_DEPOT);
+        }
+
+        public Builder morphOrbital() {
+            return trainUnit(Units.TERRAN_COMMAND_CENTER, Abilities.MORPH_ORBITAL_COMMAND);
+        }
     }
 
-    static SimpleBuildOrderStage atSupplyExpand(int supply, UnitType unitType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .unitFilter(UnitFilter.mine(unitType))
-                .expand(true)
-                .build();
-    }
-
-    static SimpleBuildOrderStage atSupplyRepeat(int supply, UnitType unitType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .unitFilter(UnitFilter.mine(unitType))
-                .repeat(true).build();
-    }
-
-    static SimpleBuildOrderStage atSupplyRepeat(int supply, Set<UnitType> unitTypes, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .unitFilter(UnitFilter.mine(unitTypes))
-                .repeat(true).build();
-    }
-
-    static SimpleBuildOrderStage atSupplyRepeat(int supply, UnitType unitType, UnitType addonType, Abilities ability) {
-        return ImmutableSimpleBuildOrderStage.builder()
-                .supplyTrigger(supply)
-                .ability(ability)
-                .addonType(addonType)
-                .unitFilter(UnitFilter.mine(unitType))
-                .repeat(true).build();
-    }
-
-    static SimpleBuildOrderStage stopRepeating(int supply) {
-        return ImmutableSimpleBuildOrderStage.builder().supplyTrigger(supply).stopWorkerProduction(true).build();
-    }
-
-    static SimpleBuildOrderStage resumeWorkerProductionAt(int supply) {
-        return ImmutableSimpleBuildOrderStage.builder().supplyTrigger(supply).stopWorkerProduction(false).build();
+    public static Builder terran() {
+        return new Builder(Units.TERRAN_SCV, Constants.TERRAN_CC_TYPES);
     }
 }

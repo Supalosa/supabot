@@ -73,7 +73,7 @@ public class SimpleBuildOrder implements BuildOrder {
             SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
             List<BuildOrderOutput> output = new ArrayList<>();
             final int currentSupply = observationInterface.getFoodUsed();
-            if (currentSupply >= currentStage.supplyTrigger()) {
+            if (currentStage.trigger().accept(this, observationInterface)) {
                 output.add(convertStageToOutput(currentStage));
             }
             output.addAll(repeatingStages.stream().map(this::convertStageToOutput)
