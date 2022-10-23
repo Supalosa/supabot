@@ -44,6 +44,8 @@ public class FightManager {
     private boolean hasSeenCloakedOrBurrowedUnits = false;
 
     private long positionalLogicUpdatedAt = 0L;
+    private boolean canAttack = false;
+    private boolean pendingReinforcement = false;
 
     public FightManager(S2Agent agent) {
         this.agent = agent;
@@ -166,6 +168,11 @@ public class FightManager {
             updateCloakOrBurrowed();
             lastCloakOrBurrowedUpdate = gameLoop;
         }
+
+        if (pendingReinforcement) {
+            pendingReinforcement = false;
+            attackingArmy.takeAllFrom(data.taskManager(), agent.observation(), reserveArmy);
+        }
     }
 
     /**
@@ -251,89 +258,8 @@ public class FightManager {
         }
 
         // periodically push units from the reserve army to the main army.
-        if (!defenceNeedsAssistance && (reserveArmy.getSize()) >= getTargetMarines()) {
-            attackingArmy.takeAllFrom(data.taskManager(), agent.observation(), reserveArmy);
-        }
-    }
-
-    // this is crap
-    private void oldUpdateTargetingLogic(AgentData data) {
-        // Select attack position.
-        Optional<Point2d> attackPosition;
-        if (data.enemyAwareness().getPotentialEnemyArmy().isEmpty()) {
-            // Don't know where the enemy army is - attack/
-            attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemyBase();
-        } else {
-            if (data.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
-                    attackingArmy.predictFightAgainst(data.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.WINNING) {
-                attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemyBase();
-            } else {
-                attackPosition = data.mapAwareness().getDefenceLocation();
-            }
-        }
-        // Select harass position with the lowest diffuse threat that is not close to the attack position.
-        final double MIN_DISTANCE_FROM_ATTACK_POSITION = 25f;
-        // Harass bases which have half the enemy army threat diffused to them.
-        double minDiffuseThreat = data.enemyAwareness().getPotentialEnemyArmy()
-                .map(army -> army.threat() / 2.0)
-                .orElse(20.0);
-        RegionData minRegion = null;
-        for (RegionData regionData : data.mapAwareness().getAllRegionData()) {
-            if (attackPosition.isPresent() &&
-                    regionData.region().centrePoint().distance(attackPosition.get()) > MIN_DISTANCE_FROM_ATTACK_POSITION) {
-                if (regionData.hasEnemyBase()) {
-                    if (regionData.diffuseEnemyThreat() < minDiffuseThreat) {
-                        minRegion = regionData;
-                        minDiffuseThreat = regionData.diffuseEnemyThreat();
-                    }
-                }
-            }
-        }
-        Optional<Point2d> harassPosition = Optional.empty();
-        if (minRegion != null) {
-            harassPosition = Optional.of(minRegion.region().centrePoint());
-        } else {
-            harassPosition = data.mapAwareness().getNextScoutTarget();
-        }
-        this.setHarassPosition(harassPosition);
-        Optional<Point2d> finalHarassPosition = harassPosition;
-        data.enemyAwareness().getPotentialEnemyArmy().ifPresent(enemyArmy -> {
-            FightPerformance predictedOutcome = attackingArmy.predictFightAgainst(enemyArmy);
-            if (predictedOutcome != FightPerformance.WINNING) {
-                if (finalHarassPosition.isPresent()) {
-                    attackingArmy.setTargetPosition(finalHarassPosition);
-                } else {
-                    attackingArmy.setTargetPosition(attackPosition);
-                }
-            }
-        });
-        Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearOwnBase();
-        boolean isDefending = false;
-        if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
-            // Enemy detected near our base, attack them.
-            this.setDefencePosition(nearestEnemy);
-            Optional<Army> attackingEnemyArmy = data.enemyAwareness().getMaybeEnemyArmy(nearestEnemy.get());
-            if (attackingEnemyArmy.isPresent()) {
-                FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(attackingEnemyArmy.get());
-                if (predictedOutcome == FightPerformance.BADLY_LOSING) {
-                    // Defending army needs help.
-                    attackingArmy.setTargetPosition(nearestEnemy);
-                }
-            }
-            isDefending = true;
-        } else {
-            data.structurePlacementCalculator().ifPresent(spc -> {
-                // Defend from behind the barracks, or else the position of the barracks.
-                Optional<Point2d> defencePosition = spc
-                        .getMainRamp()
-                        .map(ramp -> ramp.projection(5.0f))
-                        .orElse(spc.getFirstBarracksWithAddonLocation());
-                this.setDefencePosition(defencePosition);
-            });
-        }
-        // hack, maybe?
-        if (!isDefending && (reserveArmy.getSize()) >= getTargetMarines()) {
-            attackingArmy.takeAllFrom(data.taskManager(), agent.observation(), reserveArmy);
+        if (!defenceNeedsAssistance && (reserveArmy.getSize()) >= getTargetMarines() && canAttack) {
+            reinforceAttackingArmy();
         }
     }
 
@@ -440,5 +366,13 @@ public class FightManager {
 
     public Collection<ArmyTask> getAllArmies() {
         return Collections.unmodifiableCollection(armyTasks);
+    }
+
+    public void setCanAttack(boolean canAttack) {
+        this.canAttack = canAttack;
+    }
+
+    public void reinforceAttackingArmy() {
+        this.pendingReinforcement = true;
     }
 }

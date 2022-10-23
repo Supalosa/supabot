@@ -8,6 +8,8 @@ import java.util.Set;
 
 @Value.Immutable
 public interface TaskResult {
+
+    @Value.Parameter
     boolean isSuccessful();
     Optional<Point2d> locationResult();
     Optional<Set<Task>> producedUnit();

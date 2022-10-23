@@ -25,7 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
-public class BuildStructureTask implements Task {
+public class BuildStructureTask extends BaseTask {
 
     private static final long BUILD_ATTEMPT_INTERVAL = 22;
     private static final long MAX_BUILD_ATTEMPTS = 10;
@@ -49,6 +49,7 @@ public class BuildStructureTask implements Task {
     private long buildAttempts = 0;
     private boolean isComplete = false;
 
+    private boolean isSuccess = false;
     private boolean aborted = false;
 
     public BuildStructureTask(Ability ability,
@@ -72,6 +73,7 @@ public class BuildStructureTask implements Task {
     public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
         if (aborted) {
             isComplete = true;
+            onFailure();
             if (assignedWorker.isPresent()) {
                 agent.actions().unitCommand(assignedWorker.get(), Abilities.STOP, false);
             }
@@ -100,6 +102,17 @@ public class BuildStructureTask implements Task {
                         assignedWorker = Optional.empty();
                         return;
                     }
+                    if (actionError.getActionResult() == ActionResult.CANT_FIND_PLACEMENT_LOCATION) {
+                        location = Optional.empty();
+                        return;
+                    }
+                    if (actionError.getActionResult() == ActionResult.CANT_BUILD_ON_THAT) {
+                        location = Optional.empty();
+                        return;
+                    }
+                }
+                if (actionError.getActionResult() == ActionResult.CANT_FIND_PLACEMENT_LOCATION) {
+                    return;
                 }
             });
             worker = assignedWorker
@@ -154,6 +167,7 @@ public class BuildStructureTask implements Task {
                 agent.actions().unitCommand(tag, Abilities.CANCEL, false);
             });
             isComplete = true;
+            onFailure();
             return;
         }
 
@@ -182,6 +196,9 @@ public class BuildStructureTask implements Task {
                 float buildProgress = actualUnit.unit().getBuildProgress();
                 if (buildProgress > 0.99) {
                     isComplete = true;
+                    isSuccess = true;
+                    onComplete();
+                    return;
                 }
                 // Cancel if low HP.
                 float expectedHp = actualUnit.unit().getHealthMax().map(healthMax -> healthMax * buildProgress).orElse(1000f);
@@ -262,6 +279,16 @@ public class BuildStructureTask implements Task {
 
     @Override
     public Optional<TaskResult> getResult() {
+        if (isComplete) {
+            if (isSuccess) {
+                return Optional.of(ImmutableTaskResult.builder()
+                        .isSuccessful(true)
+                        .locationResult(location)
+                        .build());
+            } else {
+                return Optional.of(ImmutableTaskResult.of(false));
+            }
+        }
         return Optional.empty();
     }
 

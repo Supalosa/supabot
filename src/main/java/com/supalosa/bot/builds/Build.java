@@ -67,6 +67,30 @@ public class Build {
         // Generic stages go here.
 
         /**
+         * Triggers all reserve army to go into the attacking army.
+         * This can be called multiple times.
+         */
+        public Builder attack() {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .attack(true)
+                    .build());
+            return builder;
+        }
+
+        /**
+         * Triggers all reserve army to constantly go into the attacking army.
+         */
+        public Builder repeatAttack() {
+            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .attack(true)
+                    .repeat(true)
+                    .build());
+            return builder;
+        }
+
+        /**
          * Builds a structure with the appropriate worker type for the race, in the player's base regions only.
          */
         public Builder buildStructure(Abilities ability) {

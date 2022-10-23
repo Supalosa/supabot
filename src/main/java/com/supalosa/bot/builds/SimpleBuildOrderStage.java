@@ -28,6 +28,13 @@ public abstract class SimpleBuildOrderStage {
         return false;
     }
 
+    /**
+     * Triggers all reserve army to go into the attacking army.
+     * This can be called multiple times.
+     */
+    @Value.Default
+    public boolean attack() { return false; }
+
     @Value.Default
     public boolean repeat() {
         return false;
@@ -55,7 +62,7 @@ public abstract class SimpleBuildOrderStage {
                 (Constants.TERRAN_ADDON_TYPES.contains(addonType().get())),
                 "Only tech lab/reactor types are supported",
                 addonType());
-        Validate.isTrue(ability().isPresent() || gasMiners().isPresent(),
+        Validate.isTrue(ability().isPresent() || gasMiners().isPresent() || attack(),
                 "Order does not do anything.");
     }
 }

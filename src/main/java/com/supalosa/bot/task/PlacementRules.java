@@ -40,14 +40,14 @@ public interface PlacementRules {
     }
 
     static PlacementRules mainRampSupplyDepot1() {
-        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_SUPPLY_DEPOT_1).maxVariation(0).build();
+        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_SUPPLY_DEPOT_1).maxVariation(6).build();
     }
 
     static PlacementRules mainRampSupplyDepot2() {
-        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_SUPPLY_DEPOT_2).maxVariation(0).build();
+        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_SUPPLY_DEPOT_2).maxVariation(6).build();
     }
 
     static PlacementRules mainRampBarracksWithAddon() {
-        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_BARRACKS_WITH_ADDON).maxVariation(0).build();
+        return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_BARRACKS_WITH_ADDON).maxVariation(6).build();
     }
 }

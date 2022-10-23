@@ -23,10 +23,12 @@ public interface BuildOrder {
     void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage);
 
     /**
-     * Returns whether the build is complete and the build should be handed over to the default
+     * Returns whether the build is (successfully) complete and the build should be handed over to the default
      * build handler.
      */
     boolean isComplete();
+    
+    boolean isTimedOut();
 
     void onStep(ObservationInterface observationInterface, GameData data);
 

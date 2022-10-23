@@ -46,6 +46,7 @@ public class SupaBot extends S2Agent implements AgentData {
     private Multimap<Integer, Task> singletonTasksToDispatch = ArrayListMultimap.create();
 
     private final DebugTarget debugTarget;
+    private BehaviourTask behaviourTask;
 
     public SupaBot(boolean isDebug, DebugTarget debugTarget) {
         this.isDebug = isDebug;
@@ -79,9 +80,10 @@ public class SupaBot extends S2Agent implements AgentData {
 
         dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemyBase(), 1));
         dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
-        dispatchTaskOnce(1, new SimpleBuildOrderTask(
+        this.behaviourTask = new SimpleBuildOrderTask(
                 new ThreeRaxStimCombatConcussivePush(),
-                new BaseTerranTask()));
+                () -> new BaseTerranTask());
+        dispatchTaskOnce(1, behaviourTask);
     }
 
     @Override
@@ -106,6 +108,14 @@ public class SupaBot extends S2Agent implements AgentData {
             });
             suppliesReached.forEach(supplyTrigger -> singletonTasksToDispatch.removeAll(supplyTrigger));
             notDispatched.forEach((task, supplyTrigger) -> singletonTasksToDispatch.put(supplyTrigger, task));
+        }
+
+        if (behaviourTask.isComplete()) {
+            BehaviourTask nextBehaviourTask = behaviourTask.getNextBehaviourTask().get();
+            if (!taskManager.addTask(nextBehaviourTask, 1)) {
+                throw new IllegalStateException("Could not dispatch the next behaviour task.");
+            }
+            behaviourTask = nextBehaviourTask;
         }
 
         List<ChatReceived> chat = observation().getChatMessages();

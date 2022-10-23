@@ -19,7 +19,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public abstract class DefaultTaskWithUnits implements TaskWithUnits {
+public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithUnits {
 
     protected Map<UnitType, Integer> currentComposition = new HashMap<>();
     protected Set<Tag> armyUnits = new HashSet<>();

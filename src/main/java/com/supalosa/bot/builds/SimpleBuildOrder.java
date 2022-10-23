@@ -11,6 +11,7 @@ import com.supalosa.bot.GameData;
 import com.supalosa.bot.task.ImmutablePlacementRules;
 import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.utils.UnitFilter;
+import org.apache.commons.lang3.Validate;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,6 +29,7 @@ public class SimpleBuildOrder implements BuildOrder {
     private boolean expectedCountInitialised = false;
     private long stageStartedAt = 0L;
     private boolean isTimedOut = false;
+    private boolean isAttackPermitted = false;
 
     SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
         this.stages = stages;
@@ -35,6 +37,17 @@ public class SimpleBuildOrder implements BuildOrder {
         this.targetGasMiners = 0; //Integer.MAX_VALUE;
         this.currentStageNumber = 0;
         this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised
+        validateStages();
+    }
+
+    private void validateStages() {
+        boolean hasAttack = false;
+        for (SimpleBuildOrderStage stage : stages) {
+            if (stage.attack()) {
+                hasAttack = true;
+            }
+        }
+        Validate.isTrue(hasAttack, "A build order needs an attack(true) step.");
     }
 
     public int getCurrentStageNumber()  {
@@ -100,6 +113,9 @@ public class SimpleBuildOrder implements BuildOrder {
             if (currentStage.gasMiners().isPresent()) {
                 targetGasMiners = currentStage.gasMiners().get();
             }
+            if (currentStage.attack()) {
+                isAttackPermitted = currentStage.attack();
+            }
         }
     }
 
@@ -109,16 +125,21 @@ public class SimpleBuildOrder implements BuildOrder {
                 .eligibleUnitTypes(simpleBuildOrderStage.unitFilter())
                 .addonRequired(simpleBuildOrderStage.addonType())
                 .placementRules(simpleBuildOrderStage.placementRules())
+                .performAttack(isAttackPermitted ? Optional.of(isAttackPermitted) : Optional.empty())
                 .build();
     }
 
     @Override
     public boolean isComplete() {
-        if (isTimedOut || currentStageNumber >= stages.size()) {
+        if (currentStageNumber >= stages.size()) {
             return true;
         } else {
             return false;
         }
     }
 
+    @Override
+    public boolean isTimedOut() {
+        return isTimedOut;
+    }
 }

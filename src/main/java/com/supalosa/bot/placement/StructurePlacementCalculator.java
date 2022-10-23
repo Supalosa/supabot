@@ -442,17 +442,17 @@ public class StructurePlacementCalculator {
                 break;
             case MAIN_RAMP_SUPPLY_DEPOT_1:
                 suggestedLocation = getFirstSupplyDepotLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight))
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
                         .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
                 break;
             case MAIN_RAMP_SUPPLY_DEPOT_2:
                 suggestedLocation = getSecondSupplyDepotLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight))
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
                         .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
                 break;
             case MAIN_RAMP_BARRACKS_WITH_ADDON:
                 suggestedLocation = getFirstBarracksWithAddonLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight))
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
                         .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
                 break;
             default:
@@ -521,9 +521,15 @@ public class StructurePlacementCalculator {
     /**
      * Use for when we calculated a position ahead of time.
      */
-    private Optional<Point2d> checkSpecificPlacement(Point2d point, int structureWidth, int structureHeight) {
+    private Optional<Point2d> checkSpecificPlacement(Point2d point,
+                                                     int structureWidth,
+                                                     int structureHeight,
+                                                     Optional<PlacementRules> placementRules) {
         if (canPlaceAtIgnoringStaticGrid(point, structureWidth, structureHeight)) {
             return Optional.of(point);
+        } else if (placementRules.isPresent() && placementRules.get().maxVariation() > 0) {
+            // Place near the target point.
+            return findAnyPlacement(point, placementRules.get().maxVariation(), structureWidth, structureHeight);
         }
         return Optional.empty();
     }

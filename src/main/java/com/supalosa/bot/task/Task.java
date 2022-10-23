@@ -5,9 +5,11 @@ import com.supalosa.bot.AgentData;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskMessageResponse;
 import com.supalosa.bot.task.message.TaskPromise;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public interface Task {
 
@@ -19,7 +21,7 @@ public interface Task {
 
     /**
      * Returns the result of the task (success, fail etc).
-     * Generally not used or implemented yet.
+     * If the task is incomplete, should return an empty result.
      */
     Optional<TaskResult> getResult();
 
@@ -65,5 +67,19 @@ public interface Task {
      */
     default int reservedVespene() {
         return 0;
+    }
+
+    /**
+     * Runs a callback when this task is complete.
+     */
+    default Task onComplete(Consumer<TaskResult> callback) {
+        throw new NotImplementedException("This task does not support onComplete callbacks.");
+    }
+
+    /**
+     * Runs a callback when this task is complete.
+     */
+    default Task onFailure(Consumer<TaskResult> callback) {
+        throw new NotImplementedException("This task does not support onFailure callbacks.");
     }
 }
