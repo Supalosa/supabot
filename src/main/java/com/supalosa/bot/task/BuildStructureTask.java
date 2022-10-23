@@ -106,7 +106,8 @@ public class BuildStructureTask extends BaseTask {
                         assignedWorker = Optional.empty();
                         return;
                     }
-                    if (actionError.getActionResult() == ActionResult.CANT_FIND_PLACEMENT_LOCATION) {
+                    if (actionError.getActionResult() == ActionResult.CANT_FIND_PLACEMENT_LOCATION ||
+                            actionError.getActionResult() == ActionResult.CANT_BUILD_LOCATION_INVALID) {
                         location = Optional.empty();
                         return;
                     }

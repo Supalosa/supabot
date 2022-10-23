@@ -5,12 +5,14 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.task.PlacementRules;
+import com.supalosa.bot.task.Task;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.StringUtils;
 import org.immutables.value.Value;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Command from a {@code BuildOrder} to the driver.
@@ -32,6 +34,10 @@ public interface BuildOrderOutput {
 
     Optional<Boolean> performAttack();
 
+    Optional<Supplier<Task>> dispatchTask();
+
+    boolean repeat();
+
     /*
     Optional<Unit> unitToUse();
 
@@ -39,15 +45,15 @@ public interface BuildOrderOutput {
     */
     default String asHumanReadableString() {
         if (abilityToUse().isPresent()) {
-            return StringUtils.capitalize(abilityToUse().get().toString()
+            return (repeat() ? "*" : "") + StringUtils.capitalize(abilityToUse().get().toString()
                             .replace("BUILD_", "")
                             .replace("TRAIN_", "")
-                            .replace("_", "")
+                            .replace("_", " ")
                             .toLowerCase());
         }
         if (performAttack().isPresent()) {
             return performAttack().get() ? "Start Attack" : "Cancel Attack";
         }
-        return "Unknown(" + toString() + ")";
+        return (repeat() ? "*" : "") + "Unknown(" + toString() + ")";
     }
 }

@@ -1,10 +1,9 @@
-package com.supalosa.bot.task.terran;
+package com.supalosa.bot.task;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ActionInterface;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.action.Action;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
@@ -15,13 +14,12 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.GameData;
-import com.supalosa.bot.builds.Build;
 import com.supalosa.bot.builds.BuildOrderOutput;
 import com.supalosa.bot.builds.SimpleBuildOrder;
 import com.supalosa.bot.builds.SimpleBuildOrderStage;
-import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
+import com.supalosa.bot.task.terran.BuildUtils;
 import com.supalosa.bot.utils.UnitFilter;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 
@@ -80,6 +78,9 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                 if (output.performAttack().get() == true) {
                     data.fightManager().reinforceAttackingArmy();
                 }
+            }
+            if (output.dispatchTask().isPresent()) {
+                taskManager.addTask(output.dispatchTask().get().get(), 1);
             }
             if (output.abilityToUse().isEmpty()) {
                 simpleBuildOrder.onStageStarted(agent, data, output);
@@ -148,14 +149,19 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                                 simpleBuildOrder.onStageStarted(agent, data, thisStage);
                             })
                             .onFailure(result -> {
-                                this.isComplete = true;
-                                onFailure();
-                                System.out.println("Build task " + output.abilityToUse().get() + " failed, aborting build order.");
-                                expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
-                                announceFailure(agent.observation(), agent.actions());
+                                if (!output.repeat()) {
+                                    this.isComplete = true;
+                                    this.onFailure();
+                                    System.out.println("Build task " + output.abilityToUse().get() + " failed, aborting build order.");
+                                    expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
+                                    announceFailure(agent.observation(), agent.actions());
+                                }
                             })
                             .onComplete(result -> {
-                                expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
+                                if (!output.repeat()) {
+                                    // If not repeating, reduce parallel building of this structure.
+                                    expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
+                                }
                             });
                     orderDispatchedAt.put(output, gameLoop);
                 }
@@ -200,6 +206,8 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                 simpleBuildOrder.getCurrentStageNumber() + "/" + simpleBuildOrder.getTotalStages() + "/" + observationInterface.getGameLoop(),
                 ActionChat.Channel.BROADCAST);
         actionInterface.sendChat("tag:buildorder-current-" + outputsAsString, ActionChat.Channel.BROADCAST);
+        actionInterface.sendChat("tag:buildorder-minerals-" + observationInterface.getMinerals(), ActionChat.Channel.BROADCAST);
+        actionInterface.sendChat("tag:buildorder-supply-" + observationInterface.getFoodUsed() + "/" + observationInterface.getFoodCap(), ActionChat.Channel.BROADCAST);
         nextStage.ifPresent(next ->
                 actionInterface.sendChat("tag:buildorder-next-trigger-" + next.trigger().toString(), ActionChat.Channel.BROADCAST));
         System.out.println("Build order terminated at stage " + simpleBuildOrder.getCurrentStageNumber() + ": " + outputsAsString);

@@ -22,7 +22,7 @@ import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.terran.BaseTerranTask;
 import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
-import com.supalosa.bot.task.terran.SimpleBuildOrderTask;
+import com.supalosa.bot.task.SimpleBuildOrderTask;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;

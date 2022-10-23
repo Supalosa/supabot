@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.task.PlacementRules;
+import com.supalosa.bot.task.Task;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.Validate;
 import org.immutables.value.Value;
@@ -12,6 +13,7 @@ import org.immutables.value.Value;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 @Value.Immutable
 public abstract class SimpleBuildOrderStage {
@@ -54,6 +56,8 @@ public abstract class SimpleBuildOrderStage {
 
     public abstract Optional<Integer> gasMiners();
 
+    public abstract Optional<Supplier<Task>> dispatchTask();
+
     /**
      * Required because addons are tag-only.
      */
@@ -66,7 +70,24 @@ public abstract class SimpleBuildOrderStage {
                 (Constants.TERRAN_ADDON_TYPES.contains(addonType().get())),
                 "Only tech lab/reactor types are supported",
                 addonType());
-        Validate.isTrue(ability().isPresent() || gasMiners().isPresent() || attack().isPresent(),
+        Validate.isTrue(ability().isPresent() ||
+                        gasMiners().isPresent() ||
+                        attack().isPresent() ||
+                        dispatchTask().isPresent(),
                 "Order does not do anything.");
+    }
+
+    public BuildOrderOutput toBuildOrderOutput() {
+        // one might think that SimpleBuildOrderStage should just implement BuildOrderOutput...
+        return ImmutableBuildOrderOutput.builder()
+                .originatingHashCode(hashCode())
+                .abilityToUse(ability())
+                .eligibleUnitTypes(unitFilter())
+                .addonRequired(addonType())
+                .placementRules(placementRules())
+                .performAttack(attack())
+                .dispatchTask(dispatchTask())
+                .repeat(repeat())
+                .build();
     }
 }

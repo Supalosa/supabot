@@ -72,7 +72,7 @@ public class SimpleBuildOrder implements BuildOrder {
             });
         }
         long gameLoop = observationInterface.getGameLoop();
-        if (gameLoop > stageStartedAt + MAX_STAGE_TIME) {
+        if (gameLoop > stageStartedAt + MAX_STAGE_TIME || observationInterface.getMinerals() > 1000) {
             isTimedOut = true;
         }
     }
@@ -144,14 +144,7 @@ public class SimpleBuildOrder implements BuildOrder {
     }
 
     private BuildOrderOutput convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
-        return ImmutableBuildOrderOutput.builder()
-                .originatingHashCode(simpleBuildOrderStage.hashCode())
-                .abilityToUse(simpleBuildOrderStage.ability())
-                .eligibleUnitTypes(simpleBuildOrderStage.unitFilter())
-                .addonRequired(simpleBuildOrderStage.addonType())
-                .placementRules(simpleBuildOrderStage.placementRules())
-                .performAttack(simpleBuildOrderStage.attack())
-                .build();
+        return simpleBuildOrderStage.toBuildOrderOutput();
     }
 
     @Override

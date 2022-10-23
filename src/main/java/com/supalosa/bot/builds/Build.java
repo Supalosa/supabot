@@ -6,11 +6,14 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.task.PlacementRules;
+import com.supalosa.bot.task.Task;
+import com.supalosa.bot.task.terran.SwapAddonsTask;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;
+import java.util.function.Supplier;
 
 /**
  * Helper class to construct build order stages.
@@ -233,15 +236,13 @@ public class Build {
         }
 
         public Builder startRepeatingStructure(Abilities ability) {
-            throw new NotImplementedException("Repeating structure not supported yet (it causes infinite tasks to be created");
-            /*
             this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(builder.workerType))
                     .repeat(true)
                     .build());
-            return builder;*/
+            return builder;
         }
 
         public Builder startRepeatingUnitWithAddon(Set<UnitType> unitTypes, UnitType addonType, Abilities ability) {
@@ -261,6 +262,17 @@ public class Build {
 
         public Builder morphOrbital() {
             return trainUnit(Units.TERRAN_COMMAND_CENTER, Abilities.MORPH_ORBITAL_COMMAND);
+        }
+
+        public Builder swapAddonsBetween(UnitType structure1, UnitType structure2) {
+            return dispatchTask(() -> new SwapAddonsTask(structure1, structure2));
+        }
+
+        public Builder dispatchTask(Supplier<Task> task) {
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
+                    .trigger(this.condition)
+                    .dispatchTask(task)
+                    .build());
         }
     }
 
