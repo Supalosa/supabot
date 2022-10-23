@@ -313,6 +313,7 @@ public class MapAwarenessImpl implements MapAwareness {
                                     .alliance(Alliance.ENEMY)
                                     .inRangeOf(expansion.position().toPoint2d())
                                     .range(2.5f)
+                                    .includeIncomplete(true)
                                     .build());
                     if (units.size() > 0) {
                         knownEnemyBases.add(expansion.position().toPoint2d());
