@@ -47,4 +47,8 @@ public class AnalysisResults {
     public Optional<Tile> getTile(int x, int y) {
         return grid.isSet(x, y) ? Optional.of(grid.get(x, y)) : Optional.empty();
     }
+
+    public Optional<Tile> getTile(Point2d point) {
+        return this.getTile((int)point.getX(), (int)point.getY());
+    }
 }

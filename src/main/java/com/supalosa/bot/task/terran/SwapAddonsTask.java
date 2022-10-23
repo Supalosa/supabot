@@ -101,12 +101,20 @@ public class SwapAddonsTask extends BaseTask {
                 return;
             }*/
             if (!(structure1.get().unit().getFlying().orElse(false))) {
-                agent.actions().unitCommand(structure1.get().unit(), Abilities.LIFT, false);
+                if (structure1.get().unit().getOrders().isEmpty()) {
+                    agent.actions().unitCommand(structure1.get().unit(), Abilities.LIFT, false);
+                } else {
+                    agent.actions().unitCommand(structure1.get().unit(), Abilities.CANCEL_LAST, false);
+                }
             } else {
                 agent.actions().unitCommand(structure1.get().unit(), Abilities.MOVE, initialPosition2.get(), false);
             }
             if (!(structure2.get().unit().getFlying().orElse(false))) {
-                agent.actions().unitCommand(structure2.get().unit(), Abilities.LIFT, false);
+                if (structure2.get().unit().getOrders().isEmpty()) {
+                    agent.actions().unitCommand(structure2.get().unit(), Abilities.LIFT, false);
+                } else {
+                    agent.actions().unitCommand(structure2.get().unit(), Abilities.CANCEL_LAST, false);
+                }
             } else {
                 agent.actions().unitCommand(structure2.get().unit(), Abilities.MOVE, initialPosition1.get(), false);
             }

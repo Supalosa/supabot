@@ -17,6 +17,7 @@ import com.supalosa.bot.GameData;
 import com.supalosa.bot.builds.BuildOrderOutput;
 import com.supalosa.bot.builds.SimpleBuildOrder;
 import com.supalosa.bot.builds.SimpleBuildOrderStage;
+import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.task.terran.BuildUtils;

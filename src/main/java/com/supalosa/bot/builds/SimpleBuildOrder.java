@@ -2,17 +2,11 @@ package com.supalosa.bot.builds;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
-import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
-import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.GameData;
-import com.supalosa.bot.task.ImmutablePlacementRules;
-import com.supalosa.bot.task.PlacementRules;
-import com.supalosa.bot.utils.UnitFilter;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;

@@ -1,18 +1,15 @@
 package com.supalosa.bot.builds;
 
-import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.supalosa.bot.Constants;
-import com.supalosa.bot.task.PlacementRules;
+import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.Validate;
 import org.immutables.value.Value;
 
-import java.time.Duration;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 @Value.Immutable

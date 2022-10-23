@@ -2,7 +2,7 @@ package com.supalosa.bot.builds;
 
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
-import com.supalosa.bot.task.PlacementRules;
+import com.supalosa.bot.placement.PlacementRules;
 
 import java.util.Set;
 
@@ -38,19 +38,19 @@ public class ThreeRaxStimCombatConcussivePush extends SimpleBuildOrder {
                 .atSupply(29).morphOrbital()
                 .atSupply(32).useAbility(BARRACKS, Abilities.BUILD_TECHLAB_BARRACKS)
                 .then().useAbility(BARRACKS, Abilities.BUILD_TECHLAB_BARRACKS)
-                .atSupply(33).buildSupplyDepot()
+                .atSupply(33).buildSupplyDepot().at(PlacementRules.borderOfBase())
                 .atSupply(37).useAbility(BARRACKS_TECHLAB, Abilities.RESEARCH_STIMPACK)
                 .then().useAbility(BARRACKS_TECHLAB, Abilities.RESEARCH_CONCUSSIVE_SHELLS)
-                .atSupply(41).buildSupplyDepot()
+                .atSupply(41).buildSupplyDepot().at(PlacementRules.borderOfBase())
                 .then().buildStructure(Abilities.BUILD_REFINERY)
                 .atSupply(43).startRepeatingUnitWithAddon(BARRACKS, BARRACKS_TECHLAB, Abilities.TRAIN_MARAUDER)
                 .atSupply(43).startRepeatingUnitWithAddon(BARRACKS, BARRACKS_TECHLAB, Abilities.TRAIN_MARAUDER)
-                .atSupply(49).buildStructure(Abilities.BUILD_ENGINEERING_BAY)
-                .atSupply(51).buildSupplyDepot()
-                .then().startRepeatingStructure(Abilities.BUILD_SUPPLY_DEPOT)
-                .then().startRepeatingStructure(Abilities.BUILD_SUPPLY_DEPOT)
+                .atSupply(49).buildStructure(Abilities.BUILD_ENGINEERING_BAY).at(PlacementRules.borderOfBase())
+                .atSupply(51).buildSupplyDepot().at(PlacementRules.borderOfBase())
+                .then().startRepeatingStructure(Abilities.BUILD_SUPPLY_DEPOT).at(PlacementRules.borderOfBase())
+                .then().startRepeatingStructure(Abilities.BUILD_SUPPLY_DEPOT).at(PlacementRules.borderOfBase())
                 .atSupply(53).useAbility(BARRACKS_TECHLAB, Abilities.RESEARCH_COMBAT_SHIELD)
-                .then().attack()
+                .after(10).of(Units.TERRAN_MARINE).attack()
                 .then().buildStructure(Abilities.BUILD_FACTORY)
                 .then().buildStructure(Abilities.BUILD_MISSILE_TURRET)
                 .then().useAbility(EBAY, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1)
@@ -70,12 +70,16 @@ public class ThreeRaxStimCombatConcussivePush extends SimpleBuildOrder {
                 .then().buildStructure(Abilities.BUILD_BARRACKS)
                 .then().attack()
                 .then().useAbility(BARRACKS, Abilities.BUILD_REACTOR_BARRACKS)
+                .then().useAbility(FACTORY, Abilities.BUILD_REACTOR_FACTORY)
                 .then().startRepeatingUnit(BARRACKS, Abilities.TRAIN_MARINE)
                 .then().startRepeatingUnit(BARRACKS, Abilities.TRAIN_MARINE)
                 .then().useAbility(BARRACKS, Abilities.BUILD_TECHLAB_BARRACKS)
                 .then().startRepeatingUnitWithAddon(BARRACKS, BARRACKS_TECHLAB, Abilities.TRAIN_MARAUDER)
+                .then().startRepeatingUnit(FACTORY, Abilities.TRAIN_WIDOWMINE)
+                .then().startRepeatingUnit(FACTORY, Abilities.TRAIN_WIDOWMINE)
                 .then().morphOrbital()
                 .then().attack()
+                .then().expand()
                 .build());
     }
 }

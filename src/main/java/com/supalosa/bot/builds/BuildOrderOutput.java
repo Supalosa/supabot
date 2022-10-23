@@ -2,16 +2,13 @@ package com.supalosa.bot.builds;
 
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
-import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.task.PlacementRules;
+import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.StringUtils;
 import org.immutables.value.Value;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 /**

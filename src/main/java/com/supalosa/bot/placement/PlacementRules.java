@@ -1,4 +1,4 @@
-package com.supalosa.bot.task;
+package com.supalosa.bot.placement;
 
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import org.immutables.value.Value;
@@ -11,7 +11,11 @@ public interface PlacementRules {
         /**
          * Place it in any player owned region.
          */
-        ANY_PLAYER_BASE,
+        PLAYER_BASE_ANY,
+        /**
+         * Place it on the border of the player base.
+         */
+        PLAYER_BASE_BORDER,
         /**
          * Place it on an expansion only.
          */
@@ -40,12 +44,16 @@ public interface PlacementRules {
         return ImmutablePlacementRules.builder().regionType(Region.EXPANSION).maxVariation(0).build();
     }
 
-    static PlacementRules inBase() {
-        return ImmutablePlacementRules.builder().regionType(Region.ANY_PLAYER_BASE).maxVariation(20).build();
+    static PlacementRules anyPlayerBase() {
+        return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_ANY).maxVariation(20).build();
+    }
+
+    static PlacementRules borderOfBase() {
+        return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_BORDER).maxVariation(20).build();
     }
 
     static PlacementRules inBaseNear(UnitType unitType) {
-        return ImmutablePlacementRules.builder().regionType(Region.ANY_PLAYER_BASE).near(unitType).maxVariation(10).build();
+        return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_ANY).near(unitType).maxVariation(10).build();
     }
 
     static PlacementRules mainRampSupplyDepot1() {

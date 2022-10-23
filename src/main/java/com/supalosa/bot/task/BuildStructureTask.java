@@ -3,7 +3,6 @@ package com.supalosa.bot.task;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
-import com.github.ocraft.s2client.protocol.action.ActionError;
 import com.github.ocraft.s2client.protocol.action.ActionResult;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
@@ -16,6 +15,7 @@ import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -228,7 +228,7 @@ public class BuildStructureTask extends BaseTask {
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
         // This should probably be a preidcate associated to the PlacementRules it itself.
         boolean nearBaseOnly = placementRules
-                .map(rule -> rule.regionType().equals(PlacementRules.Region.ANY_PLAYER_BASE))
+                .map(rule -> rule.regionType().equals(PlacementRules.Region.PLAYER_BASE_ANY))
                 .orElse(false);
         if (location.isPresent()) {
             // If location is known, find closest unit to that location.
@@ -293,7 +293,6 @@ public class BuildStructureTask extends BaseTask {
         return location.or(() -> data.structurePlacementCalculator().flatMap(spc -> spc.suggestLocationForFreePlacement(
                 data,
                 worker.unit().getPosition().toPoint2d(),
-                20,
                 ability,
                 targetUnitType,
                 placementRules)));

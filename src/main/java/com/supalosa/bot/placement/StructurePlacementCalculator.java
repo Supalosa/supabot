@@ -16,18 +16,16 @@ import com.supalosa.bot.Expansion;
 import com.supalosa.bot.GameData;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Ramp;
+import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.Tile;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
+import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
-import com.supalosa.bot.task.PlacementRules;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -419,40 +417,39 @@ public class StructurePlacementCalculator {
     // does NOT query for placement but will never suggest something that overlaps with a reserved tile.
     public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
                                                              Point2d origin,
-                                                             int searchRadius,
                                                              int structureWidth,
                                                              int structureHeight,
                                                              Optional<PlacementRules> placementRules) {
-        int actualSearchRadius = placementRules.map(PlacementRules::maxVariation).orElse(searchRadius);
         PlacementRules.Region region = placementRules
                 .map(PlacementRules::regionType)
-                .orElse(PlacementRules.Region.ANY_PLAYER_BASE);
+                .orElse(PlacementRules.Region.PLAYER_BASE_ANY);
         Optional<UnitType> unitTypeNearFilter = placementRules.flatMap(PlacementRules::near);
         final Point2d searchOrigin = unitTypeNearFilter.flatMap(type -> findMyStructureOfType(type)).orElse(origin);
         // Reserve the location after we suggest it. It will be wiped clear in the next structure grid update if
         // it doesn't actually get used.
         Optional<Point2d> suggestedLocation = Optional.empty();
         switch (region) {
-            case ANY_PLAYER_BASE:
-                suggestedLocation = findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight);
+            case PLAYER_BASE_ANY:
+            case PLAYER_BASE_BORDER:
+                suggestedLocation = findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data);
                 break;
             case EXPANSION:
                 suggestedLocation = findExpansionPlacement(searchOrigin, structureWidth, structureHeight, data);
                 break;
             case MAIN_RAMP_SUPPLY_DEPOT_1:
                 suggestedLocation = getFirstSupplyDepotLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
-                        .orElseGet(() -> findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight));
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
                 break;
             case MAIN_RAMP_SUPPLY_DEPOT_2:
                 suggestedLocation = getSecondSupplyDepotLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
-                        .orElseGet(() -> findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight));
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
                 break;
             case MAIN_RAMP_BARRACKS_WITH_ADDON:
                 suggestedLocation = getFirstBarracksWithAddonLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
-                        .orElseGet(() -> findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight));
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported placement region logic: " + region);
@@ -476,13 +473,81 @@ public class StructurePlacementCalculator {
 
     private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
     private static final int MAX_ADJACENT_PLACEMENT_ITERATIONS = 10;
+    private static final int DEFAULT_MAX_PLACEMENT_VARIATION = 20;
 
-    private Optional<Point2d> findAnyPlacement(Point2d origin, int actualSearchRadius, int structureWidth, int structureHeight) {
+    private Optional<Point2d> findAnyPlacementNearBase(Point2d origin,
+                                                       Optional<PlacementRules> placementRules,
+                                                       int structureWidth,
+                                                       int structureHeight,
+                                                       AgentData data) {
+        int actualSearchRadius = placementRules.map(PlacementRules::maxVariation).orElse(DEFAULT_MAX_PLACEMENT_VARIATION);
         List<Point2d> nearbyStructures = myStructures.stream()
                 .map(myStructure -> myStructure.getPosition().toPoint2d())
                 .filter(myStructurePoint2d -> {
             return myStructurePoint2d.distance(origin) < actualSearchRadius;
         }).collect(Collectors.toList());
+        PlacementRules.Region placementRegion = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.PLAYER_BASE_ANY);
+        if (placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER) {
+            // Repeatedly test until we find a position at the minimum distance from the border of the region.
+            Optional<Region> maybeRegion = data.mapAwareness().getRegionDataForPoint(origin).map(RegionData::region);
+            if (maybeRegion.isEmpty()) {
+                return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
+                        nearbyStructures);
+            } else {
+                Region region = maybeRegion.get();
+                Pair<Point2d, Point2d> bounds = region.regionBounds();
+                Point2d bottomLeftBound = bounds.getLeft();
+                Point2d topRightBound = bounds.getRight();
+                int minDistanceFromBorder = Integer.MAX_VALUE;
+                Optional<Point2d> minDistanceCandidate = Optional.empty();
+                // Start at the middle of the region and start walking towards the border.
+                final Point2d startPoint = region.centrePoint();
+                Point2d testPoint = startPoint;
+                for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
+                    Point2d thisPoint = testPoint;
+                    Optional<Tile> thisTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(thisPoint));
+                    if (thisTile.isEmpty()) {
+                        testPoint = startPoint;
+                        continue;
+                    }
+                    if (canPlaceAt(testPoint, structureWidth, structureWidth)) {
+                        int distance = thisTile.get().distanceToBorder;
+                        if (distance < minDistanceFromBorder) {
+                            minDistanceFromBorder = distance;
+                            minDistanceCandidate = Optional.of(thisPoint);
+                        }
+                    }
+                    // Walk randomly towards a point with lower height.
+                    List<Point2d> candidates = new ArrayList<>();
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        for (int dy = -1; dy <= 1; ++dy) {
+                            Point2d maybePoint = testPoint.add(dx, dy);
+                            if (region.getTiles().contains(maybePoint)) {
+                                Optional<Tile> nextTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(maybePoint));
+                                nextTile.ifPresent(tile -> {
+                                    if (tile.distanceToBorder < thisTile.get().distanceToBorder) {
+                                        candidates.add(maybePoint);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    if (candidates.isEmpty()) {
+                        testPoint = startPoint;
+                    } else {
+                        testPoint = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+                    }
+                }
+                return minDistanceCandidate;
+            }
+        } else {
+            return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
+                    nearbyStructures);
+        }
+    }
+
+    private Optional<Point2d> findAnyPlacement(Point2d origin, int structureWidth, int structureHeight,
+                                                       int actualSearchRadius, List<Point2d> nearbyStructures) {
         for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
             // prefer to place next to an existing structure.
             Point2d candidate;
@@ -490,16 +555,16 @@ public class StructurePlacementCalculator {
                 if (ThreadLocalRandom.current().nextBoolean()) {
                     // up-down
                     candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
-                            .add(0, (structureHeight) * getRandomSign());
+                            .add(0, structureHeight * getRandomSign());
                 } else {
                     // left-right
                     candidate = nearbyStructures.get(getRandomInteger(0, nearbyStructures.size()))
-                            .add((structureWidth) * getRandomSign(), 0);
+                            .add(structureWidth * getRandomSign(), 0);
                 }
             } else {
                 // Initially we will search closer to the querying worker. The longer we search, the more willing we
                 // are to place something far away.
-                int testedRadius = (int)Math.max(1, actualSearchRadius * Math.min(1f, (float)i / (float)MAX_FREE_PLACEMENT_ITERATIONS));
+                int testedRadius = (int) Math.max(1, actualSearchRadius * Math.min(1f, (float) i / (float) MAX_FREE_PLACEMENT_ITERATIONS));
                 candidate = origin.add(
                         Point2d.of(
                                 getRandomInteger(-testedRadius, testedRadius),
@@ -532,19 +597,19 @@ public class StructurePlacementCalculator {
     private Optional<Point2d> checkSpecificPlacement(Point2d point,
                                                      int structureWidth,
                                                      int structureHeight,
-                                                     Optional<PlacementRules> placementRules) {
+                                                     Optional<PlacementRules> placementRules,
+                                                     AgentData data) {
         if (canPlaceAtIgnoringStaticGrid(point, structureWidth, structureHeight)) {
             return Optional.of(point);
         } else if (placementRules.isPresent() && placementRules.get().maxVariation() > 0) {
             // Place near the target point.
-            return findAnyPlacement(point, placementRules.get().maxVariation(), structureWidth, structureHeight);
+            return findAnyPlacementNearBase(point, placementRules, structureWidth, structureHeight, data);
         }
         return Optional.empty();
     }
 
     public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
                                                              Point2d position,
-                                                             int searchRadius,
                                                              Ability ability,
                                                              UnitType unitType,
                                                              Optional<PlacementRules> placementRules) {
@@ -558,7 +623,7 @@ public class StructurePlacementCalculator {
                 unitType);
         Point2d outputOffset = modifiedFootprint.getLeft();
         Point2d newFootprint = modifiedFootprint.getRight();
-        return suggestLocationForFreePlacement(data, position, searchRadius,
+        return suggestLocationForFreePlacement(data, position,
                 (int)newFootprint.getX(),
                 (int)newFootprint.getY(),
                 placementRules).map(outputPosition ->
