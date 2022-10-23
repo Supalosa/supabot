@@ -1,6 +1,9 @@
 package com.supalosa.bot.task;
 
+import com.github.ocraft.s2client.protocol.data.UnitType;
 import org.immutables.value.Value;
+
+import java.util.Optional;
 
 @Value.Immutable
 public interface PlacementRules {
@@ -31,12 +34,18 @@ public interface PlacementRules {
 
     int maxVariation();
 
+    Optional<UnitType> near();
+
     static PlacementRules expansion() {
         return ImmutablePlacementRules.builder().regionType(Region.EXPANSION).maxVariation(0).build();
     }
 
     static PlacementRules inBase() {
         return ImmutablePlacementRules.builder().regionType(Region.ANY_PLAYER_BASE).maxVariation(20).build();
+    }
+
+    static PlacementRules inBaseNear(UnitType unitType) {
+        return ImmutablePlacementRules.builder().regionType(Region.ANY_PLAYER_BASE).near(unitType).maxVariation(10).build();
     }
 
     static PlacementRules mainRampSupplyDepot1() {

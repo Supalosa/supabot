@@ -9,6 +9,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
@@ -48,7 +49,7 @@ public class StructurePlacementCalculator {
     private Optional<Optional<Point2d>> secondSupplyDepotLocation = Optional.empty();
     private Optional<Optional<Point2d>> barracksWithAddonLocation = Optional.empty();
 
-    private List<Point2d> myStructures = new ArrayList<>();
+    private List<Unit> myStructures = new ArrayList<>();
     private long myStructuresUpdatedAt = 0L;
 
     // Grid of tiles available for free placement (i.e. not reserved tiles).
@@ -426,30 +427,32 @@ public class StructurePlacementCalculator {
         PlacementRules.Region region = placementRules
                 .map(PlacementRules::regionType)
                 .orElse(PlacementRules.Region.ANY_PLAYER_BASE);
+        Optional<UnitType> unitTypeNearFilter = placementRules.flatMap(PlacementRules::near);
+        final Point2d searchOrigin = unitTypeNearFilter.flatMap(type -> findMyStructureOfType(type)).orElse(origin);
         // Reserve the location after we suggest it. It will be wiped clear in the next structure grid update if
         // it doesn't actually get used.
         Optional<Point2d> suggestedLocation = Optional.empty();
         switch (region) {
             case ANY_PLAYER_BASE:
-                suggestedLocation = findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight);
+                suggestedLocation = findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight);
                 break;
             case EXPANSION:
-                suggestedLocation = findExpansionPlacement(origin, structureWidth, structureHeight, data);
+                suggestedLocation = findExpansionPlacement(searchOrigin, structureWidth, structureHeight, data);
                 break;
             case MAIN_RAMP_SUPPLY_DEPOT_1:
                 suggestedLocation = getFirstSupplyDepotLocation()
                         .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
-                        .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
+                        .orElseGet(() -> findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight));
                 break;
             case MAIN_RAMP_SUPPLY_DEPOT_2:
                 suggestedLocation = getSecondSupplyDepotLocation()
                         .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
-                        .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
+                        .orElseGet(() -> findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight));
                 break;
             case MAIN_RAMP_BARRACKS_WITH_ADDON:
                 suggestedLocation = getFirstBarracksWithAddonLocation()
                         .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules))
-                        .orElseGet(() -> findAnyPlacement(origin, actualSearchRadius, structureWidth, structureHeight));
+                        .orElseGet(() -> findAnyPlacement(searchOrigin, actualSearchRadius, structureWidth, structureHeight));
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported placement region logic: " + region);
@@ -464,11 +467,20 @@ public class StructurePlacementCalculator {
         return suggestedLocation;
     }
 
+    private Optional<Point2d> findMyStructureOfType(UnitType type) {
+        return myStructures.stream().filter(unit -> unit.getType().equals(type))
+                .findFirst()
+                .map(Unit::getPosition)
+                .map(Point::toPoint2d);
+    }
+
     private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
     private static final int MAX_ADJACENT_PLACEMENT_ITERATIONS = 10;
 
     private Optional<Point2d> findAnyPlacement(Point2d origin, int actualSearchRadius, int structureWidth, int structureHeight) {
-        List<Point2d> nearbyStructures = myStructures.stream().filter(myStructurePoint2d -> {
+        List<Point2d> nearbyStructures = myStructures.stream()
+                .map(myStructure -> myStructure.getPosition().toPoint2d())
+                .filter(myStructurePoint2d -> {
             return myStructurePoint2d.distance(origin) < actualSearchRadius;
         }).collect(Collectors.toList());
         for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
@@ -624,7 +636,7 @@ public class StructurePlacementCalculator {
                 return maybeUnitTypeData.map(unitType ->
                     unitType.getAttributes().contains(UnitAttribute.STRUCTURE)
                 ).orElse(false);
-            }).stream().map(unitInPool -> unitInPool.unit().getPosition().toPoint2d()).collect(Collectors.toList());
+            }).stream().map(unitInPool -> unitInPool.unit()).collect(Collectors.toList());
 
             // Look at structures being placed but not existing yet.
             agent.observation().getUnits(unitInPool -> unitInPool.unit().getOrders().size() > 0).forEach(unitWithOrder -> {

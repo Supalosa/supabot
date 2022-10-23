@@ -84,6 +84,15 @@ public class Build {
             return this;
         }
 
+        public Builder near(UnitType unitType) {
+            Validate.isTrue(stages.size() > 0);
+            stages.set(stages.size() - 1, ImmutableSimpleBuildOrderStage.builder()
+                    .from(stages.get(stages.size() - 1))
+                    .placementRules(PlacementRules.inBaseNear(unitType))
+                    .build());
+            return this;
+        }
+
         private Builder addStage(SimpleBuildOrderStage stage) {
             this.stages.add(stage);
             if (stage.ability().isPresent()) {
