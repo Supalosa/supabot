@@ -236,19 +236,15 @@ public class StructurePlacementCalculator {
         // TODO: check the shape of the top of the ramp complies with the standard.
         Point2d northTile = getNorthmostTile(ramp.getTopOfRampTiles());
         Point2d southTile = getSouthmostTile(ramp.getTopOfRampTiles());
-        // West-facing ramps
+        // West-facing ramps need to be shifted to fit the addon. Unfortunately it leaves a gap in the wall.
         switch (ramp.getRampDirection()) {
             case SOUTH_EAST:
-                // This is ideal because there is always space for the addon.
                 return Optional.of(northTile.add(0, -3));
             case SOUTH_WEST:
-                // We shift this one over to create space for the addon. Unfortunately it leaves a gap in the wall.
                 return Optional.of(northTile.add(-2, -3));
             case NORTH_EAST:
-                // This is ideal because there is always space for the addon.
                 return Optional.of(southTile.add(0, 3));
             case NORTH_WEST:
-                // We shift this one over to create space for the addon. Unfortunately it leaves a gap in the wall.
                 return Optional.of(southTile.add(-2, 3));
         }
         return Optional.empty();
@@ -570,8 +566,8 @@ public class StructurePlacementCalculator {
         int y = (int)origin.getY();
         int xStart = (int)Math.ceil(x - width / 2);
         int yStart = (int)Math.ceil(y - height / 2);
-        for (int xx = xStart; xx <= xStart + width; ++xx) {
-            for (int yy = yStart; yy <= yStart + height; ++yy) {
+        for (int xx = xStart; xx < xStart + width; ++xx) {
+            for (int yy = yStart; yy < yStart + height; ++yy) {
                 if (checkStatic && staticFreePlacementGrid.get(xx, yy) == false) {
                     return false;
                 }

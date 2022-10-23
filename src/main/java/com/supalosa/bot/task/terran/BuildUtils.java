@@ -7,16 +7,15 @@ import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
+import com.supalosa.bot.GameData;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
@@ -173,5 +172,62 @@ public class BuildUtils {
                 }
             });
         });
+    }
+
+    public static void rebalanceWorkers(S2Agent agent) {
+        // rebalance workers
+        Map<Tag, Integer> ccToWorkerCount = new HashMap<>();
+        int totalWorkers = agent.observation().getFoodWorkers();
+        int ccCount = agent.observation().getUnits(UnitFilter.mine(Constants.ALL_TOWN_HALL_TYPES)).size();
+        if (ccCount > 0) {
+            int averageWorkers = totalWorkers / ccCount;
+            Set<Unit> givers = new HashSet<>();
+            Map<Unit, Integer> takers = new HashMap<>();
+            agent.observation().getUnits(Alliance.SELF,
+                    unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(ccInPool -> {
+                ccInPool.getUnit().ifPresent(cc -> {
+                    if (cc.getBuildProgress() < 0.9) {
+                        return;
+                    }
+                    cc.getAssignedHarvesters().ifPresent(assigned -> {
+                        ccToWorkerCount.put(cc.getTag(), assigned);
+                        if (assigned > averageWorkers + 4 || (cc.getIdealHarvesters().isPresent() && assigned > cc.getIdealHarvesters().get() + 4)) {
+                            givers.add(cc);
+                        } else if (cc.getIdealHarvesters().isPresent() && assigned < cc.getIdealHarvesters().get()) {
+                            takers.put(cc, cc.getIdealHarvesters().get() - assigned);
+                        }
+                    });
+                });
+            });
+            if (givers.size() > 0 && takers.size() > 0) {
+                Queue<Tag> donatedWorkers = new LinkedList<>();
+                agent.observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_SCV)).forEach(scvInPool -> {
+                    scvInPool.getUnit().ifPresent(scv -> {
+                        givers.forEach(giver -> {
+                            if (scv.getPosition().distance(giver.getPosition()) < 10) {
+                                if (donatedWorkers.size() < averageWorkers) {
+                                    donatedWorkers.add(scv.getTag());
+                                }
+                            }
+                        });
+                    });
+                });
+                takers.entrySet().forEach(taker -> {
+                    Unit takerCc = taker.getKey();
+                    int takerAmount = taker.getValue();
+                    Optional<Unit> nearestMineralPatch = Utils.findNearestMineralPatch(agent.observation(), takerCc.getPosition().toPoint2d());
+                    if (donatedWorkers.size() > 0) {
+                        while (!donatedWorkers.isEmpty() && takerAmount > 0) {
+                            --takerAmount;
+                            Tag takenWorker = donatedWorkers.poll();
+                            // Move to the patch, or the CC itself if patch is missing.
+                            nearestMineralPatch.ifPresentOrElse(patch ->
+                                            agent.actions().unitCommand(takenWorker, Abilities.SMART, patch, false),
+                                    () -> agent.actions().unitCommand(takenWorker, Abilities.SMART, takerCc, false));
+                        }
+                    }
+                });
+            }
+        }
     }
 }

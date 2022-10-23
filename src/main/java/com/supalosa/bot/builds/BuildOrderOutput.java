@@ -18,6 +18,11 @@ import java.util.Set;
 @Value.Immutable
 public interface BuildOrderOutput {
 
+    /**
+     * The originating hash code of the output. Used to deduplicate tasks that are identical.
+     */
+    int originatingHashCode();
+
     Optional<Ability> abilityToUse();
 
     Optional<UnitFilter> eligibleUnitTypes();
@@ -33,15 +38,15 @@ public interface BuildOrderOutput {
     Optional<Unit> unitToTarget();
     */
     default String asHumanReadableString() {
-        if (performAttack().isPresent()) {
-            return performAttack().get() ? "Start Attack" : "Cancel Attack";
-        }
         if (abilityToUse().isPresent()) {
             return StringUtils.capitalize(abilityToUse().get().toString()
                             .replace("BUILD_", "")
                             .replace("TRAIN_", "")
                             .replace("_", "")
                             .toLowerCase());
+        }
+        if (performAttack().isPresent()) {
+            return performAttack().get() ? "Start Attack" : "Cancel Attack";
         }
         return "Unknown(" + toString() + ")";
     }

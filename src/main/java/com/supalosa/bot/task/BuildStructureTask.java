@@ -12,6 +12,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.awareness.RegionData;
@@ -28,7 +29,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class BuildStructureTask extends BaseTask {
 
     private static final long BUILD_ATTEMPT_INTERVAL = 22;
-    private static final long MAX_BUILD_ATTEMPTS = 10;
+    private static final long MAX_BUILD_ATTEMPTS = 15;
 
     private final Ability ability;
     private final Optional<Integer> minimumMinerals;
@@ -42,6 +43,9 @@ public class BuildStructureTask extends BaseTask {
     private int numWorkersUsed = 0;
 
     private Optional<Tag> matchingUnitAtLocation = Optional.empty();
+    // The tag of the `matchingUnitAtLocation` that we dispatched through `onStarted`. This is tracked so
+    // that if the construction is started again, we know to dispatch the event again.
+    private Optional<Tag> dispatchedMatchingUnitAtLocation = Optional.empty();
     private Optional<Tag> assignedWorker = Optional.empty();
 
     private final String taskKey;
@@ -96,7 +100,7 @@ public class BuildStructureTask extends BaseTask {
             }
         } else {
             agent.observation().getActionErrors().stream().forEach(actionError -> {
-                if (actionError.getUnitTag().equals(assignedWorker)) {
+                if (assignedWorker.isPresent() && actionError.getUnitTag().equals(assignedWorker)) {
                     System.out.println("Assigned builder had an action error: " + actionError.getActionResult());
                     if (actionError.getActionResult() == ActionResult.COULDNT_REACH_TARGET) {
                         assignedWorker = Optional.empty();
@@ -127,10 +131,20 @@ public class BuildStructureTask extends BaseTask {
                 assignedWorker = Optional.empty();
             }
         }
+        if (worker.isPresent() && location.isEmpty()) {
+            location = resolveLocation(worker.get(), data);
+        }
         if (matchingUnitAtLocation.isEmpty()) {
-            final Optional<Point2d> locationToSearch = location.isPresent() ?
-                    location :
-                    worker.map(w -> w.unit().getPosition().toPoint2d());
+            Optional<UnitInPool> finalWorker = worker;
+            // Look in multiple places for a building under construction.
+            // 1. The targeted unit (e.g. refinery on a geyser).
+            final Optional<Point2d> locationToSearch = specificTarget.map(unit -> unit.getPosition().toPoint2d())
+                    // 2. If the worker is building something, where it is building it.
+                    .or(() -> finalWorker.flatMap(this::getWorkerOrderTargetedWorldSpace))
+                    // 3. If a location was specified for construction, that position.
+                    .or(() -> location)
+                    // 4. Finally, the worker's location.
+                    .or(() -> finalWorker.map(w -> w.unit().getPosition().toPoint2d()));
             // Find any matching units within 1.5 range of target location
             List<UnitInPool> matchingUnits = agent.observation().getUnits(unitInPool ->
                     unitInPool.getUnit().filter(unit -> unit.getAlliance() == Alliance.SELF &&
@@ -145,23 +159,9 @@ public class BuildStructureTask extends BaseTask {
             matchingUnitAtLocation = matchingUnitAtLocation.filter(tag -> agent.observation().getUnit(tag) != null);
         }
 
-        List<ActionError> actionErrors = agent.observation().getActionErrors();
-        if (buildAttempts > MAX_BUILD_ATTEMPTS || actionErrors.stream().anyMatch(actionError -> {
-            if (actionError.getUnitTag().equals(assignedWorker) &&
-                    actionError.getActionResult() != ActionResult.NOT_ENOUGH_MINERALS &&
-                    actionError.getActionResult() != ActionResult.NOT_ENOUGH_VESPENE &&
-                    actionError.getActionResult() != ActionResult.COULDNT_REACH_TARGET) {
-                System.out.println("Relevant action error: " + actionError.getActionResult());
-                return true;
-            }
-            if (actionError.getUnitTag().equals(assignedWorker) || actionError.getAbility().equals(Optional.of(ability))) {
-                System.out.println("Action error: " + actionError.getActionResult());
-            }
-            System.out.println("General Action error: " + actionError.getActionResult());
-            return false;
-        })) {
+        if (buildAttempts > MAX_BUILD_ATTEMPTS) {
             agent.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
-            System.out.println("BuildTask " + targetUnitType + " failed");
+            System.out.println("Build task of " + targetUnitType + " failed");
             // Cancel the construction if applicable.
             matchingUnitAtLocation.ifPresent(tag -> {
                 agent.actions().unitCommand(tag, Abilities.CANCEL, false);
@@ -170,29 +170,40 @@ public class BuildStructureTask extends BaseTask {
             onFailure();
             return;
         }
-
         if (worker.isPresent() &&
                 !matchingUnitAtLocation.isPresent() &&
                 minimumMinerals.map(minimum -> agent.observation().getMinerals() >= minimum).orElse(true) &&
                 minimumVespene.map(minimum -> agent.observation().getVespene() >= minimum).orElse(true) &&
                 !isWorkerOrderQueued(worker.get())) {
             if (gameLoop > lastBuildAttempt + BUILD_ATTEMPT_INTERVAL) {
-                if (specificTarget.isPresent()) {
-                    agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
-                } else {
-                    location = resolveLocation(worker.get(), data);
-                    location.ifPresent(target ->
-                        agent.actions().unitCommand(assignedWorker.get(), ability, target, false)
-                    );
+                if (data.gameData().unitHasAbility(assignedWorker.get(), ability)) {
+                    if (specificTarget.isPresent()) {
+                        agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
+                    } else if (location.isPresent()) {
+                        location.ifPresent(target -> {
+                            agent.actions().unitCommand(assignedWorker.get(), ability, target, false);
+                        });
+                    }
+                    //System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
+                    lastBuildAttempt = gameLoop;
+                    ++buildAttempts;
+                    if (buildAttempts > MAX_BUILD_ATTEMPTS / 2) {
+                        // Reset the location on the second half of attempts.
+                        location = Optional.empty();
+                    }
+                } else if (location.isPresent()) {
+                    agent.actions().unitCommand(assignedWorker.get(), Abilities.MOVE, location.get(), false);
                 }
-                //System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
-                lastBuildAttempt = gameLoop;
-                ++buildAttempts;
             }
         }
         if (matchingUnitAtLocation.isPresent()) {
+            if (!dispatchedMatchingUnitAtLocation.equals(matchingUnitAtLocation)) {
+                onStarted();
+                dispatchedMatchingUnitAtLocation = matchingUnitAtLocation;
+            }
             UnitInPool actualUnit = agent.observation().getUnit(matchingUnitAtLocation.get());
             if (actualUnit != null) {
+                location = Optional.of(actualUnit.unit().getPosition().toPoint2d());
                 float buildProgress = actualUnit.unit().getBuildProgress();
                 if (buildProgress > 0.99) {
                     isComplete = true;
@@ -215,16 +226,18 @@ public class BuildStructureTask extends BaseTask {
 
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
         // This should probably be a preidcate associated to the PlacementRules it itself.
-        boolean nearBaseOnly = placementRules.isPresent() ?
-                placementRules.get().regionType().equals(PlacementRules.Region.ANY_PLAYER_BASE) :
-                false;
+        boolean nearBaseOnly = placementRules
+                .map(rule -> rule.regionType().equals(PlacementRules.Region.ANY_PLAYER_BASE))
+                .orElse(false);
         if (location.isPresent()) {
             // If location is known, find closest unit to that location.
+            // Avoid using gas workers.
             return taskManager.findFreeUnitForTask(
                     this,
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
-                            Constants.WORKER_TYPES.contains(unitInPool.unit().getType()),
+                            Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            !UnitInPool.isCarryingVespene().test(unitInPool),
                     Comparator.comparing((UnitInPool unitInPool) ->
                             unitInPool.unit().getPosition().toPoint2d().distance(location.get()))
             ).map(unitInPool -> unitInPool.getTag());
@@ -238,6 +251,7 @@ public class BuildStructureTask extends BaseTask {
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            !UnitInPool.isCarryingVespene().test(unitInPool) &&
                             data.mapAwareness()
                                     .getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())
                                     .map(RegionData::isPlayerBase).orElse(false),
@@ -260,6 +274,17 @@ public class BuildStructureTask extends BaseTask {
                 .getOrders()
                 .stream()
                 .anyMatch(unitOrder -> ability.equals(unitOrder.getAbility()));
+    }
+
+    private Optional<Point2d> getWorkerOrderTargetedWorldSpace(UnitInPool worker) {
+        return worker.unit().getOrders().stream()
+                .filter(unitOrder -> ability.equals(unitOrder.getAbility()))
+                .map(UnitOrder::getTargetedWorldSpacePosition)
+                .map(maybePosition -> maybePosition.map(point -> point.toPoint2d()))
+                .findFirst()
+                .orElse(Optional.empty());
+
+
     }
 
     private Optional<Point2d> resolveLocation(UnitInPool worker, AgentData data) {
@@ -314,6 +339,9 @@ public class BuildStructureTask extends BaseTask {
 
     @Override
     public void debug(S2Agent agent) {
+        if (isComplete) {
+            return;
+        }
         if (this.location.isPresent()) {
             Point2d actualLocation = this.location.get();
             float height = agent.observation().terrainHeight(actualLocation);
@@ -332,7 +360,7 @@ public class BuildStructureTask extends BaseTask {
             if (unitInPool == null) {
                 return;
             }
-            Point point3d = unitInPool.unit().getPosition();
+            Point point3d = unitInPool.unit().getPosition().add(Point.of(0f, 0f, -0.5f));
             Color color = Color.YELLOW;
             if (this.matchingUnitAtLocation.isPresent()) {
                 color = Color.GREEN;
@@ -341,6 +369,11 @@ public class BuildStructureTask extends BaseTask {
             agent.debug().debugTextOut(
                     "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);
+            if (this.location.isPresent()) {
+                float height = agent.observation().terrainHeight(location.get());
+                Point destinationLocation = Point.of(location.get().getX(), location.get().getY(), height);
+                agent.debug().debugLineOut(point3d, destinationLocation, Color.TEAL);
+            }
         }
     }
 

@@ -1,10 +1,20 @@
 package com.supalosa.bot;
 
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
+import com.github.ocraft.s2client.bot.gateway.QueryInterface;
 import com.github.ocraft.s2client.protocol.data.*;
+import com.github.ocraft.s2client.protocol.observation.AvailableAbility;
+import com.github.ocraft.s2client.protocol.query.AvailableAbilities;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.github.ocraft.s2client.protocol.unit.Tag;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
 
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * This class allows us to cache game data while also allowing us to
@@ -17,6 +27,7 @@ public class GameData {
     private Map<Ability, AbilityData> abilityData = null;
     private final Map<Ability, UnitType> abilityToUnitType = new HashMap<>();
     private Map<UnitType, Boolean> structureTypes = new HashMap<>();
+    private Map<Tag, Set<Ability>> availableAbilities;
 
     public GameData(ObservationInterface observationInterface) {
         this.observationInterface = observationInterface;
@@ -147,5 +158,28 @@ public class GameData {
      */
     public Optional<Integer> getUnitCargoSize(UnitType type) {
         return Optional.ofNullable(getOrInitUnitTypeData().get(type)).flatMap(unitTypeData -> unitTypeData.getCargoSize());
+    }
+
+    public void onStep(ObservationInterface observationInterface, QueryInterface queryInterface) {
+        List<Unit> myUnits = observationInterface.getUnits(Alliance.SELF).stream().map(unitInPool -> unitInPool.unit()).collect(Collectors.toList());
+        List<AvailableAbilities> available = queryInterface.getAbilitiesForUnits(myUnits, false);
+
+        availableAbilities = available.stream().collect(
+                Collectors.toMap(
+                        AvailableAbilities::getUnitTag,
+                        abilities ->
+                                abilities.getAbilities().stream().map(AvailableAbility::getAbility).collect(Collectors.toSet()))
+        );
+    }
+
+    /**
+     * Return all abilities available to this unit.
+     */
+    public Set<Ability> getAvailableAbilities(Tag tag) {
+        return availableAbilities.getOrDefault(tag, Collections.emptySet());
+    }
+
+    public boolean unitHasAbility(Tag tag, Ability ability) {
+        return getAvailableAbilities(tag).contains(ability);
     }
 }

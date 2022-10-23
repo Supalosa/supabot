@@ -15,6 +15,11 @@ import java.util.Set;
 
 @Value.Immutable
 public abstract class SimpleBuildOrderStage {
+
+    /**
+     * A {@code SimpleBuildOrderCondition} that must be satisfied before this build order stage will be presented
+     * to the runner.
+     */
     @Value.Parameter
     public abstract SimpleBuildOrderCondition trigger();
 
@@ -32,8 +37,7 @@ public abstract class SimpleBuildOrderStage {
      * Triggers all reserve army to go into the attacking army.
      * This can be called multiple times.
      */
-    @Value.Default
-    public boolean attack() { return false; }
+    public abstract Optional<Boolean> attack();
 
     @Value.Default
     public boolean repeat() {
@@ -62,7 +66,7 @@ public abstract class SimpleBuildOrderStage {
                 (Constants.TERRAN_ADDON_TYPES.contains(addonType().get())),
                 "Only tech lab/reactor types are supported",
                 addonType());
-        Validate.isTrue(ability().isPresent() || gasMiners().isPresent() || attack(),
+        Validate.isTrue(ability().isPresent() || gasMiners().isPresent() || attack().isPresent(),
                 "Order does not do anything.");
     }
 }

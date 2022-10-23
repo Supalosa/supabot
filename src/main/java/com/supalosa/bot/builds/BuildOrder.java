@@ -18,7 +18,7 @@ public interface BuildOrder {
      * Returns the most appropriate action to take in the current step.
      * If no order is appropriate yet, do nothing.
      */
-    List<BuildOrderOutput> getOutput(ObservationInterface observationInterface);
+    List<BuildOrderOutput> getOutput(ObservationInterface observationInterface, GameData gameData);
 
     void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage);
 

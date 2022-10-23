@@ -3,6 +3,7 @@ package com.supalosa.bot.builds;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
@@ -11,6 +12,7 @@ import com.supalosa.bot.GameData;
 import com.supalosa.bot.task.ImmutablePlacementRules;
 import com.supalosa.bot.task.PlacementRules;
 import com.supalosa.bot.utils.UnitFilter;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;
@@ -26,6 +28,7 @@ public class SimpleBuildOrder implements BuildOrder {
     private int targetGasMiners;
     private int currentStageNumber;
     private final Map<UnitType, Integer> expectedCountOfUnitType;
+    private final Map<Ability, Integer> abilitiesUsedCount;
     private boolean expectedCountInitialised = false;
     private long stageStartedAt = 0L;
     private boolean isTimedOut = false;
@@ -36,14 +39,15 @@ public class SimpleBuildOrder implements BuildOrder {
         this.repeatingStages = new HashSet<>();
         this.targetGasMiners = 0; //Integer.MAX_VALUE;
         this.currentStageNumber = 0;
-        this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised
+        this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised initially onStep.
+        this.abilitiesUsedCount = new HashMap<>();
         validateStages();
     }
 
     private void validateStages() {
         boolean hasAttack = false;
         for (SimpleBuildOrderStage stage : stages) {
-            if (stage.attack()) {
+            if (stage.attack().isPresent() && stage.attack().get() == true) {
                 hasAttack = true;
             }
         }
@@ -79,14 +83,14 @@ public class SimpleBuildOrder implements BuildOrder {
     }
 
     @Override
-    public List<BuildOrderOutput> getOutput(ObservationInterface observationInterface) {
+    public List<BuildOrderOutput> getOutput(ObservationInterface observationInterface, GameData gameData) {
         if (currentStageNumber >= stages.size()) {
             return new ArrayList<>();
         } else {
             SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
             List<BuildOrderOutput> output = new ArrayList<>();
             final int currentSupply = observationInterface.getFoodUsed();
-            if (currentStage.trigger().accept(this, observationInterface)) {
+            if (currentStage.trigger().accept(this, observationInterface, gameData)) {
                 output.add(convertStageToOutput(currentStage));
             }
             output.addAll(repeatingStages.stream().map(this::convertStageToOutput)
@@ -95,10 +99,24 @@ public class SimpleBuildOrder implements BuildOrder {
         }
     }
 
+    /**
+     * Returns the stage that we're waiting for (if applicable).
+     */
+    public Optional<SimpleBuildOrderStage> getWaitingStage(ObservationInterface observationInterface, GameData gameData) {
+        if (currentStageNumber < stages.size()) {
+            SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
+            if (!currentStage.trigger().accept(this, observationInterface, gameData)) {
+                return Optional.of(currentStage);
+            }
+        }
+        return Optional.empty();
+    }
+
     @Override
     public void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage) {
         SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
         if (stage.equals(convertStageToOutput(currentStage))) {
+            System.out.println("Stage " + currentStage + " started at " + agent.observation().getGameLoop());
             currentStageNumber += 1;
             stageStartedAt = agent.observation().getGameLoop();
             SimpleBuildOrderStage nextStage = stages.get(currentStageNumber);
@@ -107,25 +125,30 @@ public class SimpleBuildOrder implements BuildOrder {
             if (expectedUnitType.isPresent()) {
                 expectedCountOfUnitType.compute(expectedUnitType.get(), (k, v) -> v == null ? 1 : v + 1);
             }
+            if (currentStage.ability().isPresent()) {
+                abilitiesUsedCount.compute(currentStage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
+            }
             if (currentStage.repeat()) {
                 repeatingStages.add(currentStage);
             }
+            // These actions aren't actually emitted to the consumer, but rather just update the internal state.
             if (currentStage.gasMiners().isPresent()) {
                 targetGasMiners = currentStage.gasMiners().get();
             }
-            if (currentStage.attack()) {
-                isAttackPermitted = currentStage.attack();
+            if (currentStage.attack().isPresent()) {
+                isAttackPermitted = currentStage.attack().get();
             }
         }
     }
 
     private BuildOrderOutput convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
         return ImmutableBuildOrderOutput.builder()
+                .originatingHashCode(simpleBuildOrderStage.hashCode())
                 .abilityToUse(simpleBuildOrderStage.ability())
                 .eligibleUnitTypes(simpleBuildOrderStage.unitFilter())
                 .addonRequired(simpleBuildOrderStage.addonType())
                 .placementRules(simpleBuildOrderStage.placementRules())
-                .performAttack(isAttackPermitted ? Optional.of(isAttackPermitted) : Optional.empty())
+                .performAttack(simpleBuildOrderStage.attack())
                 .build();
     }
 
@@ -141,5 +164,14 @@ public class SimpleBuildOrder implements BuildOrder {
     @Override
     public boolean isTimedOut() {
         return isTimedOut;
+    }
+
+    /**
+     * Returns a count of Abilities that have been dispatched so far. This does not account for abilities that
+     * have been dispatched but then aborted (eg building placement failed) or the unit created has since been destroyed.
+     * Use checkpoints to 'rebuild' the build order.
+     */
+    Map<Ability, Integer> getAbilitiesUsedCount() {
+        return Collections.unmodifiableMap(abilitiesUsedCount);
     }
 }

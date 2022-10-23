@@ -43,13 +43,9 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
         armyUnits = armyUnits.stream().filter(tag -> {
                     UnitInPool unit = agent.observation().getUnit(tag);
                     if (unit != null) {
-                        currentComposition.put(
-                                unit.unit().getType(),
-                                currentComposition.getOrDefault(unit.unit().getType(), 0) + 1);
+                        currentComposition.compute(unit.unit().getType(), (k, v) -> v == null ? 1 : v + 1);
                         unit.unit().getPassengers().forEach(passengerUnit -> {
-                            currentComposition.put(
-                                unit.unit().getType(),
-                                currentComposition.getOrDefault(passengerUnit.getType(), 0) + 1);
+                            currentComposition.compute(passengerUnit.getType(), (k, v) -> v == null ? 1 : v + 1);
                         });
                     }
                     if (myPassengers.contains(tag)) {

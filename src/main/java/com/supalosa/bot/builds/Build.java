@@ -10,9 +10,7 @@ import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.Validate;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Helper class to construct build order stages.
@@ -29,15 +27,51 @@ public class Build {
         private List<SimpleBuildOrderStage> stages;
         private Units workerType;
         private Set<UnitType> townHallTypes;
+        private Map<Ability, Integer> expectedCountOfAbility;
 
         private Builder(Units workerType, Set<UnitType> townHallTypes) {
             this.stages = new ArrayList<>();
             this.workerType = workerType;
             this.townHallTypes = townHallTypes;
+            this.expectedCountOfAbility = new HashMap<>();
         }
 
+        /**
+         * Waits until the given supply value is reached until performing the next step.
+         * Warning: This can cause blockages in the build order if not carefully managed, e.g. when supply blocked,
+         * or tech requirements are not met due to bugs or losing structures.
+         * In particular, it's not recommended to use this after initiating an attack.
+         */
         public BuilderWithCondition atSupply(int supply) {
             return new BuilderWithCondition(this, new SimpleBuildOrderCondition.AtSupplyCondition(supply));
+        }
+
+        /**
+         * Does not perform the next step until we have a certain amount of unit.
+         */
+        public UnitCountCondition after(int count) {
+            return new UnitCountCondition(this, count);
+        }
+
+        class UnitCountCondition {
+            private final int count;
+            private final Builder builder;
+            private UnitCountCondition(Builder builder, int count) {
+                this.count = count;
+                this.builder = builder;
+            }
+            public BuilderWithCondition of(UnitType type) {
+                return new BuilderWithCondition(this.builder,
+                        new SimpleBuildOrderCondition.AtUnitCountCondition(Map.of(type, count)));
+            }
+        }
+
+        /**
+         * Does not perform the next step until all previous steps have resolved.
+         */
+        public BuilderWithCondition then() {
+            return new BuilderWithCondition(this,
+                    new SimpleBuildOrderCondition.AtAbilityCountCondition(new HashMap<>(expectedCountOfAbility)));
         }
 
         // Mutators (which modify the previously added stage) go here.
@@ -47,6 +81,14 @@ public class Build {
                     .from(stages.get(stages.size() - 1))
                     .placementRules(rules)
                     .build());
+            return this;
+        }
+
+        private Builder addStage(SimpleBuildOrderStage stage) {
+            this.stages.add(stage);
+            if (stage.ability().isPresent()) {
+                this.expectedCountOfAbility.compute(stage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
+            }
             return this;
         }
 
@@ -71,36 +113,33 @@ public class Build {
          * This can be called multiple times.
          */
         public Builder attack() {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .attack(true)
                     .build());
-            return builder;
         }
 
         /**
          * Triggers all reserve army to constantly go into the attacking army.
          */
         public Builder repeatAttack() {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .attack(true)
                     .repeat(true)
                     .build());
-            return builder;
         }
 
         /**
          * Builds a structure with the appropriate worker type for the race, in the player's base regions only.
          */
         public Builder buildStructure(Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(builder.workerType))
                     .placementRules(PlacementRules.inBase())
                     .build());
-            return builder;
         }
 
         public Builder useAbility(UnitType unitType, Abilities ability) {
@@ -110,30 +149,27 @@ public class Build {
         }
 
         public Builder trainUnit(UnitType unitType, Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(unitType))
                     .build());
-            return builder;
         }
 
         public Builder trainUnitUsingAddon(UnitType unitType, UnitType addonType, Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(unitType))
                     .addonType(addonType)
                     .build());
-            return builder;
         }
 
         public Builder setGasMiners(int miners) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .gasMiners(miners)
                     .build());
-            return builder;
         }
 
         public Builder expand() {
@@ -151,44 +187,40 @@ public class Build {
                 default:
                     throw new IllegalStateException("Invalid worker type, cannot determine expansion ability to use.");
             }
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(builder.workerType))
                     .placementRules(PlacementRules.expansion())
                     .build());
-            return builder;
         }
 
         public Builder startRepeatingUnit(UnitType unitType, Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(unitType))
                     .repeat(true)
                     .build());
-            return builder;
         }
 
         public Builder startRepeatingUnit(Set<UnitType> unitTypes, Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .unitFilter(UnitFilter.mine(unitTypes))
                     .repeat(true)
                     .build());
-            return builder;
         }
 
         public Builder startRepeatingUnitWithAddon(UnitType unitType, UnitType addonType, Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .addonType(addonType)
                     .unitFilter(UnitFilter.mine(unitType))
                     .repeat(true)
                     .build());
-            return builder;
         }
 
         public Builder startRepeatingStructure(Abilities ability) {
@@ -204,14 +236,13 @@ public class Build {
         }
 
         public Builder startRepeatingUnitWithAddon(Set<UnitType> unitTypes, UnitType addonType, Abilities ability) {
-            this.builder.stages.add(ImmutableSimpleBuildOrderStage.builder()
+            return builder.addStage(ImmutableSimpleBuildOrderStage.builder()
                     .trigger(this.condition)
                     .ability(ability)
                     .addonType(addonType)
                     .unitFilter(UnitFilter.mine(unitTypes))
                     .repeat(true)
                     .build());
-            return builder;
         }
 
         // Race-specific helpers go here.

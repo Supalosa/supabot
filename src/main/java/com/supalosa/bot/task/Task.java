@@ -70,16 +70,24 @@ public interface Task {
     }
 
     /**
+     * Runs a callback when this task is started (in particular, when action in the game has been taken).
+     * It may be called multiple times, if the task has internal retry behaviour.
+     */
+    default Task onStarted(Consumer<Optional<TaskResult>> callback) {
+        throw new NotImplementedException("This task does not support onFailure callbacks.");
+    }
+
+    /**
      * Runs a callback when this task is complete.
      */
-    default Task onComplete(Consumer<TaskResult> callback) {
+    default Task onComplete(Consumer<Optional<TaskResult>> callback) {
         throw new NotImplementedException("This task does not support onComplete callbacks.");
     }
 
     /**
      * Runs a callback when this task is complete.
      */
-    default Task onFailure(Consumer<TaskResult> callback) {
+    default Task onFailure(Consumer<Optional<TaskResult>> callback) {
         throw new NotImplementedException("This task does not support onFailure callbacks.");
     }
 }

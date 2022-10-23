@@ -91,6 +91,7 @@ public class SupaBot extends S2Agent implements AgentData {
         mapAwareness.onStep(this, this);
         enemyAwareness.onStep(this.observation(), this);
         structurePlacementCalculator.ifPresent(spc -> spc.onStep(this, this));
+        gameData.onStep(observation(), query());
         taskManager.onStep(this, this);
         fightManager.onStep(taskManager, this);
 

@@ -195,7 +195,7 @@ public class BaseTerranTask implements BehaviourTask {
                 });
             }
         }
-        rebalanceWorkers(agent, data);
+        rebalanceWorkers(agent);
 
         mineGas(agent);
 
@@ -617,66 +617,13 @@ public class BaseTerranTask implements BehaviourTask {
         BuildUtils.reassignGasWorkers(agent, minMineralWorkersPerCc, Integer.MAX_VALUE);
     }
 
-    private void rebalanceWorkers(S2Agent agent, AgentData data) {
+    private void rebalanceWorkers(S2Agent agent) {
         long gameLoop = agent.observation().getGameLoop();
         if (gameLoop < lastRebalanceAt + 1000L) {
             return;
         }
         lastRebalanceAt = gameLoop;
-        // rebalance workers
-        Map<Tag, Integer> ccToWorkerCount = new HashMap<>();
-        int totalWorkers = agent.observation().getFoodWorkers();
-        int ccCount = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
-        if (ccCount > 0) {
-            int averageWorkers = totalWorkers / ccCount;
-            Set<Unit> givers = new HashSet<>();
-            Map<Unit, Integer> takers = new HashMap<>();
-            agent.observation().getUnits(Alliance.SELF,
-                    unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(ccInPool -> {
-                ccInPool.getUnit().ifPresent(cc -> {
-                    if (cc.getBuildProgress() < 0.9) {
-                        return;
-                    }
-                    cc.getAssignedHarvesters().ifPresent(assigned -> {
-                        ccToWorkerCount.put(cc.getTag(), assigned);
-                        if (assigned > averageWorkers + 4 || (cc.getIdealHarvesters().isPresent() && assigned > cc.getIdealHarvesters().get() + 4)) {
-                            givers.add(cc);
-                        } else if (cc.getIdealHarvesters().isPresent() && assigned < cc.getIdealHarvesters().get()) {
-                            takers.put(cc, cc.getIdealHarvesters().get() - assigned);
-                        }
-                    });
-                });
-            });
-            if (givers.size() > 0 && takers.size() > 0) {
-                Queue<Tag> donatedWorkers = new LinkedList<>();
-                agent.observation().getUnits(Alliance.SELF, UnitInPool.isUnit(Units.TERRAN_SCV)).forEach(scvInPool -> {
-                    scvInPool.getUnit().ifPresent(scv -> {
-                        givers.forEach(giver -> {
-                            if (scv.getPosition().distance(giver.getPosition()) < 10) {
-                                if (donatedWorkers.size() < averageWorkers) {
-                                    donatedWorkers.add(scv.getTag());
-                                }
-                            }
-                        });
-                    });
-                });
-                takers.entrySet().forEach(taker -> {
-                    Unit takerCc = taker.getKey();
-                    int takerAmount = taker.getValue();
-                    Optional<Unit> nearestMineralPatch = Utils.findNearestMineralPatch(agent.observation(), takerCc.getPosition().toPoint2d());
-                    if (donatedWorkers.size() > 0) {
-                        while (!donatedWorkers.isEmpty() && takerAmount > 0) {
-                            --takerAmount;
-                            Tag takenWorker = donatedWorkers.poll();
-                            // Move to the patch, or the CC itself if patch is missing.
-                            nearestMineralPatch.ifPresentOrElse(patch ->
-                                            agent.actions().unitCommand(takenWorker, Abilities.SMART, patch, false),
-                                    () -> agent.actions().unitCommand(takenWorker, Abilities.SMART, takerCc, false));
-                        }
-                    }
-                });
-            }
-        }
+        BuildUtils.rebalanceWorkers(agent);
     }
 
     private void tryGetUpgrades(S2Agent agent, AgentData data,
