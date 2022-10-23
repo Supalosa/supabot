@@ -119,24 +119,26 @@ public class SimpleBuildOrder implements BuildOrder {
             System.out.println("Stage " + currentStage + " started at " + agent.observation().getGameLoop());
             currentStageNumber += 1;
             stageStartedAt = agent.observation().getGameLoop();
-            SimpleBuildOrderStage nextStage = stages.get(currentStageNumber);
-            Optional<UnitType> expectedUnitType = nextStage.ability().flatMap(ability ->
-                    data.gameData().getUnitBuiltByAbilility(ability));
-            if (expectedUnitType.isPresent()) {
-                expectedCountOfUnitType.compute(expectedUnitType.get(), (k, v) -> v == null ? 1 : v + 1);
-            }
-            if (currentStage.ability().isPresent()) {
-                abilitiesUsedCount.compute(currentStage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
-            }
-            if (currentStage.repeat()) {
-                repeatingStages.add(currentStage);
-            }
-            // These actions aren't actually emitted to the consumer, but rather just update the internal state.
-            if (currentStage.gasMiners().isPresent()) {
-                targetGasMiners = currentStage.gasMiners().get();
-            }
-            if (currentStage.attack().isPresent()) {
-                isAttackPermitted = currentStage.attack().get();
+            if (currentStageNumber < stages.size()) {
+                SimpleBuildOrderStage nextStage = stages.get(currentStageNumber);
+                Optional<UnitType> expectedUnitType = nextStage.ability().flatMap(ability ->
+                        data.gameData().getUnitBuiltByAbilility(ability));
+                if (expectedUnitType.isPresent()) {
+                    expectedCountOfUnitType.compute(expectedUnitType.get(), (k, v) -> v == null ? 1 : v + 1);
+                }
+                if (currentStage.ability().isPresent()) {
+                    abilitiesUsedCount.compute(currentStage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
+                }
+                if (currentStage.repeat()) {
+                    repeatingStages.add(currentStage);
+                }
+                // These actions aren't actually emitted to the consumer, but rather just update the internal state.
+                if (currentStage.gasMiners().isPresent()) {
+                    targetGasMiners = currentStage.gasMiners().get();
+                }
+                if (currentStage.attack().isPresent()) {
+                    isAttackPermitted = currentStage.attack().get();
+                }
             }
         }
     }

@@ -69,12 +69,11 @@ public class ThreeRaxStimCombatConcussivePush extends SimpleBuildOrder {
                 .then().startRepeatingUnit(STARPORT, Abilities.TRAIN_MEDIVAC)
                 .then().buildSupplyDepot()
                 .then().buildSupplyDepot()
-                .then().morphOrbital()
                 .then().attack()
-                .then().useAbility(FACTORY, Abilities.BUILD_REACTOR_FACTORY)
+                .then().useAbility(STARPORT, Abilities.BUILD_REACTOR_STARPORT)
                 .then().useAbility(BARRACKS, Abilities.BUILD_REACTOR_BARRACKS)
                 .then().useAbility(BARRACKS, Abilities.BUILD_TECHLAB_BARRACKS)
-                .then().buildStructure(Abilities.BUILD_BUNKER)
+                .then().morphOrbital()
                 .then().attack()
                 .build());
     }

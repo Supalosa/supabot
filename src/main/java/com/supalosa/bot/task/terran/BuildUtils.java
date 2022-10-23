@@ -171,6 +171,9 @@ public class BuildUtils {
                     agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
                 }
             });
+            for (UnitInPool supplyDepot : agent.observation().getUnits(UnitFilter.mine(Units.TERRAN_SUPPLY_DEPOT))) {
+                agent.actions().unitCommand(supplyDepot.unit(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+            }
         });
     }
 
