@@ -141,7 +141,6 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
             // Finished path.
             waypointsCalculatedTo = Optional.empty();
             waypointsCalculatedFrom = Optional.empty();
-            targetPosition = Optional.empty();
         }
     }
 
@@ -381,7 +380,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
      * It's basically a periodic 'update' command. Maybe I should rename it.
      *
      * @param suggestedAttackMovePosition The position of either the next waypoint in the path, or the targetPosition.
-     * @return he state that the army should be in (aggressive, regroup, retreat etc).
+     * @return The state that the army should be in (aggressive, regroup, retreat etc).
      */
     protected AggressionState attackCommand(S2Agent agent,
                                             AgentData data,
@@ -394,8 +393,6 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
         } else {
             if (aggressionLevel != AggressionLevel.FULL_AGGRESSION && maybeEnemyArmy.isPresent() &&
                     predictFightAgainst(maybeEnemyArmy.get()) == FightPerformance.BADLY_LOSING) {
-                // Lose the target.
-                targetPosition = Optional.empty();
                 return AggressionState.RETREATING;
             } else {
                 return AggressionState.ATTACKING;
@@ -523,11 +520,7 @@ public abstract class DefaultArmyTask extends DefaultTaskWithUnits implements Ar
 
     @Override
     public void setTargetPosition(Optional<Point2d> targetPosition) {
-        // Only accept the attack order if we're not already attacking somewhere.
-        // We clear the targetPosition if we can't attack that location anymore.
-        if (this.targetPosition.isEmpty()) {
-            this.targetPosition = targetPosition;
-        }
+        this.targetPosition = targetPosition;
     }
 
     public void setAggressionLevel(AggressionLevel aggressionLevel) {
