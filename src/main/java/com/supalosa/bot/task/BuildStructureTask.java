@@ -13,6 +13,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.placement.PlacementRules;
@@ -74,32 +75,32 @@ public class BuildStructureTask extends BaseTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         if (aborted) {
             isComplete = true;
             onFailure();
             if (assignedWorker.isPresent()) {
-                agent.actions().unitCommand(assignedWorker.get(), Abilities.STOP, false);
+                agentWithData.actions().unitCommand(assignedWorker.get(), Abilities.STOP, false);
             }
             return;
         }
         Optional<UnitInPool> worker = Optional.empty();
-        long gameLoop = agent.observation().getGameLoop();
+        long gameLoop = agentWithData.observation().getGameLoop();
         if (assignedWorker.isEmpty()) {
             if (gameLoop > nextAssignedWorkerAttempt) {
-                assignedWorker = findWorker(taskManager, agent, data, placementRules);
+                assignedWorker = findWorker(taskManager, agentWithData, agentWithData, placementRules);
                 // Resume the construction if applicable.
                 assignedWorker.ifPresent(theWorker -> {
                     matchingUnitAtLocation.ifPresent(tag -> {
-                        UnitInPool unit = agent.observation().getUnit(tag);
+                        UnitInPool unit = agentWithData.observation().getUnit(tag);
                         if (unit != null) {
-                            agent.actions().unitCommand(theWorker, Abilities.SMART, unit.unit(), false);
+                            agentWithData.actions().unitCommand(theWorker, Abilities.SMART, unit.unit(), false);
                         }
                     });
                 });
             }
         } else {
-            agent.observation().getActionErrors().stream().forEach(actionError -> {
+            agentWithData.observation().getActionErrors().stream().forEach(actionError -> {
                 if (assignedWorker.isPresent() && actionError.getUnitTag().equals(assignedWorker)) {
                     System.out.println("Assigned builder had an action error: " + actionError.getActionResult());
                     if (actionError.getActionResult() == ActionResult.COULDNT_REACH_TARGET) {
@@ -121,7 +122,7 @@ public class BuildStructureTask extends BaseTask {
                 }
             });
             worker = assignedWorker
-                    .map(assignedWorkerTag -> agent.observation().getUnit(assignedWorkerTag));
+                    .map(assignedWorkerTag -> agentWithData.observation().getUnit(assignedWorkerTag));
             if (worker.isEmpty()) {
                 if (assignedWorker.isPresent()) {
                     // Worker was assigned but not found - the worker probably died.
@@ -133,7 +134,7 @@ public class BuildStructureTask extends BaseTask {
             }
         }
         if (worker.isPresent() && location.isEmpty()) {
-            location = resolveLocation(worker.get(), data);
+            location = resolveLocation(worker.get(), agentWithData);
         }
         if (matchingUnitAtLocation.isEmpty()) {
             Optional<UnitInPool> finalWorker = worker;
@@ -147,7 +148,7 @@ public class BuildStructureTask extends BaseTask {
                     // 4. Finally, the worker's location.
                     .or(() -> finalWorker.map(w -> w.unit().getPosition().toPoint2d()));
             // Find any matching units within 1.5 range of target location
-            List<UnitInPool> matchingUnits = agent.observation().getUnits(unitInPool ->
+            List<UnitInPool> matchingUnits = agentWithData.observation().getUnits(unitInPool ->
                     unitInPool.getUnit().filter(unit -> unit.getAlliance() == Alliance.SELF &&
                             unit.getType().equals(targetUnitType) &&
                             unit.getBuildProgress() < 0.99 &&
@@ -157,15 +158,15 @@ public class BuildStructureTask extends BaseTask {
             );
             matchingUnitAtLocation = matchingUnits.stream().findFirst().map(unitInPool -> unitInPool.getTag());
         } else {
-            matchingUnitAtLocation = matchingUnitAtLocation.filter(tag -> agent.observation().getUnit(tag) != null);
+            matchingUnitAtLocation = matchingUnitAtLocation.filter(tag -> agentWithData.observation().getUnit(tag) != null);
         }
 
         if (buildAttempts > MAX_BUILD_ATTEMPTS) {
-            agent.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
+            agentWithData.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
             System.out.println("Build task of " + targetUnitType + " failed");
             // Cancel the construction if applicable.
             matchingUnitAtLocation.ifPresent(tag -> {
-                agent.actions().unitCommand(tag, Abilities.CANCEL, false);
+                agentWithData.actions().unitCommand(tag, Abilities.CANCEL, false);
             });
             isComplete = true;
             onFailure();
@@ -173,16 +174,16 @@ public class BuildStructureTask extends BaseTask {
         }
         if (worker.isPresent() &&
                 !matchingUnitAtLocation.isPresent() &&
-                minimumMinerals.map(minimum -> agent.observation().getMinerals() >= minimum).orElse(true) &&
-                minimumVespene.map(minimum -> agent.observation().getVespene() >= minimum).orElse(true) &&
+                minimumMinerals.map(minimum -> agentWithData.observation().getMinerals() >= minimum).orElse(true) &&
+                minimumVespene.map(minimum -> agentWithData.observation().getVespene() >= minimum).orElse(true) &&
                 !isWorkerOrderQueued(worker.get())) {
             if (gameLoop > lastBuildAttempt + BUILD_ATTEMPT_INTERVAL) {
-                if (data.gameData().unitHasAbility(assignedWorker.get(), ability)) {
+                if (agentWithData.gameData().unitHasAbility(assignedWorker.get(), ability)) {
                     if (specificTarget.isPresent()) {
-                        agent.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
+                        agentWithData.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
                     } else if (location.isPresent()) {
                         location.ifPresent(target -> {
-                            agent.actions().unitCommand(assignedWorker.get(), ability, target, false);
+                            agentWithData.actions().unitCommand(assignedWorker.get(), ability, target, false);
                         });
                     }
                     //System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
@@ -193,7 +194,7 @@ public class BuildStructureTask extends BaseTask {
                         location = Optional.empty();
                     }
                 } else if (location.isPresent()) {
-                    agent.actions().unitCommand(assignedWorker.get(), Abilities.MOVE, location.get(), false);
+                    agentWithData.actions().unitCommand(assignedWorker.get(), Abilities.MOVE, location.get(), false);
                 }
             }
         }
@@ -202,7 +203,7 @@ public class BuildStructureTask extends BaseTask {
                 onStarted();
                 dispatchedMatchingUnitAtLocation = matchingUnitAtLocation;
             }
-            UnitInPool actualUnit = agent.observation().getUnit(matchingUnitAtLocation.get());
+            UnitInPool actualUnit = agentWithData.observation().getUnit(matchingUnitAtLocation.get());
             if (actualUnit != null) {
                 location = Optional.of(actualUnit.unit().getPosition().toPoint2d());
                 float buildProgress = actualUnit.unit().getBuildProgress();
@@ -216,7 +217,7 @@ public class BuildStructureTask extends BaseTask {
                 float expectedHp = actualUnit.unit().getHealthMax().map(healthMax -> healthMax * buildProgress).orElse(1000f);
                 if (actualUnit.unit().getHealth().map(health -> health < expectedHp * 0.25f).orElse(false)) {
                     matchingUnitAtLocation.ifPresent(tag -> {
-                        agent.actions().unitCommand(tag, Abilities.CANCEL, false);
+                        agentWithData.actions().unitCommand(tag, Abilities.CANCEL, false);
                     });
                 }
             }

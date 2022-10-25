@@ -114,7 +114,7 @@ public class FightManager {
                 armyTasks.add(harassTask);
             }
         }
-        if (data.mapAwareness().getValidExpansionLocations().isPresent() && agent.observation().getArmyCount() > 80) {
+        /*if (data.mapAwareness().getValidExpansionLocations().isPresent() && agent.observation().getArmyCount() > 80) {
             // Start parking units around the map
             DefaultArmyTask mapTask = new TerranMapControlArmyTask("Parked", 100);
             if (taskManager.addTask(mapTask, data.mapAwareness().getValidExpansionLocations().get().size())) {
@@ -122,7 +122,7 @@ public class FightManager {
                 mapTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_AGGRESSION);
                 armyTasks.add(mapTask);
             }
-        }
+        }*/
     }
 
 

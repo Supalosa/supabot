@@ -11,7 +11,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitFilter;
@@ -43,8 +43,8 @@ public class ScoutTask implements Task {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
-        long gameLoop = agent.observation().getGameLoop();
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
+        long gameLoop = agentWithData.observation().getGameLoop();
         if (gameLoop < sleepUntil) {
             return;
         }
@@ -54,7 +54,7 @@ public class ScoutTask implements Task {
             if (sleepCount > MAX_SLEEP_COUNT) {
                 isComplete = true;
             } else {
-                scoutTarget = data.mapAwareness().getNextScoutTarget();
+                scoutTarget = agentWithData.mapAwareness().getNextScoutTarget();
             }
             return;
         }
@@ -62,20 +62,20 @@ public class ScoutTask implements Task {
             isComplete = true;
             return;
         }
-        if (agent.observation().getVisibility(scoutTarget.get()) == Visibility.VISIBLE) {
+        if (agentWithData.observation().getVisibility(scoutTarget.get()) == Visibility.VISIBLE) {
             scoutTarget = Optional.empty();
             sleepCount = 0;
             return;
         }
         List<Unit> scouters = assignedScouters.stream()
-                .map(tag -> agent.observation().getUnit(tag))
+                .map(tag -> agentWithData.observation().getUnit(tag))
                 .filter(unitInPool -> unitInPool != null)
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
 
         if (scouters.size() < targetScouters) {
             Optional<UnitInPool> maybeScouter = taskManager.findFreeUnitForTask(this,
-                agent.observation(),
+                    agentWithData.observation(),
                 UnitFilter.builder()
                         .alliance(Alliance.SELF)
                         .unitType(Units.TERRAN_SCV)
@@ -89,7 +89,7 @@ public class ScoutTask implements Task {
         assignedScouters = scouters.stream().map(unit -> unit.getTag()).collect(Collectors.toList());
         if (scouters.size() > 0) {
             // TODO maybe better repair task.
-            agent.actions().unitCommand(scouters, Abilities.MOVE, scoutTarget.get(), false);
+            agentWithData.actions().unitCommand(scouters, Abilities.MOVE, scoutTarget.get(), false);
         }
     }
 

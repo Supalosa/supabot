@@ -4,14 +4,11 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.UnitType;
-import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.github.ocraft.s2client.protocol.unit.Alliance;
-import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.task.BaseTask;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
@@ -19,11 +16,9 @@ import com.supalosa.bot.task.TaskResult;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
-import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * A task to swap addons between structures.
@@ -61,15 +56,15 @@ public class SwapAddonsTask extends BaseTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         if (structure1.isEmpty()) {
-            structure1 = taskManager.findFreeUnitForTask(this, agent.observation(), UnitFilter.mine(structureType1));
+            structure1 = taskManager.findFreeUnitForTask(this, agentWithData.observation(), UnitFilter.mine(structureType1));
             if (structure1.isPresent()) {
                 initialPosition1 = structure1.map(UnitInPool::unit).map(Unit::getPosition).map(Point::toPoint2d);
             }
         }
         if (structure2.isEmpty()) {
-            structure2 = taskManager.findFreeUnitForTask(this, agent.observation(), UnitFilter.mine(structureType2));
+            structure2 = taskManager.findFreeUnitForTask(this, agentWithData.observation(), UnitFilter.mine(structureType2));
             if (structure2.isPresent()) {
                 initialPosition2 = structure2.map(UnitInPool::unit).map(Unit::getPosition).map(Point::toPoint2d);
             }
@@ -77,7 +72,7 @@ public class SwapAddonsTask extends BaseTask {
         if (structure1.isEmpty() || structure2.isEmpty()) {
             return;
         }
-        UnitInPool newStructure1 = agent.observation().getUnit(structure1.get().getTag());
+        UnitInPool newStructure1 = agentWithData.observation().getUnit(structure1.get().getTag());
         if (newStructure1 == null) {
             isComplete = true;
             onFailure();
@@ -85,7 +80,7 @@ public class SwapAddonsTask extends BaseTask {
         } else {
             structure1 = Optional.of(newStructure1);
         }
-        UnitInPool newStructure2 = agent.observation().getUnit(structure2.get().getTag());
+        UnitInPool newStructure2 = agentWithData.observation().getUnit(structure2.get().getTag());
         if (newStructure2 == null) {
             isComplete = true;
             onFailure();
@@ -102,28 +97,28 @@ public class SwapAddonsTask extends BaseTask {
             }*/
             if (!(structure1.get().unit().getFlying().orElse(false))) {
                 if (structure1.get().unit().getOrders().isEmpty()) {
-                    agent.actions().unitCommand(structure1.get().unit(), Abilities.LIFT, false);
+                    agentWithData.actions().unitCommand(structure1.get().unit(), Abilities.LIFT, false);
                 } else {
-                    agent.actions().unitCommand(structure1.get().unit(), Abilities.CANCEL_LAST, false);
+                    agentWithData.actions().unitCommand(structure1.get().unit(), Abilities.CANCEL_LAST, false);
                 }
             } else {
-                agent.actions().unitCommand(structure1.get().unit(), Abilities.MOVE, initialPosition2.get(), false);
+                agentWithData.actions().unitCommand(structure1.get().unit(), Abilities.MOVE, initialPosition2.get(), false);
             }
             if (!(structure2.get().unit().getFlying().orElse(false))) {
                 if (structure2.get().unit().getOrders().isEmpty()) {
-                    agent.actions().unitCommand(structure2.get().unit(), Abilities.LIFT, false);
+                    agentWithData.actions().unitCommand(structure2.get().unit(), Abilities.LIFT, false);
                 } else {
-                    agent.actions().unitCommand(structure2.get().unit(), Abilities.CANCEL_LAST, false);
+                    agentWithData.actions().unitCommand(structure2.get().unit(), Abilities.CANCEL_LAST, false);
                 }
             } else {
-                agent.actions().unitCommand(structure2.get().unit(), Abilities.MOVE, initialPosition1.get(), false);
+                agentWithData.actions().unitCommand(structure2.get().unit(), Abilities.MOVE, initialPosition1.get(), false);
             }
             if (structure1.get().unit().getFlying().orElse(false) && structure2.get().unit().getFlying().orElse(false)) {
                 state = State.TRANSFERRING;
             }
         } else {
-            agent.actions().unitCommand(structure1.get().unit(), Abilities.LAND, initialPosition2.get(), false);
-            agent.actions().unitCommand(structure2.get().unit(), Abilities.LAND, initialPosition1.get(), false);
+            agentWithData.actions().unitCommand(structure1.get().unit(), Abilities.LAND, initialPosition2.get(), false);
+            agentWithData.actions().unitCommand(structure2.get().unit(), Abilities.LAND, initialPosition1.get(), false);
             if (!structure1.get().unit().getFlying().orElse(false) && !structure2.get().unit().getFlying().orElse(false)) {
                 isComplete = true;
                 onComplete();
@@ -156,17 +151,17 @@ public class SwapAddonsTask extends BaseTask {
     }
 
     @Override
-    public void debug(S2Agent agent) {
+    public void debug(S2Agent agentWithData) {
         if (this.structure1.isPresent()) {
             Point point3d = structure1.get().unit().getPosition();
             Color color = Color.YELLOW;
-            agent.debug().debugSphereOut(point3d, 1.0f, color);
-            agent.debug().debugTextOut("Swap", point3d, Color.WHITE, 10);
+            agentWithData.debug().debugSphereOut(point3d, 1.0f, color);
+            agentWithData.debug().debugTextOut("Swap", point3d, Color.WHITE, 10);
             if (this.structure2.isPresent()) {
                 Point point3d2 = structure2.get().unit().getPosition();
-                agent.debug().debugSphereOut(point3d, 1.0f, color);
-                agent.debug().debugTextOut("Swap", point3d, Color.WHITE, 10);
-                agent.debug().debugLineOut(point3d.add(Point.of(0f, 0f, 0.5f)), point3d2.add(Point.of(0f, 0f, 0.5f)), Color.TEAL);
+                agentWithData.debug().debugSphereOut(point3d, 1.0f, color);
+                agentWithData.debug().debugTextOut("Swap", point3d, Color.WHITE, 10);
+                agentWithData.debug().debugLineOut(point3d.add(Point.of(0f, 0f, 0.5f)), point3d2.add(Point.of(0f, 0f, 0.5f)), Color.TEAL);
             }
         }
     }

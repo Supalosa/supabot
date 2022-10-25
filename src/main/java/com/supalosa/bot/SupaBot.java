@@ -29,7 +29,7 @@ import com.supalosa.bot.utils.Utils;
 
 import java.util.*;
 
-public class SupaBot extends S2Agent implements AgentData {
+public class SupaBot extends AgentWithData {
 
     private final TaskManager taskManager;
     private final FightManager fightManager;
@@ -92,7 +92,7 @@ public class SupaBot extends S2Agent implements AgentData {
         enemyAwareness.onStep(this.observation(), this);
         structurePlacementCalculator.ifPresent(spc -> spc.onStep(this, this));
         gameData.onStep(observation(), query());
-        taskManager.onStep(this, this);
+        taskManager.onStep(this);
         fightManager.onStep(taskManager, this);
 
         // Dispatch one-off tasks.

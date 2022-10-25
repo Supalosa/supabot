@@ -10,7 +10,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.task.*;
@@ -66,15 +66,15 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
-        super.onStep(taskManager, data, agent);
-        long gameLoop = agent.observation().getGameLoop();
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
+        super.onStep(taskManager, agentWithData);
+        long gameLoop = agentWithData.observation().getGameLoop();
 
         if (armyUnits.size() == 0) {
             return;
         }
 
-        enemySiegeTanks = agent.observation().getUnits(
+        enemySiegeTanks = agentWithData.observation().getUnits(
                 UnitFilter.builder()
                         .alliance(Alliance.ENEMY)
                         .unitType(Units.TERRAN_SIEGE_TANK_SIEGED).build());
@@ -111,14 +111,14 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
             if (targetFound != null) {
                 Point2d target2d = targetFound.toPoint2d();
                 Optional<UnitInPool> ccWithEnergy = armyUnits.stream()
-                        .map(tag -> agent.observation().getUnit(tag))
+                        .map(tag -> agentWithData.observation().getUnit(tag))
                         .filter(unitInPool -> unitInPool != null && unitInPool.unit().getEnergy().isPresent() && unitInPool.unit().getEnergy().get() > 50f)
                         .findFirst();
                 ccWithEnergy.ifPresent(cc -> {
-                    if (agent.observation().getVisibility(target2d) != Visibility.VISIBLE) {
-                        agent.actions().unitCommand(cc.unit(), Abilities.EFFECT_SCAN, target2d, false);
+                    if (agentWithData.observation().getVisibility(target2d) != Visibility.VISIBLE) {
+                        agentWithData.actions().unitCommand(cc.unit(), Abilities.EFFECT_SCAN, target2d, false);
                     } else {
-                        agent.actions().unitCommand(cc.unit(), Abilities.EFFECT_CALL_DOWN_MULE, target2d, false);
+                        agentWithData.actions().unitCommand(cc.unit(), Abilities.EFFECT_CALL_DOWN_MULE, target2d, false);
                     }
                 });
             }
@@ -148,8 +148,8 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
 
         if (siegeTankClusters.size() == 0) {
             // land mules and scan cloaked items
-            float reserveCcEnergy = (scanRequests.size() > 0 || data.fightManager().hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
-            Set<Point2d> scanClusters = new HashSet<>(data.fightManager().getCloakedOrBurrowedUnitClusters());
+            float reserveCcEnergy = (scanRequests.size() > 0 || agentWithData.fightManager().hasSeenCloakedOrBurrowedUnits() ? 100f : 50f);
+            Set<Point2d> scanClusters = new HashSet<>(agentWithData.fightManager().getCloakedOrBurrowedUnitClusters());
             scanClusters.addAll(scanRequestClusters.keySet());
             new HashMap<>(scannedClusters).forEach((scannedCluster, time) -> {
                 // Scan lasts for 12.3 seconds.
@@ -157,12 +157,12 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
                     scannedClusters.remove(scannedCluster);
                 }
             });
-            agent.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
+            agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     UnitInPool.isUnit(Units.TERRAN_ORBITAL_COMMAND).test(unitInPool)).forEach(unit -> {
                 if (unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > reserveCcEnergy) {
-                    Optional<Unit> nearestMineral = Utils.findNearestMineralPatch(agent.observation(), unit.unit().getPosition().toPoint2d());
+                    Optional<Unit> nearestMineral = Utils.findNearestMineralPatch(agentWithData.observation(), unit.unit().getPosition().toPoint2d());
                     nearestMineral.ifPresent(mineral -> {
-                        agent.actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
+                        agentWithData.actions().unitCommand(unit.unit(), Abilities.EFFECT_CALL_DOWN_MULE, mineral, false);
                     });
                 }
                 if (scanClusters.size() > 0 && unit.unit().getEnergy().isPresent() && unit.unit().getEnergy().get() > 50f) {
@@ -172,7 +172,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
                             !scannedClusters.keySet().stream()
                                     .anyMatch(alreadyScannedPoint -> alreadyScannedPoint.distance(scanPoint) < 8f)
                     ).findFirst().ifPresent(scanPoint -> {
-                        agent.actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
+                        agentWithData.actions().unitCommand(unit.unit(), Abilities.EFFECT_SCAN, scanPoint, false);
                         scannedClusters.put(scanPoint, gameLoop);
                         scanClusters.remove(scanPoint);
                         scanRequests.forEach((request, promise) -> {

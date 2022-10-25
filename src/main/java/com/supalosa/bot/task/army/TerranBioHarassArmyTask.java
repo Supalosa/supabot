@@ -10,6 +10,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
@@ -61,52 +62,18 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
-        super.onStep(taskManager, data, agent);
-        long gameLoop = agent.observation().getGameLoop();
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
+        super.onStep(taskManager, agentWithData);
+        long gameLoop = agentWithData.observation().getGameLoop();
 
         if (gameLoop > desiredCompositionUpdatedAt + 22L) {
             desiredCompositionUpdatedAt = gameLoop;
             updateBioArmyComposition();
         }
         // This army disappears if the overall army is small.
-        if (harassMode == HarassMode.GROUND && agent.observation().getArmyCount() < deleteAtArmyCount) {
+        if (harassMode == HarassMode.GROUND && agentWithData.observation().getArmyCount() < deleteAtArmyCount) {
             this.isComplete = true;
         }
-
-        if (gameLoop > harassModeCalculatedAt + 22L * 5) {
-            harassModeCalculatedAt = gameLoop;
-            Optional<Region> currentRegion = centreOfMass.flatMap(point2d -> data.mapAwareness().getRegionDataForPoint(point2d).map(RegionData::region));
-            Optional<Region> targetRegion = targetPosition.flatMap(point2d -> data.mapAwareness().getRegionDataForPoint(point2d).map(RegionData::region));
-            if (currentRegion.isPresent() && targetRegion.isPresent()) {
-                Optional<RegionGraphPath> pathByAir = data.mapAwareness().generatePath(currentRegion.get(), targetRegion.get(), MapAwareness.PathRules.AIR_AVOID_ENEMY_ARMY);
-                Optional<RegionGraphPath> pathByGround = data.mapAwareness().generatePath(currentRegion.get(), targetRegion.get(), MapAwareness.PathRules.AVOID_ENEMY_ARMY);
-                if (pathByAir.isPresent() && !pathByGround.isPresent()) {
-                    harassMode = HarassMode.AIR;
-                } else if (!pathByAir.isPresent() && pathByGround.isPresent()) {
-                    harassMode = HarassMode.GROUND;
-                } else if (harassMode == HarassMode.GROUND &&
-                        pathByAir.map(RegionGraphPath::getWeight).orElse(0.0) < pathByGround.map(RegionGraphPath::getWeight).orElse(0.0) * 0.85) {
-                    harassMode = HarassMode.AIR;
-                } else if (harassMode == HarassMode.AIR && getFightPerformance() == FightPerformance.WINNING) {
-                    harassMode = HarassMode.GROUND;
-                }
-            }
-            List<Unit> units = armyUnits.stream().map(tag ->
-                            agent.observation().getUnit(tag)).filter(unit -> unit != null)
-                    .map(UnitInPool::unit).collect(Collectors.toList());
-            boolean allGroundUnits = units.stream().noneMatch(unit -> unit.getFlying().orElse(false));
-            boolean allAirUnits = units.stream().allMatch(unit -> unit.getFlying().orElse(false));
-            if (allGroundUnits || allAirUnits) {
-                harassMode = HarassMode.GROUND;
-            }
-            if (harassMode == HarassMode.AIR && allAirUnits) {
-                this.setPathRules(MapAwareness.PathRules.AIR_AVOID_ENEMY_ARMY);
-            } else {
-                this.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
-            }
-        }
-
     }
 
     private void updateBioArmyComposition() {
@@ -136,139 +103,6 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
         desiredComposition = result;
     }
 
-
-    @Override
-    protected AggressionState attackCommand(S2Agent agent,
-                                            AgentData data,
-                                            Optional<Point2d> centreOfMass,
-                                            Optional<Point2d> suggestedAttackMovePosition,
-                                            Optional<Point2d> suggestedRetreatMovePosition,
-                                            Optional<Army> maybeEnemyArmy) {
-        AggressionState parentState = super.attackCommand(agent, data, centreOfMass,
-                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
-
-        ObservationInterface observationInterface = agent.observation();
-        ActionInterface actionInterface = agent.actions();
-
-        handleMedivacLoading(agent, data, actionInterface, suggestedAttackMovePosition);
-
-        return parentState;
-    }
-
-    @Override
-    protected AggressionState retreatCommand(S2Agent agent,
-                                             AgentData data,
-                                             Optional<Point2d> centreOfMass,
-                                             Optional<Point2d> suggestedAttackMovePosition,
-                                             Optional<Point2d> suggestedRetreatMovePosition,
-                                             Optional<Army> enemyArmy, Optional<Army> maybeEnemyArmy) {
-        AggressionState parentState = super.retreatCommand(agent, data, centreOfMass,
-                suggestedAttackMovePosition, suggestedRetreatMovePosition, enemyArmy, maybeEnemyArmy);
-
-        ObservationInterface observationInterface = agent.observation();
-        ActionInterface actionInterface = agent.actions();
-
-        handleMedivacLoading(agent, data, actionInterface, suggestedAttackMovePosition);
-        return parentState;
-    }
-
-    @Override
-    protected AggressionState regroupCommand(S2Agent agent,
-                                             AgentData data,
-                                             Optional<Point2d> centreOfMass,
-                                             Optional<Point2d> suggestedAttackMovePosition,
-                                             Optional<Point2d> suggestedRetreatMovePosition,
-                                             Optional<Army> maybeEnemyArmy) {
-        AggressionState parentState = super.regroupCommand(agent, data, centreOfMass,
-                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
-
-        ObservationInterface observationInterface = agent.observation();
-        ActionInterface actionInterface = agent.actions();
-
-        handleMedivacLoading(agent, data, actionInterface, suggestedAttackMovePosition);
-        return parentState;
-    }
-
-
-    private void handleMedivacLoading(S2Agent agent, AgentData data, ActionInterface actionInterface, Optional<Point2d> suggestedAttackMovePosition) {
-        Function<Set<Tag>, Stream<Unit>> unitsStream = units -> units.stream().map(tag ->
-                agent.observation().getUnit(tag)).filter(unit -> unit != null).map(UnitInPool::unit);
-
-        if (!suggestedAttackMovePosition.isPresent()) {
-            return;
-        }
-        if (harassMode == HarassMode.AIR) {
-            long gameLoop = agent.observation().getGameLoop();
-            List<Unit> airUnitsNotFull = unitsStream.apply(armyUnits)
-                    .filter(unit -> unit.getFlying().orElse(false))
-                    .filter(unit -> unit.getCargoSpaceTaken().orElse(0) < unit.getCargoSpaceMax().orElse(0) - 2)
-                    .collect(Collectors.toList());
-            List<Unit> airUnitsWithCargo = unitsStream.apply(armyUnits)
-                    .filter(unit -> unit.getFlying().orElse(false))
-                    .filter(unit -> unit.getCargoSpaceTaken().orElse(0) > 0)
-                    .collect(Collectors.toList());
-            List<Unit> airUnits = unitsStream.apply(armyUnits)
-                    .filter(unit -> unit.getFlying().orElse(false))
-                    .filter(unit -> unit.getCargoSpaceTaken().isPresent())
-                    .collect(Collectors.toList());
-            List<Unit> groundUnits = unitsStream.apply(armyUnits)
-                    .filter(unit -> unit.getFlying().map(isFlying -> !isFlying).orElse(false))
-                    .collect(Collectors.toList());
-            if (gameLoop > loadingStateChangedAt + 22L) {
-                loadingStateChangedAt = gameLoop;
-
-                Optional<Region> currentRegion = centreOfMass.flatMap(point2d -> data.mapAwareness().getRegionDataForPoint(point2d).map(RegionData::region));
-                Optional<Region> targetRegion = targetPosition.flatMap(point2d -> data.mapAwareness().getRegionDataForPoint(point2d).map(RegionData::region));
-                Optional<Region> nextRegion = suggestedAttackMovePosition.flatMap(point2d -> data.mapAwareness().getRegionDataForPoint(point2d).map(RegionData::region));
-                if (currentRegion.equals(targetRegion)) {
-                    loadingState = LoadingState.UNLOADING;
-                } else if (groundUnits.size() > 0 && nextRegion.equals(targetRegion)) {
-                    loadingState = LoadingState.LOADING;
-                } else {
-                    loadingState = LoadingState.MOVING;
-                }
-            }
-            if (loadingState == LoadingState.UNLOADING) {
-                for (Unit unit : airUnitsWithCargo) {
-                    actionInterface.unitCommand(unit, Abilities.UNLOAD_ALL_AT_MEDIVAC, unit.getPosition().toPoint2d(), false);
-                }
-                if (groundUnits.size() > 0) {
-                    actionInterface.unitCommand(groundUnits, Abilities.ATTACK, suggestedAttackMovePosition.get(), false);
-                }
-            } else if (loadingState == LoadingState.MOVING) {
-                if (airUnits.size() > 0) {
-                    actionInterface.unitCommand(airUnits, Abilities.MOVE, suggestedAttackMovePosition.get(), false);
-                    actionInterface.unitCommand(airUnits, Abilities.EFFECT_MEDIVAC_IGNITE_AFTERBURNERS, false);
-                }
-                if (groundUnits.size() > 0) {
-                    actionInterface.unitCommand(groundUnits, Abilities.ATTACK, suggestedAttackMovePosition.get(), false);
-                }
-            } else if (loadingState == LoadingState.LOADING) {
-                if (groundUnits.size() > 0 && airUnitsNotFull.size() > 0) {
-                    actionInterface.unitCommand(groundUnits, Abilities.SMART, airUnitsNotFull.get(0), false);
-                } else if (groundUnits.size() > 0 && suggestedAttackMovePosition.isPresent()) {
-                    actionInterface.unitCommand(groundUnits, Abilities.MOVE, suggestedAttackMovePosition.get(), false);
-                }
-                if (airUnits.size() > 0) {
-                    if (centreOfMass.isPresent()) {
-                        actionInterface.unitCommand(airUnits, Abilities.MOVE, centreOfMass.get(), false);
-                    }
-                }
-            }
-        } else {
-            loadingState = LoadingState.UNLOADING;
-            List<Unit> airUnitsNotEmpty = unitsStream.apply(armyUnits)
-                    .filter(unit -> unit.getFlying().orElse(false))
-                    .filter(unit -> unit.getCargoSpaceTaken().orElse(0) > 0)
-                    .collect(Collectors.toList());
-            if (airUnitsNotEmpty.size() > 0) {
-                for (Unit unit : airUnitsNotEmpty) {
-                    actionInterface.unitCommand(unit, Abilities.UNLOAD_ALL_AT_MEDIVAC, unit.getPosition().toPoint2d(), false);
-                }
-            }
-        }
-    }
-
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
         return desiredComposition;
@@ -282,7 +116,7 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
     @Override
     public boolean isSimilarTo(Task otherTask) {
         if (otherTask instanceof TerranBioHarassArmyTask) {
-            return ((TerranBioHarassArmyTask) otherTask).armyName.equals(this.armyName);
+            return ((TerranBioHarassArmyTask) otherTask).equals(this);
         }
         return false;
     }

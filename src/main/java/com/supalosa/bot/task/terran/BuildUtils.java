@@ -10,6 +10,7 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.GameData;
 import com.supalosa.bot.utils.UnitFilter;
@@ -146,12 +147,12 @@ public class BuildUtils {
         });
     }
 
-    public static void defaultTerranRamp(AgentData data, S2Agent agent) {
+    public static void defaultTerranRamp(AgentWithData agentWithData) {
         // Open or close the ramp.
-        data.structurePlacementCalculator().ifPresent(spc -> {
+        agentWithData.structurePlacementCalculator().ifPresent(spc -> {
             AtomicBoolean rampClosed = new AtomicBoolean(false);
-            spc.getFirstSupplyDepot(agent.observation()).ifPresent(supplyDepot -> {
-                if (agent.observation().getUnits(Alliance.ENEMY).stream()
+            spc.getFirstSupplyDepot(agentWithData.observation()).ifPresent(supplyDepot -> {
+                if (agentWithData.observation().getUnits(Alliance.ENEMY).stream()
                         .anyMatch(enemyUnit -> enemyUnit
                                 .getUnit()
                                 .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < 8)
@@ -159,20 +160,20 @@ public class BuildUtils {
                     rampClosed.set(true);
                 }
                 if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                    agentWithData.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
                 } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
+                    agentWithData.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
                 }
             });
-            spc.getSecondSupplyDepot(agent.observation()).ifPresent(supplyDepot -> {
+            spc.getSecondSupplyDepot(agentWithData.observation()).ifPresent(supplyDepot -> {
                 if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                    agentWithData.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
                 } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
-                    agent.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
+                    agentWithData.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
                 }
             });
-            for (UnitInPool supplyDepot : agent.observation().getUnits(UnitFilter.mine(Units.TERRAN_SUPPLY_DEPOT))) {
-                agent.actions().unitCommand(supplyDepot.unit(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+            for (UnitInPool supplyDepot : agentWithData.observation().getUnits(UnitFilter.mine(Units.TERRAN_SUPPLY_DEPOT))) {
+                agentWithData.actions().unitCommand(supplyDepot.unit(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
             }
         });
     }

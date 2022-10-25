@@ -6,6 +6,7 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskMessageResponse;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -68,7 +69,7 @@ public interface TaskManager {
                                              Predicate<UnitInPool> predicate,
                                              Comparator<UnitInPool> comparator);
 
-    void onStep(AgentData data, S2Agent agent);
+    void onStep(AgentWithData agentWithData);
 
     /**
      * Adds a task to be tracked and executed by the task manager.

@@ -10,6 +10,7 @@ import com.github.ocraft.s2client.protocol.unit.PassengerUnit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 
@@ -78,13 +79,13 @@ public class TaskManagerImpl implements TaskManager {
     }
 
     @Override
-    public void onStep(AgentData data, S2Agent agent) {
+    public void onStep(AgentWithData agentWithData) {
         List<Task> tasksFinishedThisStep = new ArrayList<>();
         Set<Tag> unitsReleasedThisStep = new HashSet<>();
         List<Task> tasksForStep = new ArrayList<>(taskSet.values());
         tasksForStep.forEach(task -> {
             if (!task.isComplete()) {
-                task.onStep(this, data, agent);
+                task.onStep(this, agentWithData);
             } else {
                 tasksFinishedThisStep.add(task);
                 unitToTaskMap.entrySet().forEach(entry -> {
@@ -105,17 +106,17 @@ public class TaskManagerImpl implements TaskManager {
         ).collect(Collectors.toList());
         if (unitsReleasedThisStep.size() > 0) {
             unitsReleasedThisStep.forEach(tag -> {
-                UnitInPool unit = agent.observation().getUnit(tag);
+                UnitInPool unit = agentWithData.observation().getUnit(tag);
                 if (unit != null) {
                     dispatchUnit(unit.unit());
                 }
             });
         }
-        long gameLoop = agent.observation().getGameLoop();
+        long gameLoop = agentWithData.observation().getGameLoop();
         if (gameLoop > unassignedUnitsDispatchedAt + 66L) {
             // Periodically assign unallocated units to tasks.
             unassignedUnitsDispatchedAt = gameLoop;
-            agent.observation().getUnits(Alliance.SELF).forEach(unitInPool -> {
+            agentWithData.observation().getUnits(Alliance.SELF).forEach(unitInPool -> {
                 if (!unitToTaskMap.containsKey(unitInPool.getTag())) {
                     dispatchUnit(unitInPool.unit());
                 }
@@ -126,7 +127,7 @@ public class TaskManagerImpl implements TaskManager {
             Set<Tag> missingUnits = new HashSet<>();
             Set<Tag> unitsInPassengers = new HashSet<>();
             unitToTaskMap.forEach((tag, task) -> {
-                UnitInPool unitInPool = agent.observation().getUnit(tag);
+                UnitInPool unitInPool = agentWithData.observation().getUnit(tag);
                 if (unitInPool == null) {
                     missingUnits.add(tag);
                 } else if (unitInPool.unit().getPassengers().size() > 0) {

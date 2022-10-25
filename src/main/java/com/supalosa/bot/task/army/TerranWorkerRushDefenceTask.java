@@ -10,11 +10,11 @@ import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
-import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.WorkerDefenceThreatCalculator;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
@@ -41,27 +40,27 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
     private long desiredCompositionUpdatedAt = 0L;
 
     public TerranWorkerRushDefenceTask(String armyName, int basePriority) {
-        super(armyName, basePriority, new WorkerDefenceThreatCalculator());
+        super(armyName, basePriority, new WorkerDefenceThreatCalculator(), new TerranBioArmyTaskBehaviour());
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
-        super.onStep(taskManager, data, agent);
-        long gameLoop = agent.observation().getGameLoop();
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
+        super.onStep(taskManager, agentWithData);
+        long gameLoop = agentWithData.observation().getGameLoop();
 
         if (gameLoop > desiredCompositionUpdatedAt + 22L) {
             desiredCompositionUpdatedAt = gameLoop;
             updateComposition();
         }
         // This army disappears if we can't see any workers near the start position.
-        List<UnitInPool> enemyUnitsNearStartPosition = agent.observation().getUnits(
+        List<UnitInPool> enemyUnitsNearStartPosition = agentWithData.observation().getUnits(
                 UnitFilter.builder()
                         .alliance(Alliance.ENEMY)
-                        .inRangeOf(agent.observation().getStartLocation().toPoint2d())
+                        .inRangeOf(agentWithData.observation().getStartLocation().toPoint2d())
                         .range(20f)
                         .build());
         if (enemyUnitsNearStartPosition.size() == 0) {
-            sendChat(agent.actions(), "Worker rush defence ended.");
+            sendChat(agentWithData.actions(), "Worker rush defence ended.");
             this.isComplete = true;
         } else {
             taskManager.dispatchMessage(this, new WorkerRushDetected());
@@ -84,15 +83,12 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
         desiredComposition = result;
     }
 
-    @Override
     protected AggressionState attackCommand(S2Agent agent,
                                             AgentData data,
                                             Optional<Point2d> centreOfMass,
                                             Optional<Point2d> suggestedAttackMovePosition,
                                             Optional<Point2d> suggestedRetreatMovePosition,
                                             Optional<Army> maybeEnemyArmy) {
-        AggressionState parentState = super.attackCommand(agent, data, centreOfMass,
-                suggestedAttackMovePosition, suggestedRetreatMovePosition, maybeEnemyArmy);
         ObservationInterface observationInterface = agent.observation();
         ActionInterface actionInterface = agent.actions();
 
@@ -128,7 +124,7 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
         Point2d enemyCentreOfMass = Point2d.of((float)averageEnemyX, (float)averageEnemyY);
 
         if (units.isEmpty()) {
-            return parentState;
+            return null;
         }
 
         sendChat(agent.actions(), "Worker rush step [" + units.size() + " vs " + enemyUnitsNearStartPosition.size() + "]");
@@ -177,7 +173,7 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
             }
         });
 
-        return parentState;
+        return null;
     }
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {

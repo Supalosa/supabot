@@ -11,7 +11,7 @@ import com.github.ocraft.s2client.protocol.observation.AvailableAbility;
 import com.github.ocraft.s2client.protocol.query.AvailableAbilities;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.GameData;
 import com.supalosa.bot.builds.BuildOrderOutput;
@@ -59,35 +59,35 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
-        this.simpleBuildOrder.onStep(agent.observation(), data.gameData());
-        List<BuildOrderOutput> outputs = this.simpleBuildOrder.getOutput(agent.observation(), data.gameData());
-        this.nextStage = this.simpleBuildOrder.getWaitingStage(agent.observation(), data.gameData());
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
+        this.simpleBuildOrder.onStep(agentWithData.observation(), agentWithData.gameData());
+        List<BuildOrderOutput> outputs = this.simpleBuildOrder.getOutput(agentWithData.observation(), agentWithData.gameData());
+        this.nextStage = this.simpleBuildOrder.getWaitingStage(agentWithData.observation(), agentWithData.gameData());
         this.lastOutput = outputs;
-        mineGas(agent);
-        rebalanceWorkers(agent);
-        long gameLoop = agent.observation().getGameLoop();
+        mineGas(agentWithData);
+        rebalanceWorkers(agentWithData);
+        long gameLoop = agentWithData.observation().getGameLoop();
         Set<Tag> reservedTags = new HashSet<>();
-        Set<Tag> reactors = agent.observation()
+        Set<Tag> reactors = agentWithData.observation()
                 .getUnits(UnitFilter.mine(Constants.TERRAN_REACTOR_TYPES)).stream()
                 .map(UnitInPool::getTag).collect(Collectors.toSet());
         // Determine how many parallel tasks of a certain type should be running.
         outputs.forEach(output -> {
             if (output.performAttack().isPresent()) {
-                data.fightManager().setCanAttack(output.performAttack().get());
+                agentWithData.fightManager().setCanAttack(output.performAttack().get());
                 // An attack order was given.
                 if (output.performAttack().get() == true) {
-                    data.fightManager().reinforceAttackingArmy();
+                    agentWithData.fightManager().reinforceAttackingArmy();
                 }
             }
             if (output.dispatchTask().isPresent()) {
                 taskManager.addTask(output.dispatchTask().get().get(), 1);
             }
             if (output.abilityToUse().isEmpty()) {
-                simpleBuildOrder.onStageStarted(agent, data, output);
+                simpleBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                 return;
             }
-            Optional<Unit> orderedUnit = resolveUnitToUse(agent, output);
+            Optional<Unit> orderedUnit = resolveUnitToUse(agentWithData, output);
             if (orderDispatchedAt.containsKey(output)) {
                 if (gameLoop < orderDispatchedAt.get(output) + TIME_BETWEEN_DISPATCHES) {
                     return;
@@ -107,9 +107,9 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
             }
             if (orderedUnit.isPresent()) {
                 // TODO not use query here...
-                AvailableAbilities abilities = agent.query().getAbilitiesForUnit(orderedUnit.get(), false);
+                AvailableAbilities abilities = agentWithData.query().getAbilitiesForUnit(orderedUnit.get(), false);
                 boolean isAvailable = false;
-                Optional<AbilityData> abilityData = data.gameData().getAbility(output.abilityToUse().get());
+                Optional<AbilityData> abilityData = agentWithData.gameData().getAbility(output.abilityToUse().get());
                 for (AvailableAbility availableAbility : abilities.getAbilities()) {
                     if (availableAbility.getAbility().equals(output.abilityToUse().get())) {
                         isAvailable = true;
@@ -120,9 +120,9 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                     }
                 }
                 if (isAvailable) {
-                    agent.actions().unitCommand(orderedUnit.get(), output.abilityToUse().get(), false);
+                    agentWithData.actions().unitCommand(orderedUnit.get(), output.abilityToUse().get(), false);
                     // Signal to the build order that the ability was used.
-                    simpleBuildOrder.onStageStarted(agent, data, output);
+                    simpleBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                     boolean reserveUnit = true;
                     // Units with reactors can receive multiple orders.
                     if (orderedUnit.get().getAddOnTag().isPresent()) {
@@ -141,13 +141,13 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                     }
                 }
             } else if (output.abilityToUse().get().getTargets().contains(Target.POINT)) {
-                Task buildTask = createBuildTask(data.gameData(), output.abilityToUse().get(), output.placementRules());
+                Task buildTask = createBuildTask(agentWithData.gameData(), output.abilityToUse().get(), output.placementRules());
                 if (taskManager.addTask(buildTask, maxParallel)) {
                     final BuildOrderOutput thisStage = output;
                     buildTask
                             .onStarted(result -> {
                                 // Signal to the build order that the construction was started (dispatched).
-                                simpleBuildOrder.onStageStarted(agent, data, thisStage);
+                                simpleBuildOrder.onStageStarted(agentWithData, agentWithData, thisStage);
                             })
                             .onFailure(result -> {
                                 if (!output.repeat()) {
@@ -155,7 +155,7 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                                     this.onFailure();
                                     System.out.println("Build task " + output.abilityToUse().get() + " failed, aborting build order.");
                                     expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
-                                    announceFailure(agent.observation(), agent.actions());
+                                    announceFailure(agentWithData.observation(), agentWithData.actions());
                                 }
                             })
                             .onComplete(result -> {
@@ -168,11 +168,11 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                 }
             } else if (output.abilityToUse().get().getTargets().contains(Target.UNIT)) {
                  if (Constants.BUILD_GAS_STRUCTURE_ABILITIES.contains(output.abilityToUse().get())) {
-                    Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agent.observation());
+                    Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agentWithData.observation());
                     freeGeyserNearCc.ifPresent(geyser -> {
-                        if (taskManager.addTask(createBuildTask(data.gameData(), output.abilityToUse().get(), geyser, output.placementRules()), maxParallel)) {
+                        if (taskManager.addTask(createBuildTask(agentWithData.gameData(), output.abilityToUse().get(), geyser, output.placementRules()), maxParallel)) {
                             orderDispatchedAt.put(output, gameLoop);
-                            simpleBuildOrder.onStageStarted(agent, data, output);
+                            simpleBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                         }
                     });
                 }
@@ -184,12 +184,12 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
             onComplete();
         } else if (this.simpleBuildOrder.isTimedOut()) {
             this.isComplete = true;
-            announceFailure(agent.observation(), agent.actions());
+            announceFailure(agentWithData.observation(), agentWithData.actions());
             onFailure();
         }
 
         // TODO move this to a task.
-        BuildUtils.defaultTerranRamp(data, agent);
+        BuildUtils.defaultTerranRamp(agentWithData);
     }
 
     // Renders a list of outputs to a friendly string that can go in a chat message.
@@ -216,22 +216,22 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                 System.out.println("Next stage trigger: " + next.trigger().toString()));
     }
 
-    private void mineGas(S2Agent agent) {
-        long gameLoop = agent.observation().getGameLoop();
+    private void mineGas(AgentWithData agentWithData) {
+        long gameLoop = agentWithData.observation().getGameLoop();
         if (gameLoop < lastGasCheck + 5) {
             return;
         }
         lastGasCheck = gameLoop;
-        BuildUtils.reassignGasWorkers(agent, 0, simpleBuildOrder.getMaximumGasMiners());
+        BuildUtils.reassignGasWorkers(agentWithData, 0, simpleBuildOrder.getMaximumGasMiners());
     }
 
-    private void rebalanceWorkers(S2Agent agent) {
-        long gameLoop = agent.observation().getGameLoop();
+    private void rebalanceWorkers(AgentWithData agentWithData) {
+        long gameLoop = agentWithData.observation().getGameLoop();
         if (gameLoop < lastRebalanceAt + REBALANCE_INTERVAL) {
             return;
         }
         lastRebalanceAt = gameLoop;
-        BuildUtils.rebalanceWorkers(agent);
+        BuildUtils.rebalanceWorkers(agentWithData);
     }
 
     private BuildStructureTask createBuildTask(GameData data, Ability abilityTypeForStructure, Unit targetUnitToBuildOn, Optional<PlacementRules> placementRules) {
@@ -259,8 +259,8 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                 placementRules);
     }
 
-    private Optional<Unit> resolveUnitToUse(S2Agent agent, BuildOrderOutput buildOrderOutput) {
-        ObservationInterface observationInterface = agent.observation();
+    private Optional<Unit> resolveUnitToUse(S2Agent agentWithData, BuildOrderOutput buildOrderOutput) {
+        ObservationInterface observationInterface = agentWithData.observation();
         if (buildOrderOutput.abilityToUse().isPresent() && buildOrderOutput.eligibleUnitTypes().isPresent()) {
             Ability ability = buildOrderOutput.abilityToUse().get();
             UnitFilter eligibleUnitTypes = buildOrderOutput.eligibleUnitTypes().get();
@@ -277,7 +277,7 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                         .stream().filter(unit ->
                                 gameLoop > orderDispatchedTo.getOrDefault(unit.getTag(), 0L) + ORDER_RESERVATION_TIME)
                         .collect(Collectors.toList());
-                Set<Tag> reactors = agent.observation()
+                Set<Tag> reactors = agentWithData.observation()
                         .getUnits(UnitFilter.mine(Constants.TERRAN_REACTOR_TYPES)).stream()
                         .map(UnitInPool::getTag).collect(Collectors.toSet());
                 if (buildOrderOutput.addonRequired().isPresent()) {
@@ -330,20 +330,20 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     }
 
     @Override
-    public void debug(S2Agent agent) {
+    public void debug(S2Agent agentWithData) {
         float xPosition = 0.75f;
-        agent.debug().debugTextOut(
+        agentWithData.debug().debugTextOut(
                 "Build Order (" + simpleBuildOrder.getCurrentStageNumber() + "/" + simpleBuildOrder.getTotalStages() + ")",
                 Point2d.of(xPosition, 0.5f), Color.WHITE, 8);
         final float spacing = 0.0125f;
         float yPosition = 0.51f;
         List<BuildOrderOutput> nextStages = lastOutput;
         for (BuildOrderOutput next : nextStages) {
-            agent.debug().debugTextOut(next.asHumanReadableString(), Point2d.of(xPosition, yPosition), Color.WHITE, 8);
+            agentWithData.debug().debugTextOut(next.asHumanReadableString(), Point2d.of(xPosition, yPosition), Color.WHITE, 8);
             yPosition += (spacing);
         }
         if (nextStage.isPresent()) {
-            agent.debug().debugTextOut(
+            agentWithData.debug().debugTextOut(
                     "Next @ " + nextStage.get().trigger() + ": " + nextStage.get().ability().map(Ability::toString).orElse("Unknown"),
                     Point2d.of(xPosition, yPosition), Color.WHITE, 8);
         }

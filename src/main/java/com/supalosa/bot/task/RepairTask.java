@@ -9,7 +9,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -37,12 +37,12 @@ public class RepairTask implements Task {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         if (repairTarget.isEmpty()) {
             isComplete = true;
             return;
         }
-        UnitInPool unitToRepair = agent.observation().getUnit(repairTarget.get());
+        UnitInPool unitToRepair = agentWithData.observation().getUnit(repairTarget.get());
         if (unitToRepair == null) {
             isComplete = true;
             repairTarget = Optional.empty();
@@ -59,20 +59,20 @@ public class RepairTask implements Task {
         if (aborted) {
             isComplete = true;
             if (assignedRepairers.size() > 0) {
-                agent.actions().unitCommand(assignedRepairers, Abilities.STOP, false);
+                agentWithData.actions().unitCommand(assignedRepairers, Abilities.STOP, false);
             }
             return;
         }
 
         List<Unit> repairers = assignedRepairers.stream()
-                .map(tag -> agent.observation().getUnit(tag))
+                .map(tag -> agentWithData.observation().getUnit(tag))
                 .filter(unitInPool -> unitInPool != null)
                 .map(UnitInPool::unit)
                 .collect(Collectors.toList());
 
         if (repairers.size() < targetRepairers) {
             Optional<UnitInPool> maybeRepairer = taskManager.findFreeUnitForTask(this,
-                agent.observation(),
+                    agentWithData.observation(),
                 UnitFilter.builder()
                         .alliance(Alliance.SELF)
                         .unitType(Units.TERRAN_SCV)
@@ -85,9 +85,9 @@ public class RepairTask implements Task {
             });
         }
 
-        if (agent.observation().getGameLoop() > lastRepairCountCheck + 11L) {
-            lastRepairCountCheck = agent.observation().getGameLoop();
-            List<UnitInPool> unitsNearby = agent.observation().getUnits(
+        if (agentWithData.observation().getGameLoop() > lastRepairCountCheck + 11L) {
+            lastRepairCountCheck = agentWithData.observation().getGameLoop();
+            List<UnitInPool> unitsNearby = agentWithData.observation().getUnits(
                     UnitFilter.builder()
                             .alliance(Alliance.ENEMY)
                             .inRangeOf(unitToRepair.unit().getPosition().toPoint2d())
@@ -98,7 +98,7 @@ public class RepairTask implements Task {
         assignedRepairers = repairers.stream().map(unit -> unit.getTag()).collect(Collectors.toSet());
         if (repairers.size() > 0) {
             // TODO maybe better repair task.
-            agent.actions().unitCommand(repairers, Abilities.EFFECT_REPAIR, unitToRepair.unit(), false);
+            agentWithData.actions().unitCommand(repairers, Abilities.EFFECT_REPAIR, unitToRepair.unit(), false);
         }
     }
 

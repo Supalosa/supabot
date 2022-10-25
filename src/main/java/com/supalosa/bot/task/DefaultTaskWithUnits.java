@@ -7,13 +7,7 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.PassengerUnit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.task.Task;
-import com.supalosa.bot.task.TaskManager;
-import com.supalosa.bot.task.TaskResult;
-import com.supalosa.bot.task.TaskWithUnits;
-import com.supalosa.bot.task.army.TerranBioArmyTask;
+import com.supalosa.bot.AgentWithData;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,10 +24,10 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentData data, S2Agent agent) {
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         currentComposition.clear();
         Set<Tag> myPassengers = armyUnits.stream().flatMap(tag -> {
-                    UnitInPool unit = agent.observation().getUnit(tag);
+                    UnitInPool unit = agentWithData.observation().getUnit(tag);
                     if (unit != null) {
                         return unit.unit().getPassengers().stream().map(PassengerUnit::getTag);
                     } else {
@@ -41,7 +35,7 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
                     }
                 }).collect(Collectors.toSet());
         armyUnits = armyUnits.stream().filter(tag -> {
-                    UnitInPool unit = agent.observation().getUnit(tag);
+                    UnitInPool unit = agentWithData.observation().getUnit(tag);
                     if (unit != null) {
                         currentComposition.compute(unit.unit().getType(), (k, v) -> v == null ? 1 : v + 1);
                         unit.unit().getPassengers().forEach(passengerUnit -> {
