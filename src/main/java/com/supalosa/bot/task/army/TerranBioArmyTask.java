@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * A permanent bio army that constantly asks for reinforcements.
+ * A bio army with marines, marauders, medivacs and mines.
  */
 public class TerranBioArmyTask extends DefaultArmyTask {
 
@@ -40,11 +40,29 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     private int basePriority;
 
     private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
-    private long desiredCompositionUpdatedAt = 0L;
+    private long desiredCompositionUpdatedAt = Long.MIN_VALUE;
+
+    public TerranBioArmyTask(String armyName, String armyKey, int basePriority, Optional<TerranBioArmyTask> parentArmy) {
+        super(armyName,
+                armyKey,
+                basePriority,
+                new TerranBioThreatCalculator(),
+                new TerranBioArmyTaskBehaviour(),
+                parentArmy);
+        this.basePriority = basePriority;
+    }
 
     public TerranBioArmyTask(String armyName, int basePriority) {
-        super(armyName, basePriority, new TerranBioThreatCalculator(), new TerranBioArmyTaskBehaviour());
-        this.basePriority = basePriority;
+        this(armyName, armyName, basePriority, Optional.empty());
+    }
+
+    @Override
+    public DefaultArmyTask createChildArmy() {
+        return new TerranBioArmyTask(
+                this.getArmyName() + "-child",
+                this.getArmyName() + "-child" + UUID.randomUUID(),
+                basePriority,
+                Optional.of(this));
     }
 
     @Override
@@ -136,12 +154,6 @@ public class TerranBioArmyTask extends DefaultArmyTask {
             );
         }
         desiredComposition = result;
-    }
-
-    @Override
-    public boolean isComplete() {
-        // This army is a permanent one.
-        return false;
     }
 
     private List<TaskPromise> requestScannerSweep(AgentData data, Point2d scanPosition, long scanRequiredBefore) {

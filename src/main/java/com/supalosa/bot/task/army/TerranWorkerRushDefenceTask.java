@@ -20,6 +20,7 @@ import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.utils.UnitFilter;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,13 +35,16 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
 
     public class WorkerRushDetected implements TaskMessage {}
 
-    private boolean isComplete = false;
-
     private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
     private long desiredCompositionUpdatedAt = 0L;
 
     public TerranWorkerRushDefenceTask(String armyName, int basePriority) {
         super(armyName, basePriority, new WorkerDefenceThreatCalculator(), new TerranBioArmyTaskBehaviour());
+    }
+
+    @Override
+    public DefaultArmyTask createChildArmy() {
+        throw new NotImplementedException("Cannot reinforce this army.");
     }
 
     @Override
@@ -61,7 +65,7 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
                         .build());
         if (enemyUnitsNearStartPosition.size() == 0) {
             sendChat(agentWithData.actions(), "Worker rush defence ended.");
-            this.isComplete = true;
+            this.markComplete();
         } else {
             taskManager.dispatchMessage(this, new WorkerRushDetected());
         }
@@ -178,11 +182,6 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
         return desiredComposition;
-    }
-
-    @Override
-    public boolean isComplete() {
-        return isComplete;
     }
 
     @Override

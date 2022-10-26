@@ -29,19 +29,26 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     private static final long NORMAL_UPDATE_INTERVAL = 11;
     private final String armyName;
+    private final String armyKey;
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
     private final ThreatCalculator threatCalculator;
+
+    // This is another army task that exists, that this army will try to merge into by moving close to it.
+    private Optional<DefaultArmyTask<A,D,R,I>> parentArmy = Optional.empty();
     private Optional<Point2d> targetPosition = Optional.empty();
     private Optional<Point2d> retreatPosition = Optional.empty();
     private Optional<Point2d> centreOfMass = Optional.empty();
+
     private AggressionState aggressionState = AggressionState.REGROUPING;
     private Optional<Region> currentRegion = Optional.empty();
     private Optional<Region> nextRegion = Optional.empty();
     private Optional<Region> targetRegion = Optional.empty();
     private Optional<Region> retreatRegion = Optional.empty();
+
     private List<Region> regionWaypoints = new ArrayList<>();
     private Optional<Region> waypointsCalculatedFrom = Optional.empty();
     private Optional<Region> waypointsCalculatedTo = Optional.empty();
+
     private long waypointsCalculatedAt = 0L;
     private long nextArmyLogicUpdateAt = 0L;
     private MapAwareness.PathRules pathRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
@@ -54,13 +61,29 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private double cumulativePowerDelta = 0.0;
     private long cumulativeThreatAndPowerCalculatedAt = 0L;
 
+    private boolean isComplete = false;
+
     private final DefaultArmyTaskBehaviour<A,D,R,I> behaviour;
 
-    public DefaultArmyTask(String armyName, int basePriority, ThreatCalculator threatCalculator, DefaultArmyTaskBehaviour<A,D,R,I> behaviour) {
+    public DefaultArmyTask(String armyName,
+                           int basePriority,
+                           ThreatCalculator threatCalculator,
+                           DefaultArmyTaskBehaviour<A,D,R,I> behaviour) {
+        this(armyName, armyName, basePriority, threatCalculator, behaviour, Optional.empty());
+    }
+
+    public DefaultArmyTask(String armyName,
+                           String armyKey,
+                           int basePriority,
+                           ThreatCalculator threatCalculator,
+                           DefaultArmyTaskBehaviour<A,D,R,I> behaviour,
+                           Optional<DefaultArmyTask<A,D,R,I>> parentArmy) {
         super(basePriority);
         this.armyName = armyName;
+        this.armyKey = armyKey;
         this.threatCalculator = threatCalculator;
         this.behaviour = behaviour;
+        this.parentArmy = parentArmy;
     }
 
     private DefaultArmyTaskBehaviourStateHandler<?> getBehaviourHandlerForState() {
@@ -75,6 +98,17 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 return behaviour.getIdleHandler();
         }
         throw new IllegalStateException("Unsupported aggression state: " + this.aggressionState);
+    }
+
+    /**
+     * This is not what it says on the tin...
+     *
+     * @return A new army of this type, that has its parent set to this army.
+     */
+    public abstract DefaultArmyTask<A,D,R,I> createChildArmy();
+
+    public String getArmyName() {
+        return this.armyName;
     }
 
     @Override
@@ -102,6 +136,25 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
         long gameLoop = agentWithData.observation().getGameLoop();
 
+        if (parentArmy.isPresent()) {
+            if (parentArmy.get().isComplete()) {
+                parentArmy = Optional.empty();
+            } else {
+                targetPosition = parentArmy.flatMap(army -> army.centreOfMass);
+
+                if (centreOfMass.isPresent() && targetPosition.isPresent() && centreOfMass.get().distance(targetPosition.get()) < 5f) {
+                    parentArmy.get().takeAllFrom(agentWithData.taskManager(), agentWithData.observation(), this);
+                    markComplete();
+                } else if (parentArmy.get().armyUnits.size() == 0) {
+                    parentArmy.get().takeAllFrom(agentWithData.taskManager(), agentWithData.observation(), this);
+                    markComplete();
+                }
+                if (armyUnits.size() == 0) {
+                    markComplete();
+                }
+            }
+        }
+
         if (gameLoop > nextArmyLogicUpdateAt) {
             nextArmyLogicUpdateAt = gameLoop + armyLogicUpdate(agentWithData, armyPositions, allUnits);
         }
@@ -113,6 +166,15 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             waypointsCalculatedAt = gameLoop;
             calculateNewPath(agentWithData);
         }
+    }
+
+    protected void markComplete() {
+        this.isComplete = true;
+    }
+
+    @Override
+    public final boolean isComplete() {
+        return this.isComplete;
     }
 
     private void calculateNewPath(AgentData data) {
@@ -220,7 +282,14 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 currentComposition);
 
         AggressionState newAggressionState = aggressionState;
-        ImmutableBaseArgs baseArgs = ImmutableBaseArgs.of(agentWithData, allUnits, armyList, targetPosition, currentRegion, nextRegion, targetRegion);
+        ImmutableBaseArgs baseArgs = ImmutableBaseArgs.of(
+                agentWithData,
+                allUnits,
+                armyList,
+                targetPosition,
+                currentRegion,
+                nextRegion,
+                targetRegion);
         if (aggressionState == AggressionState.ATTACKING) {
             newAggressionState = handleState(behaviour.getAttackHandler(), allUnits, baseArgs);
         } else if (aggressionState == AggressionState.RETREATING) {
@@ -327,7 +396,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     @Override
     public String getKey() {
-        return "Army." + armyName;
+        return "Army." + armyKey;
     }
 
     @Override

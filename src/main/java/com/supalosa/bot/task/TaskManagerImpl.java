@@ -220,7 +220,8 @@ public class TaskManagerImpl implements TaskManager {
                     return;
                 }
                 Unit unit = unitInPool.unit();
-                if (from.removeUnit(unit) && predicate.test(unit) && to.wantsUnit(unit)) {
+                // TODO consider whether we want `wantsUnit`
+                if (from.removeUnit(unit) && predicate.test(unit)/* && to.wantsUnit(unit)*/) {
                     to.addUnit(unit);
                     moved.incrementAndGet();
                     unitToTaskMap.put(tag, to);

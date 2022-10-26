@@ -72,7 +72,7 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
         }
         // This army disappears if the overall army is small.
         if (harassMode == HarassMode.GROUND && agentWithData.observation().getArmyCount() < deleteAtArmyCount) {
-            this.isComplete = true;
+            this.markComplete();
         }
     }
 
@@ -109,14 +109,9 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
     }
 
     @Override
-    public boolean isComplete() {
-        return isComplete;
-    }
-
-    @Override
     public boolean isSimilarTo(Task otherTask) {
         if (otherTask instanceof TerranBioHarassArmyTask) {
-            return ((TerranBioHarassArmyTask) otherTask).equals(this);
+            return otherTask.getKey().equals(this.getKey());
         }
         return false;
     }

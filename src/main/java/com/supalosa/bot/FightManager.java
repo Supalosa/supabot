@@ -171,7 +171,11 @@ public class FightManager {
 
         if (pendingReinforcement) {
             pendingReinforcement = false;
-            attackingArmy.takeAllFrom(data.taskManager(), agent.observation(), reserveArmy);
+            DefaultArmyTask reinforcingArmy = attackingArmy.createChildArmy();
+            if (taskManager.addTask(reinforcingArmy, 1)) {
+                reinforcingArmy.takeAllFrom(taskManager, agent.observation(), reserveArmy);
+                armyTasks.add(reinforcingArmy);
+            }
         }
     }
 
@@ -311,7 +315,7 @@ public class FightManager {
     public int getTargetMarines() {
         int attackingArmySize = attackingArmy.getSize();
         int myFoodCap = agent.observation().getFoodCap() - attackingArmySize;
-        int result = Math.max(20, Math.min(attackingArmySize / 4, (int)(myFoodCap * 0.25)));
+        int result = Math.max(10, Math.min(attackingArmySize / 4, (int)(myFoodCap * 0.25)));
         return result;
     }
 

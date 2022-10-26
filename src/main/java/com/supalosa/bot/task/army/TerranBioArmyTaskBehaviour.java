@@ -2,15 +2,21 @@ package com.supalosa.bot.task.army;
 
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Ability;
+import com.github.ocraft.s2client.protocol.data.Buffs;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.utils.UnitFilter;
 import org.immutables.value.Value;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The default behaviour for a Terran Bio Army.
@@ -23,7 +29,9 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
 
     @Value.Immutable
     interface AttackContext {
-
+        long maxUnitsToStim();
+        long currentUnitsStimmed();
+        AtomicLong remainingUnitsToStim();
     }
 
     @Value.Immutable
@@ -60,7 +68,15 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
 
         @Override
         public AttackContext onArmyStep(BaseArgs args) {
-            return null;
+            long currentsUnitsStimmed = args.unitsInArmy().stream()
+                    .filter(unit -> unit.getBuffs().contains(Buffs.STIMPACK) || unit.getBuffs().contains(Buffs.STIMPACK_MARAUDER))
+                    .count();
+            long maxUnitsToStim = args.enemyArmies().stream().reduce(0L, (val, army) -> val + (long)army.threat(), (v1, v2) -> v1 + v2);
+            return ImmutableAttackContext.builder()
+                    .currentUnitsStimmed(currentsUnitsStimmed)
+                    .maxUnitsToStim(maxUnitsToStim)
+                    .remainingUnitsToStim(new AtomicLong(Math.max(0L, maxUnitsToStim - currentsUnitsStimmed)))
+                    .build();
         }
 
         @Override
@@ -72,7 +88,15 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().centrePoint(), false);
                 }
             });
-            return null;
+            if (!unit.getBuffs().contains(Buffs.STIMPACK) &&
+                    !unit.getBuffs().contains(Buffs.STIMPACK_MARAUDER) &&
+                    context.remainingUnitsToStim().get() > 0) {
+                if (args.agentWithData().gameData().unitHasAbility(unit.getTag(), Abilities.EFFECT_STIM)) {
+                    context.remainingUnitsToStim().decrementAndGet();
+                    args.agentWithData().actions().unitCommand(unit, Abilities.EFFECT_STIM, false);
+                }
+            }
+            return context;
         }
 
         @Override
