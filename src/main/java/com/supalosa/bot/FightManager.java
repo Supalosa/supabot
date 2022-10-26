@@ -212,6 +212,8 @@ public class FightManager {
                 // Defending army needs help.
                 attackPosition = defencePosition;
                 defenceNeedsAssistance = true;
+                // This stops the defending army from mindlessly running to fight.
+                defencePosition = Optional.empty();
             }
         }
 

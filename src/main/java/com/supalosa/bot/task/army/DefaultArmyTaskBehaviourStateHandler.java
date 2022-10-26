@@ -20,18 +20,51 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
 
     @Value.Immutable
     interface BaseArgs {
+        /**
+         * The agent and data structures with which to operate on the game.
+         */
         @Value.Parameter
         AgentWithData agentWithData();
+
+        /**
+         * A list of all the live Units in this army.
+         */
         @Value.Parameter
         List<Unit> unitsInArmy();
+
+        /**
+         * A list of enemy Armies nearby.
+         */
         @Value.Parameter
         List<Army> enemyArmies();
+
+        /**
+         * A periodically calculated estimate of how we are performing in the fight.
+         */
+        @Value.Parameter
+        FightPerformance fightPerformance();
+
+        /**
+         * The exact position that we are trying to attack.
+         */
         @Value.Parameter
         Optional<Point2d> attackPosition();
+
+        /**
+         * The region that we are currently in.
+         */
         @Value.Parameter
         Optional<Region> currentRegion();
+
+        /**
+         * The next region that we're moving to.
+         */
         @Value.Parameter
         Optional<Region> nextRegion();
+
+        /**
+         * The region that we want to end up at.
+         */
         @Value.Parameter
         Optional<Region> targetRegion();
     }
@@ -39,11 +72,7 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
     /**
      * Called when the army first enters this state.
      *
-     * @param agentWithData The agent and data structures with which to operate on the game.
-     * @param enemyArmies A list of enemy Armies nearby.
-     * @param currentRegion The current region that the army is in.
-     * @param nextRegion The next region that the army should path to.
-     * @param targetRegion The target region that we've been ordered to attack.
+     * @param args The basic arguments for all tasks.
      */
     void onEnterState(BaseArgs args);
 
@@ -51,11 +80,7 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      * Called before any units are processed by the army. This allows you to construct state that can be shared across
      * the whole army.
      *
-     * @param agentWithData The agent and data structures with which to operate on the game.
-     * @param enemyArmies A list of enemy Armies nearby.
-     * @param currentRegion The current region that the army is in.
-     * @param nextRegion The next region that the army should path to.
-     * @param targetRegion The target region that we've been ordered to attack.
+     * @param args The basic arguments for all tasks.
      * @return A context object that should be passed to each unit.
      */
     T onArmyStep(BaseArgs args);
@@ -65,13 +90,9 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      * You can reuse the context passed by the {@code onArmyStep} method and even mutate it before the next unit
      * uses it. Note: there is no defined order in which this method is called over the army.
      *
-     * @param agentWithData The agent and data structures with which to operate on the game.
-     * @param unit The unit to operate on.
      * @param context A context object constructed in {@code onArmyStep} that should be passed to each unit.
-     * @param enemyArmies A list of enemy Armies nearby.
-     * @param currentRegion The current region that the army is in.
-     * @param nextRegion The next region that the army should path to.
-     * @param targetRegion The target region that we've been ordered to attack.
+     * @param unit The unit to operate on.
+     * @param args The basic arguments for all tasks.
      * @return A context object that should be passed to the next unit.
      */
     T onArmyUnitStep(T context, Unit unit, BaseArgs args);
@@ -79,8 +100,8 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
     /**
      * Returns the aggression state that the army should move into next.
      *
-     * @param agentWithData The agent and data structures with which to operate on the game.
      * @param context The context passed from {@code onArmyStep} and through all the units.
+     * @param args The basic arguments for all tasks.
      * @return The next state of the army - which may just be the initial state.
      */
     AggressionState getNextState(T context, BaseArgs args);
@@ -89,7 +110,7 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      * Returns whether the unit should move on from the current region or stay (and continue to engage).
      *
      * @param agentWithData The agent and data structures with which to operate on the game.
-     * @param context The context passed from {@code onArmyStep} and through all the units.
+     * @param currentRegionData The data for the region that we're in.
      * @param currentRegion The current region that the army is in, or none if we can't calculate it.
      * @param nextRegion The next region to travel to, or none if we're already in the target region.
      * @return If we should move to another region.

@@ -410,9 +410,15 @@ public class BaseTerranTask implements BehaviourTask {
         final ObservationInterface observationInterface = agentWithData.observation();
         final MapAwareness mapAwareness = agentWithData.mapAwareness();
         // Expand every 16 workers.
-        final int[] expansionNumWorkers = new int[]{0, 18, 32, 48, 64, 72};
+        final int[] expansionNumWorkers = new int[]{0, 18, 32, 48, 64, 72, 80};
         int currentWorkers = observationInterface.getFoodWorkers();
         int numCcs = countMiningBases(agentWithData);
+        if (observationInterface.getMinerals() > 1000) {
+            numCcs ++;
+        }
+        if (observationInterface.getMinerals() > 2000) {
+            numCcs ++;
+        }
         int index = Math.min(expansionNumWorkers.length - 1, Math.max(0, numCcs));
         int nextExpansionAt = expansionNumWorkers[index];
         if (observationInterface.getGameLoop() < lastExpansionTime + 22L) {

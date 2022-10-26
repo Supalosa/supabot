@@ -63,4 +63,18 @@ public class Utils {
 
         return clusters;
     }
+
+    /**
+     * Returns the position a certain distance away from the enemy.
+     * @param myPosition
+     * @param enemyPosition
+     * @param distance
+     * @return
+     */
+    public static Point2d getRetreatPosition(Point2d myPosition, Point2d enemyPosition, float distance) {
+        float dx = enemyPosition.getX() - myPosition.getX();
+        float dy = enemyPosition.getY() - myPosition.getY();
+        Point2d normalised = Point2d.of(dx, dy).div((float)Math.max(1.0, myPosition.distance(enemyPosition)));
+        return myPosition.sub(normalised.mul(distance));
+    }
 }

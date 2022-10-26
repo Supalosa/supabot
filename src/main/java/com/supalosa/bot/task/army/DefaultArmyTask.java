@@ -286,6 +286,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 agentWithData,
                 allUnits,
                 armyList,
+                currentFightPerformance,
                 targetPosition,
                 currentRegion,
                 nextRegion,
