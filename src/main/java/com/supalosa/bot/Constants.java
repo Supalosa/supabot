@@ -136,4 +136,22 @@ public class Constants {
             Units.PROTOSS_DISRUPTOR,
             Units.PROTOSS_STALKER,
             Units.PROTOSS_PHOTON_CANNON);
+
+
+    public static Set<UnitType> ANTI_AIR_UNIT_TYPES = Set.of(
+            Units.PROTOSS_STALKER,
+            Units.PROTOSS_ARCHON,
+            Units.PROTOSS_CARRIER,
+            Units.PROTOSS_HIGH_TEMPLAR,
+            Units.PROTOSS_PHOTON_CANNON,
+            Units.PROTOSS_PHOENIX,
+            Units.PROTOSS_TEMPEST,
+            Units.ZERG_CORRUPTOR,
+            Units.ZERG_MUTALISK,
+            Units.ZERG_HYDRALISK,
+            Units.TERRAN_MARINE,
+            Units.TERRAN_THOR,
+            Units.TERRAN_THOR_AP,
+            Units.TERRAN_VIKING_FIGHTER,
+            Units.TERRAN_BATTLECRUISER);
 }

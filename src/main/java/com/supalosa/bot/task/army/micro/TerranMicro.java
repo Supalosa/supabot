@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.data.Buffs;
 import com.github.ocraft.s2client.protocol.data.UnitAttribute;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.task.army.DefaultArmyTaskBehaviourStateHandler;
@@ -64,6 +65,43 @@ public class TerranMicro {
                 remainingUnitsToStim.decrementAndGet();
                 args.agentWithData().actions().unitCommand(unit, Abilities.EFFECT_STIM, false);
             }
+        }
+    }
+
+    public static void handleVikingMicro(Unit unit, Optional<Point2d> goalPosition,
+                                         DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        // Stutter-step micro. The more we're winning, the smaller the stutter radius.
+        float stutterRadius = 9f;
+        if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
+            // Off weapon cooldown.
+            goalPosition.ifPresent(position -> {
+                if (args.currentRegion().equals(args.targetRegion())) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+                } else if (args.nextRegion().isPresent()) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().region().centrePoint(), false);
+                } else {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+                }
+            });
+        } else {
+            // On weapon cooldown.
+            Optional<Point2d> nearestEnemyUnit = enemyUnitMap
+                    .getNearestInRadius(unit.getPosition().toPoint2d(), 10f, enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
+                    .map(enemy -> enemy.getPosition().toPoint2d());
+            float finalStutterRadius = stutterRadius;
+            // If the nearest enemy is within stutterRadius, walk away, otherwise walk towards it.
+            // Bias towards the region we came from.
+            Optional<Point2d> retreatPosition = nearestEnemyUnit
+                    .filter(enemyPosition -> enemyPosition.distance(unit.getPosition().toPoint2d()) < finalStutterRadius)
+                    .map(enemyPosition -> Utils.getBiasedRetreatPosition(
+                            unit.getPosition().toPoint2d(),
+                            enemyPosition,
+                            args.centreOfMass().or(() -> args.previousRegion().map(RegionData::region).map(Region::centrePoint)),
+                            1.5f))
+                    .or(() -> goalPosition);
+            retreatPosition.ifPresent(retreatPoint2d -> {
+                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+            });
         }
     }
 

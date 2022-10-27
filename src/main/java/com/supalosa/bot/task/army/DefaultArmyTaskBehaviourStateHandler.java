@@ -61,6 +61,12 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         FightPerformance fightPerformance();
 
         /**
+         * A prediction of how we would fare in the fight against the closest army.
+         */
+        @Value.Parameter
+        FightPerformance predictedFightPerformance();
+
+        /**
          * The exact position that we are trying to attack.
          */
         @Value.Parameter

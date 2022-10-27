@@ -308,6 +308,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 enemyArmy,
                 previousComposition,
                 currentComposition);
+        FightPerformance predictedFightPerformance = enemyArmy.map(this::predictFightAgainst).orElse(FightPerformance.STABLE);
 
         AggressionState newAggressionState = aggressionState;
         ImmutableBaseArgs baseArgs = ImmutableBaseArgs.of(
@@ -317,6 +318,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 armyList,
                 centreOfMass,
                 currentFightPerformance,
+                predictedFightPerformance,
                 targetPosition,
                 currentRegion,
                 previousRegion,
