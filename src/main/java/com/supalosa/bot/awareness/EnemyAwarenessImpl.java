@@ -101,22 +101,6 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                         this.maybeLargestEnemyArmy = Optional.of(enemyClusters.get(biggestArmy));
                     }
                 }
-                // Construct a fake army to represent units that we've seen but can't see anymore.
-                if (missingEnemyUnits.size() > 0) {
-                    List<UnitType> unknownArmyComposition = missingEnemyUnits.stream().map(unitInPool -> unitInPool.unit().getType())
-                            .collect(Collectors.toList());
-                    missingEnemyArmy = Optional.of(ImmutableArmy.builder()
-                            .composition(Army.createComposition(unknownArmyComposition))
-                            .position(Optional.empty())
-                            .size(missingEnemyUnits.size())
-                            .threat(threatCalculator.calculateThreat(unknownArmyComposition))
-                            .build());
-                    potentialEnemyArmy = Optional.of(this.maybeLargestEnemyArmy
-                            .map(army -> army.plus(missingEnemyArmy.get()))
-                            .orElse(missingEnemyArmy.get()));
-                } else {
-                    potentialEnemyArmy = this.maybeLargestEnemyArmy.map(Function.identity());
-                }
             }
             List<UnitType> fullArmyComposition = allEnemyUnits.stream().map(unitInPool -> unitInPool.unit().getType())
                     .collect(Collectors.toList());
@@ -159,9 +143,9 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
             });
             destroyedUnits.forEach(unitInPool -> {
                 if (unitInPool.unit().getAlliance() == Alliance.ENEMY) {
-                    /*if (missingEnemyUnits.remove(unitInPool.getTag())) {
+                    if (missingEnemyUnits.remove(unitInPool.getTag())) {
                         System.out.println("Removed a destroyed " + unitInPool.unit().getType() + " from missing set");
-                    }*/
+                    }
                 }
             });
             // Stop tracking missing units after 2 minutes or if we saw them on this tick.
@@ -172,6 +156,24 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                     .filter(unitInPool -> !seenTags.contains(unitInPool.getTag()))
                     .collect(Collectors.toSet());
             destroyedUnits.clear();
+            // Construct a fake army to represent units that we've seen but can't see anymore.
+            if (missingEnemyUnits.size() > 0) {
+                List<UnitType> unknownArmyComposition = missingEnemyUnits.stream()
+                        .filter(UnitInPool::isAlive)
+                        .map(unitInPool -> unitInPool.unit().getType())
+                        .collect(Collectors.toList());
+                missingEnemyArmy = Optional.of(ImmutableArmy.builder()
+                        .composition(Army.createComposition(unknownArmyComposition))
+                        .position(Optional.empty())
+                        .size(missingEnemyUnits.size())
+                        .threat(threatCalculator.calculateThreat(unknownArmyComposition))
+                        .build());
+                potentialEnemyArmy = Optional.of(this.maybeLargestEnemyArmy
+                        .map(army -> army.plus(missingEnemyArmy.get()))
+                        .orElse(missingEnemyArmy.get()));
+            } else {
+                potentialEnemyArmy = this.maybeLargestEnemyArmy.map(Function.identity());
+            }
         }
     }
 

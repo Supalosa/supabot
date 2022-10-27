@@ -103,12 +103,19 @@ public class BaseTerranTask implements BehaviourTask {
         if (supply > 100) {
             tryBuildMax(agentWithData, Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1);
         }
+        if (supply > 150) {
+            tryBuildMax(agentWithData, Abilities.BUILD_GHOST_ACADEMY, Units.TERRAN_GHOST_ACADEMY, Units.TERRAN_SCV, 1, 1);
+            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_GHOST_ACADEMY, Map.of(
+                    Upgrades.PERSONAL_CLOAKING, Abilities.RESEARCH_PERSONAL_CLOAKING,
+                    Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
+            ));
+        }
         if (supply > 50) {
             int targetStarports = supply > 160 ? 2 : 1;
             if (supply == 200) {
                 targetStarports = 4;
             }
-            tryBuildMax(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 1, targetStarports);
+            tryBuildMax(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 2, targetStarports);
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
@@ -394,15 +401,6 @@ public class BaseTerranTask implements BehaviourTask {
             }
             return count;
         }
-        /*if (unitType.length == 1) {
-            return agentWithData.observation().getUnits(Alliance.SELF, UnitInPool.isUnit(unitType[0])).size();
-        } else {
-            Set<UnitType> unitTypes = Set.of(unitType);
-            return agentWithData.observation().getUnits(Alliance.SELF,
-                    unitInPool -> unitTypes.contains(unitInPool.unit().getType()) &&
-                            unitInPool.unit().getBuildProgress() > 0.99f
-            ).size();
-        }*/
     }
 
 
@@ -438,7 +436,7 @@ public class BaseTerranTask implements BehaviourTask {
                 unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType()) &&
                         unitInPool.unit().getBuildProgress() > 0.99f &&
                         unitInPool.unit().getIdealHarvesters().isPresent() &&
-                        unitInPool.unit().getIdealHarvesters().get() > 0
+                        unitInPool.unit().getIdealHarvesters().get() >= 6
         ).size();
     }
 
@@ -507,19 +505,22 @@ public class BaseTerranTask implements BehaviourTask {
     }
 
     private boolean tryBuildScvs(AgentWithData agentWithData) {
-        int numBases = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
+        int numBases = countMiningBases(agentWithData);
         int numScvs = countUnitType(Units.TERRAN_SCV);
         if (agentWithData.observation().getFoodUsed() == agentWithData.observation().getFoodCap()) {
             return false;
         }
+        int neededScvs = Math.min(80, numBases * 28);
+        AtomicInteger deltaScvs = new AtomicInteger(Math.max(0, neededScvs - numScvs));
         agentWithData.observation().getUnits(Alliance.SELF,
                 unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
             if (commandCentre.unit().getBuildProgress() < 1.0f) {
                 return;
             }
             if (commandCentre.unit().getOrders().isEmpty()) {
-                if (numScvs < Math.min(80, numBases * 22)) {
+                if (numScvs < deltaScvs.get()) {
                     agentWithData.actions().unitCommand(commandCentre.unit(), Abilities.TRAIN_SCV, false);
+                    deltaScvs.decrementAndGet();
                 }
             }
         });

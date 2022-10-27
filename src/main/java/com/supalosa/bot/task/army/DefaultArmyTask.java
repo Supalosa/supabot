@@ -40,10 +40,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private Optional<Point2d> centreOfMass = Optional.empty();
 
     private AggressionState aggressionState = AggressionState.REGROUPING;
-    private Optional<Region> currentRegion = Optional.empty();
-    private Optional<Region> nextRegion = Optional.empty();
-    private Optional<Region> targetRegion = Optional.empty();
-    private Optional<Region> retreatRegion = Optional.empty();
+    private Optional<RegionData> currentRegion = Optional.empty();
+    private Optional<RegionData> nextRegion = Optional.empty();
+    private Optional<RegionData> targetRegion = Optional.empty();
+    private Optional<RegionData> retreatRegion = Optional.empty();
 
     private List<Region> regionWaypoints = new ArrayList<>();
     private Optional<Region> waypointsCalculatedFrom = Optional.empty();
@@ -160,12 +160,12 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         }
 
         // Handle pathfinding.
-        updateCurrentRegions(agentWithData);
-
         if (gameLoop > waypointsCalculatedAt + 44L) {
             waypointsCalculatedAt = gameLoop;
             calculateNewPath(agentWithData);
         }
+        updateCurrentRegions(agentWithData);
+
     }
 
     protected void markComplete() {
@@ -177,7 +177,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         return this.isComplete;
     }
 
-    private void calculateNewPath(AgentData data) {
+    private void calculateNewPath(AgentWithData agentWithData) {
         // Target has changed, clear pathfinding.
         if (!waypointsCalculatedTo.equals(targetRegion)) {
             waypointsCalculatedTo = Optional.empty();
@@ -185,15 +185,24 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         }
         // Calculate path every time. TODO: probably don't need to do this, cut down in the future.
         final Optional<Region> destinationRegion = (aggressionState == AggressionState.RETREATING) ?
-                retreatRegion :
-                targetRegion;
+                retreatRegion.map(RegionData::region) :
+                targetRegion.map(RegionData::region);
         if (currentRegion.isPresent() && destinationRegion.isPresent() && !currentRegion.equals(destinationRegion)) {
-            Optional<RegionGraphPath> maybePath = data
+            Optional<RegionGraphPath> maybePath = agentWithData
                     .mapAwareness()
-                    .generatePath(currentRegion.get(), destinationRegion.get(), pathRules);
+                    .generatePath(currentRegion.map(RegionData::region).get(), destinationRegion.get(), pathRules);
             maybePath.ifPresent(path -> {
-                regionWaypoints = new ArrayList<>(path.getPath());
-                waypointsCalculatedFrom = currentRegion;
+                List<Region> regionList = path.getPath();
+                regionWaypoints = new ArrayList<>(regionList);
+                // TODO syntax fix here. Should be calling updateCurrentRegions immediately instead.
+                // Remove the head of the path if we're already in that region.
+                // Isn't the head always going to be the current region?
+                if (regionList.size() > 0 &&
+                        currentRegion.map(RegionData::region).map(Region::regionId).get().equals(regionList.get(0).regionId())) {
+                    regionWaypoints.remove(0);
+                }
+                updateCurrentRegions(agentWithData);
+                waypointsCalculatedFrom = currentRegion.map(RegionData::region);
                 waypointsCalculatedTo = destinationRegion;
             });
         }
@@ -201,18 +210,18 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     private void updateCurrentRegions(AgentWithData agentWithData) {
         targetRegion = targetPosition.flatMap(position ->
-                agentWithData.mapAwareness().getRegionDataForPoint(position).map(RegionData::region));
+                agentWithData.mapAwareness().getRegionDataForPoint(position));
         retreatRegion = retreatPosition.flatMap(position ->
-                agentWithData.mapAwareness().getRegionDataForPoint(position).map(RegionData::region));
+                agentWithData.mapAwareness().getRegionDataForPoint(position));
         // TODO if regrouping, is current region valid? It will end up thinking the unit is in a region halfway between
         // the clumps.
         Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> agentWithData.mapAwareness().getRegionDataForPoint(centre));
-        currentRegion = currentRegionData.map(RegionData::region);
+        currentRegion = currentRegionData;
 
         if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
                 currentRegion.get().equals(regionWaypoints.get(0)) ||
                         (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 7.5f))
-                && getBehaviourHandlerForState().shouldMoveFromRegion(agentWithData, currentRegionData.get(), currentRegion.get(), nextRegion)) {
+                && getBehaviourHandlerForState().shouldMoveFromRegion(agentWithData, currentRegionData.get(), nextRegion)) {
             // Arrived at the head waypoint.
             regionWaypoints.remove(0);
             if (regionWaypoints.size() > 0) {
@@ -224,7 +233,6 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                         getBehaviourHandlerForState().shouldMoveFromRegion(
                                 agentWithData,
                                 currentRegionData.get(),
-                                currentRegion.get(),
                                 nextRegion))) {
             // Finished path.
             waypointsCalculatedTo = Optional.empty();
@@ -266,7 +274,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             centreOfMass = Optional.of(Point2d.of((float) averageX.getAsDouble(), (float) averageY.getAsDouble()));
         }
         if (waypointsCalculatedTo.isPresent() && regionWaypoints.size() > 0) {
-            nextRegion = regionWaypoints.stream().findFirst();
+            nextRegion = regionWaypoints.stream().findFirst().flatMap(region ->
+                    agentWithData.mapAwareness().getRegionDataForId(region.regionId()));
         } else {
             nextRegion = Optional.empty();
         }
@@ -283,9 +292,11 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
         AggressionState newAggressionState = aggressionState;
         ImmutableBaseArgs baseArgs = ImmutableBaseArgs.of(
+                this,
                 agentWithData,
                 allUnits,
                 armyList,
+                centreOfMass,
                 currentFightPerformance,
                 targetPosition,
                 currentRegion,
@@ -428,6 +439,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 Point newPoint = Point.of(nextPoint.getX(), nextPoint.getY(), agent.observation().terrainHeight(nextPoint)+1f);
 
                 agent.debug().debugSphereOut(newPoint, 1f, Color.WHITE);
+                agent.debug().debugTextOut("Region " + waypoint.regionId(), newPoint, Color.TEAL, 12);
                 agent.debug().debugLineOut(lastPoint, newPoint, Color.WHITE);
                 lastPoint = newPoint;
             }

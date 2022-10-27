@@ -23,7 +23,14 @@ import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.utils.UnitFilter;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.stream.Collectors;
 
 public class FightManager {
@@ -208,7 +215,7 @@ public class FightManager {
         Optional<Army> attackingEnemyArmy = data.enemyAwareness().getMaybeEnemyArmy(nearestEnemy.get());
         if (attackingEnemyArmy.isPresent()) {
             FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(attackingEnemyArmy.get());
-            if (predictedOutcome == FightPerformance.BADLY_LOSING) {
+            if (defencePosition.isPresent() && predictedOutcome == FightPerformance.BADLY_LOSING) {
                 // Defending army needs help.
                 attackPosition = defencePosition;
                 defenceNeedsAssistance = true;
@@ -218,15 +225,25 @@ public class FightManager {
         }
 
         if (attackPosition.isEmpty()) {
-            if (data.enemyAwareness().getPotentialEnemyArmy().isEmpty()) {
-                // Don't know where the enemy army is - attack them.
-                attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemyBase();
+            // Don't know where the enemy army is - attack what is near us, or the enemy base
+            Optional<Point2d> searchOrigin = attackingArmy
+                    .getTargetPosition()
+                    .or(() -> data.mapAwareness().getMaybeEnemyPositionNearEnemyBase())
+                    .or(() -> data.mapAwareness().getMaybeEnemyPositionNearOwnBase())
+                    .or(() -> data.mapAwareness().getNextScoutTarget());
+            if (searchOrigin.isPresent()) {
+                attackPosition = data.mapAwareness().findEnemyPositionNearPoint(agent.observation(), searchOrigin.get());
             } else {
-                // We think we can attack the enemy base - attack it.
-                if (data.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
-                        attackingArmy.predictFightAgainst(data.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.WINNING) {
-                    attackPosition = data.mapAwareness().getMaybeEnemyPositionNearEnemyBase();
+                System.err.println("No target or target area found to attack - how did we get here?");
+            }
+
+            // Moderate the attack with checking if we could win a fight or not.
+            if (data.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
+                    attackingArmy.predictFightAgainst(data.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.BADLY_LOSING) {
+                if (attackPosition.isPresent()) {
+                    System.err.println("Aborted aggressive attack because we think we will badly lose.");
                 }
+                attackPosition = Optional.empty();
             }
         }
         // Harass bases which have half the enemy army threat diffused to them.

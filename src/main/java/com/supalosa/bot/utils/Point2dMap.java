@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -55,8 +56,22 @@ public class Point2dMap<T>  {
                 .collect(Collectors.toUnmodifiableList());
     }
 
+    public Collection<T> getInRadius(Point2d point, double radius, Predicate<T> filter) {
+        return internalGetStreamInRadius(point, radius)
+                .map(result -> result.item)
+                .filter(result -> filter.test(result))
+                .collect(Collectors.toUnmodifiableList());
+    }
+
     public Optional<T> getNearestInRadius(Point2d point, double radius) {
         return internalGetStreamInRadius(point, radius)
+                .min(Comparator.comparing(result -> result.distance))
+                .map(result -> result.item);
+    }
+
+    public Optional<T> getNearestInRadius(Point2d point, double radius, Predicate<T> filter) {
+        return internalGetStreamInRadius(point, radius)
+                .filter(result -> filter.test(result.item))
                 .min(Comparator.comparing(result -> result.distance))
                 .map(result -> result.item);
     }

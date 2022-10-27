@@ -236,7 +236,7 @@ public class JFrameDebugTarget implements DebugTarget {
             });
             stringBuilder.append("</html>");
             JLabel text = new JLabel(stringBuilder.toString());
-            armyPanel.add(text);
+            armyPanel.add(text, BorderLayout.NORTH);
         });
 
         Army enemyArmy = data.enemyAwareness().getOverallEnemyArmy();
@@ -250,7 +250,20 @@ public class JFrameDebugTarget implements DebugTarget {
         });
         stringBuilder.append("</html>");
         JLabel text = new JLabel(stringBuilder.toString());
-        armyPanel.add(text);
+        armyPanel.add(text, BorderLayout.CENTER);
+
+        data.enemyAwareness().getMissingEnemyArmy().ifPresent(missingEnemyArmy -> {
+            Map<UnitType, Integer> comp = missingEnemyArmy.composition();
+            StringBuilder sb = new StringBuilder("<html>Missing Army: --------------<br />");
+            List<UnitType> unitKeys = comp.keySet().stream()
+                    .sorted(Comparator.comparing(UnitType::toString))
+                    .collect(Collectors.toList());
+            unitKeys.forEach(unitType -> {
+                sb.append(unitType + ": " + comp.get(unitType) + "<br />");
+            });
+            sb.append("</html>");
+            armyPanel.add(new JLabel(sb.toString()), BorderLayout.SOUTH);
+        });
 
         panel.add(armyPanel);
 

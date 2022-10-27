@@ -184,4 +184,11 @@ public class GameData {
     public boolean unitHasAbility(Tag tag, Ability ability) {
         return getAvailableAbilities(tag).contains(ability);
     }
+
+    public Set<UnitAttribute> getAttributes(UnitType unitType) {
+        Optional<UnitTypeData> maybeUnitTypeData = getUnitTypeData(unitType);
+        return maybeUnitTypeData
+                .map(unitTypeData -> unitTypeData.getAttributes())
+                .orElse(Collections.emptySet());
+    }
 }

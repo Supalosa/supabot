@@ -62,6 +62,7 @@ public class TaskManagerImpl implements TaskManager {
                                              Predicate<UnitInPool> predicate,
                                              Comparator<UnitInPool> comparator) {
         Stream<UnitInPool> freeUnits = observationInterface.getUnits(unitInPool ->
+                unitInPool.unit().getAlliance() == Alliance.SELF &&
                 !unitToTaskMap.containsKey(unitInPool.getTag()) &&
                         predicate.test(unitInPool)).stream();
 

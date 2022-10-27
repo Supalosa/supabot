@@ -21,6 +21,12 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
     @Value.Immutable
     interface BaseArgs {
         /**
+         * The task for which this behaviour is being called.
+         */
+        @Value.Parameter
+        DefaultArmyTask task();
+
+        /**
          * The agent and data structures with which to operate on the game.
          */
         @Value.Parameter
@@ -39,6 +45,12 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         List<Army> enemyArmies();
 
         /**
+         * The centre of mass of the army.
+         */
+        @Value.Parameter
+        Optional<Point2d> centreOfMass();
+
+        /**
          * A periodically calculated estimate of how we are performing in the fight.
          */
         @Value.Parameter
@@ -54,19 +66,19 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
          * The region that we are currently in.
          */
         @Value.Parameter
-        Optional<Region> currentRegion();
+        Optional<RegionData> currentRegion();
 
         /**
          * The next region that we're moving to.
          */
         @Value.Parameter
-        Optional<Region> nextRegion();
+        Optional<RegionData> nextRegion();
 
         /**
          * The region that we want to end up at.
          */
         @Value.Parameter
-        Optional<Region> targetRegion();
+        Optional<RegionData> targetRegion();
     }
 
     /**
@@ -111,9 +123,8 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      *
      * @param agentWithData The agent and data structures with which to operate on the game.
      * @param currentRegionData The data for the region that we're in.
-     * @param currentRegion The current region that the army is in, or none if we can't calculate it.
      * @param nextRegion The next region to travel to, or none if we're already in the target region.
      * @return If we should move to another region.
      */
-    boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Region currentRegion, Optional<Region> nextRegion);
+    boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion);
 }

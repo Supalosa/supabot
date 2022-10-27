@@ -122,7 +122,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .alternateForm(Units.TERRAN_WIDOWMINE_BURROWED)
                     .productionAbility(Abilities.TRAIN_WIDOWMINE)
                     .producingUnitType(Units.TERRAN_FACTORY)
-                    .needsTechLab(true)
+                    .needsTechLab(false)
                     .amount(10)
                     .build()
             );
@@ -138,18 +138,43 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .alternateForm(Units.TERRAN_VIKING_ASSAULT)
                     .productionAbility(Abilities.TRAIN_VIKING_FIGHTER)
                     .producingUnitType(Units.TERRAN_STARPORT)
-                    .needsTechLab(true)
+                    .needsTechLab(false)
                     .amount(targetVikings)
                     .build()
             );
         }
-        if (numMedivacs <= armyUnits.size() * 0.1) {
-            int targetMedivacs = (int)Math.min(12, Math.ceil(armyUnits.size() * 0.1));
+        int targetRavens = data.mapAwareness().getObservedCreepCoverage().orElse(0f) > 0.5f ? 1 : 0;
+        if (targetRavens > 0) {
             result.add(ImmutableUnitTypeRequest.builder()
-                    .unitType(Units.TERRAN_MEDIVAC)
-                    .productionAbility(Abilities.TRAIN_MEDIVAC)
+                    .unitType(Units.TERRAN_RAVEN)
+                    .productionAbility(Abilities.TRAIN_RAVEN)
                     .producingUnitType(Units.TERRAN_STARPORT)
-                    .amount(targetMedivacs)
+                    .needsTechLab(false)
+                    .amount(targetRavens)
+                    .build()
+            );
+        }
+        int targetMedivacs = (int)Math.min(12, Math.ceil(armyUnits.size() * 0.1));
+        result.add(ImmutableUnitTypeRequest.builder()
+                .unitType(Units.TERRAN_MEDIVAC)
+                .productionAbility(Abilities.TRAIN_MEDIVAC)
+                .producingUnitType(Units.TERRAN_STARPORT)
+                .amount(targetMedivacs)
+                .build()
+        );
+        int targetGhosts =
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_HIGH_TEMPLAR, 0) +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_ARCHON, 0) +
+                        enemyArmy.composition().getOrDefault(Units.ZERG_INFESTOR, 0) +
+                        enemyArmy.composition().getOrDefault(Units.ZERG_QUEEN, 0) / 10;
+        if (targetGhosts > 0) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_GHOST)
+                    .productionAbility(Abilities.TRAIN_GHOST)
+                    .producingUnitType(Units.TERRAN_BARRACKS)
+                    .needsTechLab(true)
+                    .amount(targetGhosts)
                     .build()
             );
         }
