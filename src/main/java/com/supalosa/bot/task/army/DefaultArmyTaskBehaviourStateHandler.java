@@ -50,6 +50,11 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         Optional<Point2d> centreOfMass();
 
         /**
+         * Dispersion value (Root mean squared distance) of the army.
+         */
+        Optional<Double> dispersion();
+
+        /**
          * A periodically calculated estimate of how we are performing in the fight.
          */
         @Value.Parameter
@@ -68,6 +73,12 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         Optional<RegionData> currentRegion();
 
         /**
+         * The region that we came from.
+         */
+        @Value.Parameter
+        Optional<RegionData> previousRegion();
+
+        /**
          * The next region that we're moving to.
          */
         @Value.Parameter
@@ -78,6 +89,12 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
          */
         @Value.Parameter
         Optional<RegionData> targetRegion();
+
+        /**
+         * The region that we retreat to.
+         */
+        @Value.Parameter
+        Optional<RegionData> retreatRegion();
     }
 
     /**

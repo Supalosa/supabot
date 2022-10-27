@@ -43,6 +43,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private Optional<RegionData> currentRegion = Optional.empty();
     private Optional<RegionData> nextRegion = Optional.empty();
     private Optional<RegionData> targetRegion = Optional.empty();
+    private Optional<RegionData> previousRegion = Optional.empty();
     private Optional<RegionData> retreatRegion = Optional.empty();
 
     private List<Region> regionWaypoints = new ArrayList<>();
@@ -213,6 +214,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 agentWithData.mapAwareness().getRegionDataForPoint(position));
         // TODO if regrouping, is current region valid? It will end up thinking the unit is in a region halfway between
         // the clumps.
+        Optional<RegionData> previousCurrentRegion = currentRegion;
         Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> agentWithData.mapAwareness().getRegionDataForPoint(centre));
         currentRegion = currentRegionData;
 
@@ -228,6 +230,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                         (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 7.5f))
                 && shouldMoveFromRegion) {
             // Arrived at the head waypoint.
+            previousRegion = previousCurrentRegion;
             regionWaypoints.remove(0);
             if (regionWaypoints.size() > 0) {
                 waypointsCalculatedFrom = Optional.of(regionWaypoints.get(0));
@@ -316,8 +319,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 currentFightPerformance,
                 targetPosition,
                 currentRegion,
+                previousRegion,
                 nextRegion,
-                targetRegion);
+                targetRegion,
+                retreatRegion);
         if (aggressionState == AggressionState.ATTACKING) {
             newAggressionState = handleState(behaviour.getAttackHandler(), allUnits, baseArgs);
         } else if (aggressionState == AggressionState.RETREATING) {

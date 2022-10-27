@@ -510,7 +510,7 @@ public class BaseTerranTask implements BehaviourTask {
         if (agentWithData.observation().getFoodUsed() == agentWithData.observation().getFoodCap()) {
             return false;
         }
-        int neededScvs = Math.min(80, numBases * 28);
+        int neededScvs = Math.min(75, numBases * 28);
         AtomicInteger deltaScvs = new AtomicInteger(Math.max(0, neededScvs - numScvs));
         agentWithData.observation().getUnits(Alliance.SELF,
                 unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
@@ -518,7 +518,7 @@ public class BaseTerranTask implements BehaviourTask {
                 return;
             }
             if (commandCentre.unit().getOrders().isEmpty()) {
-                if (numScvs < deltaScvs.get()) {
+                if (deltaScvs.get() > 0) {
                     agentWithData.actions().unitCommand(commandCentre.unit(), Abilities.TRAIN_SCV, false);
                     deltaScvs.decrementAndGet();
                 }
