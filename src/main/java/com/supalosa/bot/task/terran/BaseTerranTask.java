@@ -13,12 +13,12 @@ import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -83,7 +83,12 @@ public class BaseTerranTask implements BehaviourTask {
             if (supply == 200) {
                 targetFactories = 4;
             }
-            tryBuildMax(agentWithData, Abilities.BUILD_FACTORY, Units.TERRAN_FACTORY, Units.TERRAN_SCV, 1, targetFactories);
+            tryBuildMax(agentWithData, Abilities.BUILD_FACTORY,
+                    Units.TERRAN_FACTORY,
+                    Units.TERRAN_SCV,
+                    1,
+                    targetFactories,
+                    Optional.of(PlacementRules.centreOfBase()));
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_FACTORY).test(unitInPool)).forEach(unit -> {
@@ -98,13 +103,22 @@ public class BaseTerranTask implements BehaviourTask {
             ));
         }
         if (supply > 70) {
-            tryBuildMax(agentWithData, Abilities.BUILD_ENGINEERING_BAY, Units.TERRAN_ENGINEERING_BAY, Units.TERRAN_SCV, 1, 2);
+            tryBuildMax(agentWithData,
+                    Abilities.BUILD_ENGINEERING_BAY,
+                    Units.TERRAN_ENGINEERING_BAY,
+                    Units.TERRAN_SCV, 1, 2,
+                    Optional.of(PlacementRules.borderOfBase()));
         }
         if (supply > 100) {
-            tryBuildMax(agentWithData, Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1);
+            tryBuildMax(agentWithData, Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1, Optional.of(PlacementRules.borderOfBase()));
         }
         if (supply > 150) {
-            tryBuildMax(agentWithData, Abilities.BUILD_GHOST_ACADEMY, Units.TERRAN_GHOST_ACADEMY, Units.TERRAN_SCV, 1, 1);
+            tryBuildMax(agentWithData,
+                    Abilities.BUILD_GHOST_ACADEMY,
+                    Units.TERRAN_GHOST_ACADEMY,
+                    Units.TERRAN_SCV,
+                    1, 1,
+                    Optional.of(PlacementRules.borderOfBase()));
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_GHOST_ACADEMY, Map.of(
                     Upgrades.PERSONAL_CLOAKING, Abilities.RESEARCH_PERSONAL_CLOAKING,
                     Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
@@ -115,7 +129,7 @@ public class BaseTerranTask implements BehaviourTask {
             if (supply == 200) {
                 targetStarports = 4;
             }
-            tryBuildMax(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 2, targetStarports);
+            tryBuildMax(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 2, targetStarports, Optional.of(PlacementRules.borderOfBase()));
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
@@ -267,32 +281,33 @@ public class BaseTerranTask implements BehaviourTask {
     }
 
     private boolean tryBuildMax(AgentWithData agentWithData, Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType,
-                                int maxParallel, int max) {
+                                int maxParallel, int max, Optional<PlacementRules> rules) {
         if (countUnitType(unitTypeForStructure) < max) {
             return tryBuildStructure(agentWithData, abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
-                    Optional.empty());
+                    Optional.empty(), rules);
         }
         return false;
     }
 
     private boolean tryBuildStructure(AgentWithData agentWithData,
                                       Ability abilityTypeForStructure, UnitType unitTypeForStructure,
-                                      UnitType unitType, int maxParallel, Optional<Point2d> specificPosition) {
+                                      UnitType unitType, int maxParallel, Optional<Point2d> specificPosition,
+                                      Optional<PlacementRules> rules) {
         return _tryBuildStructure(agentWithData, abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
-                specificPosition, Optional.empty());
+                specificPosition, Optional.empty(), rules);
     }
 
     private boolean tryBuildStructureAtTarget(AgentWithData agentWithData,
                                               Ability abilityTypeForStructure, UnitType unitTypeForStructure,
                                               UnitType unitType, int maxParallel, Optional<Unit> specificTarget) {
         return _tryBuildStructure(agentWithData, abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
-                Optional.empty(), specificTarget);
+                Optional.empty(), specificTarget, Optional.empty());
     }
 
     private boolean _tryBuildStructure(AgentWithData agentWithData,
                                        Ability abilityTypeForStructure, UnitType unitTypeForStructure,
                                        UnitType unitType, int maxParallel, Optional<Point2d> specificPosition,
-                                       Optional<Unit> specificTarget) {
+                                       Optional<Unit> specificTarget, Optional<PlacementRules> rules) {
         // hack
         if (needsCommandCentre(agentWithData) && (unitTypeForStructure != Units.TERRAN_COMMAND_CENTER)) {
             return false;
@@ -304,7 +319,7 @@ public class BaseTerranTask implements BehaviourTask {
                 specificTarget,
                 agentWithData.gameData().getUnitMineralCost(unitTypeForStructure),
                 agentWithData.gameData().getUnitVespeneCost(unitTypeForStructure),
-                Optional.empty());
+                rules);
         if (agentWithData.taskManager().addTask(maybeTask, maxParallel)) {
             long gameLoop = agentWithData.observation().getGameLoop();
             long currentMinerals = agentWithData.observation().getMinerals();
@@ -375,7 +390,7 @@ public class BaseTerranTask implements BehaviourTask {
         int maxParallel = Math.max(1, agentWithData.observation().getMinerals() / 150);
 
         return tryBuildStructure(agentWithData, Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, Units.TERRAN_SCV, maxParallel,
-                position);
+                position, Optional.of(PlacementRules.centreOfBase()));
     }
 
     private int countUnitType(UnitType... unitType) {
@@ -448,9 +463,6 @@ public class BaseTerranTask implements BehaviourTask {
             agentWithData.actions().sendChat("Valid Expansions missing or empty", ActionChat.Channel.TEAM);
             return false;
         }
-        if (agentWithData.observation().getMinerals() < 400) {
-            return false;
-        }
         long gameLoop = agentWithData.observation().getGameLoop();
         for (Expansion validExpansionLocation : agentWithData.mapAwareness().getValidExpansionLocations().get()) {
             if (tryBuildStructure(agentWithData,
@@ -458,7 +470,7 @@ public class BaseTerranTask implements BehaviourTask {
                     Units.TERRAN_COMMAND_CENTER,
                     Units.TERRAN_SCV,
                     1,
-                    Optional.of(validExpansionLocation.position().toPoint2d()))) {
+                    Optional.of(validExpansionLocation.position().toPoint2d()), Optional.of(PlacementRules.expansion()))) {
                 agentWithData.mapAwareness().onExpansionAttempted(validExpansionLocation, gameLoop);
                 lastExpansionTime = gameLoop;
                 System.out.println("Attempting to build command centre at " + validExpansionLocation);
@@ -501,7 +513,7 @@ public class BaseTerranTask implements BehaviourTask {
         }
         long numCc = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
         return tryBuildStructure(agentWithData, Abilities.BUILD_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SCV,
-                (int) Math.min(3, numCc), position);
+                (int) Math.min(3, numCc), position, Optional.of(PlacementRules.borderOfBase()));
     }
 
     private boolean tryBuildScvs(AgentWithData agentWithData) {

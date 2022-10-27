@@ -155,7 +155,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .build()
             );
         }
-        int targetMedivacs = (int)Math.min(12, Math.ceil(armyUnits.size() * 0.1));
+        int targetMedivacs = (int)Math.min(10, Math.ceil(armyUnits.size() * 0.5));
         result.add(ImmutableUnitTypeRequest.builder()
                 .unitType(Units.TERRAN_MEDIVAC)
                 .productionAbility(Abilities.TRAIN_MEDIVAC)

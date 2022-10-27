@@ -472,7 +472,7 @@ public class StructurePlacementCalculator {
                 .map(Point::toPoint2d);
     }
 
-    private static final int MAX_FREE_PLACEMENT_ITERATIONS = 40;
+    private static final int MAX_FREE_PLACEMENT_ITERATIONS = 80;
     private static final int MAX_ADJACENT_PLACEMENT_ITERATIONS = 10;
     private static final int DEFAULT_MAX_PLACEMENT_VARIATION = 20;
 

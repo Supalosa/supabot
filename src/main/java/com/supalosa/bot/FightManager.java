@@ -203,13 +203,6 @@ public class FightManager {
         if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
             // Enemy detected near our base, attack them.
             defencePosition = nearestEnemy;
-        } else {
-            defencePosition = data.structurePlacementCalculator().flatMap(spc -> {
-                // Defend from behind the barracks, or else the position of the barracks.
-                return spc.getMainRamp()
-                        .map(ramp -> ramp.projection(5.0f))
-                        .orElse(spc.getFirstBarracksWithAddonLocation());
-            });
         }
 
         Optional<Army> attackingEnemyArmy = data.enemyAwareness().getMaybeEnemyArmy(nearestEnemy.get());
@@ -222,6 +215,13 @@ public class FightManager {
                 // This stops the defending army from mindlessly running to fight.
                 defencePosition = Optional.empty();
             }
+        } else {
+            defencePosition = data.structurePlacementCalculator().flatMap(spc -> {
+                // Defend from behind the barracks, or else the position of the barracks.
+                return spc.getMainRamp()
+                        .map(ramp -> ramp.projection(5.0f))
+                        .orElse(spc.getFirstBarracksWithAddonLocation());
+            });
         }
 
         if (attackPosition.isEmpty()) {
