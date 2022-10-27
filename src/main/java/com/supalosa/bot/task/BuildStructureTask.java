@@ -229,7 +229,7 @@ public class BuildStructureTask extends BaseTask {
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
         // This should probably be a preidcate associated to the PlacementRules it itself.
         boolean nearBaseOnly = placementRules
-                .map(rule -> rule.regionType().equals(PlacementRules.Region.PLAYER_BASE_ANY))
+                .map(rule -> rule.regionType().isPlayerBase())
                 .orElse(false);
         if (location.isPresent()) {
             // If location is known, find closest unit to that location.
@@ -239,6 +239,7 @@ public class BuildStructureTask extends BaseTask {
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            !UnitInPool.isCarryingMinerals().test(unitInPool) &&
                             !UnitInPool.isCarryingVespene().test(unitInPool),
                     Comparator.comparing((UnitInPool unitInPool) ->
                             unitInPool.unit().getPosition().toPoint2d().distance(location.get()))
@@ -253,6 +254,7 @@ public class BuildStructureTask extends BaseTask {
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            !UnitInPool.isCarryingMinerals().test(unitInPool) &&
                             !UnitInPool.isCarryingVespene().test(unitInPool) &&
                             data.mapAwareness()
                                     .getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())

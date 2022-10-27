@@ -11,27 +11,44 @@ public interface PlacementRules {
         /**
          * Place it in any player owned region.
          */
-        PLAYER_BASE_ANY,
+        PLAYER_BASE_ANY(true),
         /**
          * Place it on the border of the player base.
          */
-        PLAYER_BASE_BORDER,
+        PLAYER_BASE_BORDER(true),
+        /**
+         * Place it on the centre of the player base.
+         */
+        PLAYER_BASE_CENTRE(true),
         /**
          * Place it on an expansion only.
          */
-        EXPANSION,
+        EXPANSION(true),
         /**
          * Place it on the terran ramp.
          */
-        MAIN_RAMP_SUPPLY_DEPOT_1,
+        MAIN_RAMP_SUPPLY_DEPOT_1(true),
         /**
          * Place it on the terran ramp.
          */
-        MAIN_RAMP_SUPPLY_DEPOT_2,
+        MAIN_RAMP_SUPPLY_DEPOT_2(true),
         /**
          * Place it on the terran ramp with space for the addon.
          */
-        MAIN_RAMP_BARRACKS_WITH_ADDON,
+        MAIN_RAMP_BARRACKS_WITH_ADDON(true);
+
+        private boolean playerBase;
+
+        Region(boolean playerBase) {
+            this.playerBase = playerBase;
+        }
+
+        /**
+         * True if the worker must be pulled from a player base.
+         */
+        public boolean isPlayerBase() {
+            return this.playerBase;
+        }
     }
 
     Region regionType();
@@ -50,6 +67,10 @@ public interface PlacementRules {
 
     static PlacementRules borderOfBase() {
         return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_BORDER).maxVariation(20).build();
+    }
+
+    static PlacementRules centreOfBase() {
+        return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_CENTRE).maxVariation(20).build();
     }
 
     static PlacementRules inBaseNear(UnitType unitType) {

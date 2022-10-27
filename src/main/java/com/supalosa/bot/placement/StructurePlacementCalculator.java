@@ -431,6 +431,7 @@ public class StructurePlacementCalculator {
         switch (region) {
             case PLAYER_BASE_ANY:
             case PLAYER_BASE_BORDER:
+            case PLAYER_BASE_CENTRE:
                 suggestedLocation = findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data);
                 break;
             case EXPANSION:
@@ -487,63 +488,69 @@ public class StructurePlacementCalculator {
             return myStructurePoint2d.distance(origin) < actualSearchRadius;
         }).collect(Collectors.toList());
         PlacementRules.Region placementRegion = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.PLAYER_BASE_ANY);
-        if (placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER) {
+        if (placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER || placementRegion == PlacementRules.Region.PLAYER_BASE_CENTRE) {
             // Repeatedly test until we find a position at the minimum distance from the border of the region.
             Optional<Region> maybeRegion = data.mapAwareness().getRegionDataForPoint(origin).map(RegionData::region);
             if (maybeRegion.isEmpty()) {
                 return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
                         nearbyStructures);
             } else {
-                Region region = maybeRegion.get();
-                Pair<Point2d, Point2d> bounds = region.regionBounds();
-                Point2d bottomLeftBound = bounds.getLeft();
-                Point2d topRightBound = bounds.getRight();
-                int minDistanceFromBorder = Integer.MAX_VALUE;
-                Optional<Point2d> minDistanceCandidate = Optional.empty();
-                // Start at the middle of the region and start walking towards the border.
-                final Point2d startPoint = region.centrePoint();
-                Point2d testPoint = startPoint;
-                for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
-                    Point2d thisPoint = testPoint;
-                    Optional<Tile> thisTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(thisPoint));
-                    if (thisTile.isEmpty()) {
-                        testPoint = startPoint;
-                        continue;
-                    }
-                    if (canPlaceAt(testPoint, structureWidth, structureWidth)) {
-                        int distance = thisTile.get().distanceToBorder;
-                        if (distance < minDistanceFromBorder) {
-                            minDistanceFromBorder = distance;
-                            minDistanceCandidate = Optional.of(thisPoint);
-                        }
-                    }
-                    // Walk randomly towards a point with lower height.
-                    List<Point2d> candidates = new ArrayList<>();
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        for (int dy = -1; dy <= 1; ++dy) {
-                            Point2d maybePoint = testPoint.add(dx, dy);
-                            if (region.getTiles().contains(maybePoint)) {
-                                Optional<Tile> nextTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(maybePoint));
-                                nextTile.ifPresent(tile -> {
-                                    if (tile.distanceToBorder < thisTile.get().distanceToBorder) {
-                                        candidates.add(maybePoint);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                    if (candidates.isEmpty()) {
-                        testPoint = startPoint;
-                    } else {
-                        testPoint = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-                    }
-                }
-                return minDistanceCandidate;
+                return findPlacementRelativeToBorder(structureWidth, data, maybeRegion, placementRegion);
             }
         } else {
             return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
                     nearbyStructures);
         }
+    }
+
+    private Optional<Point2d> findPlacementRelativeToBorder(int structureWidth, AgentData data, Optional<Region> maybeRegion, PlacementRules.Region placementRegion) {
+        Region region = maybeRegion.get();
+        Pair<Point2d, Point2d> bounds = region.regionBounds();
+        Point2d bottomLeftBound = bounds.getLeft();
+        Point2d topRightBound = bounds.getRight();
+        int bestCandidateScore = Integer.MIN_VALUE;
+        Optional<Point2d> bestCandidate = Optional.empty();
+        // Start at the middle of the region and start walking towards the border.
+        final Point2d startPoint = region.centrePoint();
+        Point2d testPoint = startPoint;
+        for (int i = 0; i < MAX_FREE_PLACEMENT_ITERATIONS; ++i) {
+            Point2d thisPoint = testPoint;
+            Optional<Tile> thisTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(thisPoint));
+            if (thisTile.isEmpty()) {
+                testPoint = startPoint;
+                continue;
+            }
+            if (canPlaceAt(testPoint, structureWidth, structureWidth)) {
+                int score = placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER ?
+                        -thisTile.get().distanceToBorder :
+                        thisTile.get().distanceToBorder;
+                if (score > bestCandidateScore) {
+                    bestCandidateScore = score;
+                    bestCandidate = Optional.of(thisPoint);
+                }
+            }
+            // Walk randomly towards a point with lower distance to border (since we reset at the middle)
+            List<Point2d> candidates = new ArrayList<>();
+            for (int dx = -1; dx <= 1; ++dx) {
+                for (int dy = -1; dy <= 1; ++dy) {
+                    Point2d maybePoint = testPoint.add(dx, dy);
+                    if (region.getTiles().contains(maybePoint)) {
+                        Optional<Tile> nextTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(maybePoint));
+                        nextTile.ifPresent(tile -> {
+                            if (tile.distanceToBorder < thisTile.get().distanceToBorder) {
+                                candidates.add(maybePoint);
+                            }
+                        });
+                    }
+                }
+            }
+            if (candidates.isEmpty()) {
+                testPoint = startPoint;
+            } else {
+                testPoint = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+            }
+        }
+        return bestCandidate;
     }
 
     private Optional<Point2d> findAnyPlacement(Point2d origin, int structureWidth, int structureHeight,
