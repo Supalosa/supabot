@@ -48,6 +48,11 @@ public interface ArmyTask extends TaskWithUnits {
     Optional<Point2d> getCentreOfMass();
 
     /**
+     * Returns the dispersion of the army (root-mean-squared-distance).
+     */
+    Optional<Double> getDispersion();
+
+    /**
      * Returns the position that this army is trying to move to.
      */
     Optional<Point2d> getTargetPosition();

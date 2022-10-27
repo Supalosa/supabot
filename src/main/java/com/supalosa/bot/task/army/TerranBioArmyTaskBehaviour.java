@@ -3,26 +3,18 @@ package com.supalosa.bot.task.army;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
-import com.supalosa.bot.Constants;
-import com.supalosa.bot.analysis.Region;
-import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.task.terran.ImmutableScanRequestTaskMessage;
 import com.supalosa.bot.utils.Point2dMap;
-import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
-import org.danilopianini.util.FlexibleQuadTree;
-import org.danilopianini.util.SpatialIndex;
 import org.immutables.value.Value;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -177,7 +169,8 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                 retreatPosition.ifPresent(retreatPoint2d -> {
                     args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
                 });
-            } else if (unit.getType() == Units.TERRAN_WIDOWMINE) {
+            }
+            if (unit.getType() == Units.TERRAN_WIDOWMINE) {
                 Optional<Point2d> nearestEnemyUnit = context
                         .enemyUnitMap()
                         .getNearestInRadius(unit.getPosition().toPoint2d(), 10f)
@@ -223,8 +216,8 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion) {
-            return currentRegionData.hasEnemyBase() == false;
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
+            return dispersion.orElse(0.0) <= 2.0 && currentRegionData.hasEnemyBase() == false;
         }
     }
 
@@ -305,7 +298,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
             return true;
         }
     }
@@ -332,7 +325,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
             return true;
         }
     }
@@ -370,7 +363,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
             return true;
         }
     }

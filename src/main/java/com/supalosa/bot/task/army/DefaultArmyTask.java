@@ -9,7 +9,6 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
@@ -38,6 +37,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private Optional<Point2d> targetPosition = Optional.empty();
     private Optional<Point2d> retreatPosition = Optional.empty();
     private Optional<Point2d> centreOfMass = Optional.empty();
+    private Optional<Double> dispersion;
 
     private AggressionState aggressionState = AggressionState.REGROUPING;
     private Optional<RegionData> currentRegion = Optional.empty();
@@ -124,12 +124,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     @Override
     public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         super.onStep(taskManager, agentWithData);
-        List<Point2d> armyPositions = new ArrayList<>();
         List<Unit> allUnits = new ArrayList<>();
         for (Tag tag : armyUnits) {
             UnitInPool unit = agentWithData.observation().getUnit(tag);
             if (unit != null) {
-                armyPositions.add(unit.unit().getPosition().toPoint2d());
                 allUnits.add(unit.unit());
             }
         }
@@ -156,7 +154,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         }
 
         if (gameLoop > nextArmyLogicUpdateAt) {
-            nextArmyLogicUpdateAt = gameLoop + armyLogicUpdate(agentWithData, armyPositions, allUnits);
+            nextArmyLogicUpdateAt = gameLoop + armyLogicUpdate(agentWithData, allUnits);
         }
 
         // Handle pathfinding.
@@ -218,10 +216,17 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> agentWithData.mapAwareness().getRegionDataForPoint(centre));
         currentRegion = currentRegionData;
 
+        final boolean shouldMoveFromRegion = currentRegion
+                .filter(region -> region.equals(regionWaypoints.stream().findFirst()))
+                .map(region -> getBehaviourHandlerForState().shouldMoveFromRegion(
+                    agentWithData,
+                    region,
+                    nextRegion, dispersion)).orElse(false);
+
         if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
                 currentRegion.get().equals(regionWaypoints.get(0)) ||
                         (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 7.5f))
-                && getBehaviourHandlerForState().shouldMoveFromRegion(agentWithData, currentRegionData.get(), nextRegion)) {
+                && shouldMoveFromRegion) {
             // Arrived at the head waypoint.
             regionWaypoints.remove(0);
             if (regionWaypoints.size() > 0) {
@@ -229,11 +234,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             }
         }
         if (currentRegion.equals(targetRegion) &&
-                (currentRegionData.isEmpty() ||
-                        getBehaviourHandlerForState().shouldMoveFromRegion(
-                                agentWithData,
-                                currentRegionData.get(),
-                                nextRegion))) {
+                (currentRegionData.isEmpty() || shouldMoveFromRegion)) {
             // Finished path.
             waypointsCalculatedTo = Optional.empty();
             waypointsCalculatedFrom = Optional.empty();
@@ -266,13 +267,28 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
      *
      * @return
      */
-    private long armyLogicUpdate(AgentWithData agentWithData, List<Point2d> armyPositions, List<Unit> allUnits) {
-        OptionalDouble averageX = armyPositions.stream().mapToDouble(point -> point.getX()).average();
-        OptionalDouble averageY = armyPositions.stream().mapToDouble(point -> point.getY()).average();
-        centreOfMass = Optional.empty();
-        if (averageX.isPresent() && averageY.isPresent()) {
-            centreOfMass = Optional.of(Point2d.of((float) averageX.getAsDouble(), (float) averageY.getAsDouble()));
+    private long armyLogicUpdate(AgentWithData agentWithData, List<Unit> allUnits) {
+        // Calculated weighted centre of mass based on the unit's maximum HP.
+        // Note: Max is used here to avoid unwanted shifting when part of the army is low on HP.
+        final float defaultHealth = 1f;
+        OptionalDouble sumHp = allUnits.stream().mapToDouble(unit -> unit.getHealthMax().orElse(defaultHealth)).average();
+        OptionalDouble averageX = allUnits.stream().mapToDouble(unit ->
+                unit.getHealthMax().orElse(defaultHealth) * unit.getPosition().toPoint2d().getX()).average();
+        OptionalDouble averageY = allUnits.stream().mapToDouble(unit ->
+                unit.getHealthMax().orElse(defaultHealth) * unit.getPosition().toPoint2d().getY()).average();
+
+        if (averageX.isPresent() && averageY.isPresent() && sumHp.isPresent()) {
+            Point2d calculatedCentreOfMass = Point2d.of((float) averageX.getAsDouble(), (float) averageY.getAsDouble()).div(
+                    (float)sumHp.getAsDouble());
+            centreOfMass = Optional.of(calculatedCentreOfMass);
+            double rmsSum = 0;
+            rmsSum = allUnits.stream().mapToDouble(unit -> unit.getPosition().toPoint2d().distance(calculatedCentreOfMass)).sum();
+            dispersion = Optional.of(Math.sqrt(rmsSum / allUnits.size()));
+        } else {
+            centreOfMass = Optional.empty();
+            dispersion = Optional.empty();
         }
+        // Calculated the root mean squared distance.
         if (waypointsCalculatedTo.isPresent() && regionWaypoints.size() > 0) {
             nextRegion = regionWaypoints.stream().findFirst().flatMap(region ->
                     agentWithData.mapAwareness().getRegionDataForId(region.regionId()));
@@ -416,8 +432,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         centreOfMass.ifPresent(point2d -> {
             float z = agent.observation().terrainHeight(point2d);
             Point point = Point.of(point2d.getX(), point2d.getY(), z);
-            agent.debug().debugSphereOut(point, aggressionState == AggressionState.REGROUPING ? 5f : 10f, Color.YELLOW);
-            agent.debug().debugTextOut(this.armyName, point, Color.WHITE, 8);
+            agent.debug().debugSphereOut(point, Math.max(1f, dispersion.orElse(1.0).floatValue()), Color.YELLOW);
+            agent.debug().debugTextOut(this.armyName + " (Dispersion: " + dispersion.orElse(1.0) + ")", point, Color.WHITE, 8);
         });
         targetPosition.ifPresent(point2d -> {
             float z = agent.observation().terrainHeight(point2d);
@@ -461,6 +477,11 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     @Override
     public Optional<Point2d> getCentreOfMass() {
         return centreOfMass;
+    }
+
+    @Override
+    public Optional<Double> getDispersion() {
+        return dispersion;
     }
 
     @Override

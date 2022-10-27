@@ -3,7 +3,6 @@ package com.supalosa.bot.task.army;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
-import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.RegionData;
 import org.immutables.value.Value;
@@ -124,7 +123,8 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      * @param agentWithData The agent and data structures with which to operate on the game.
      * @param currentRegionData The data for the region that we're in.
      * @param nextRegion The next region to travel to, or none if we're already in the target region.
+     * @param dispersion The dispersion of the army, which is the root mean squared distance.
      * @return If we should move to another region.
      */
-    boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion);
+    boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion);
 }
