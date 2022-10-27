@@ -24,7 +24,7 @@ public class TerranMicro {
         if (args.fightPerformance() == FightPerformance.STABLE) {
             stutterRadius = 7.5f;
         } else if (args.fightPerformance() == FightPerformance.WINNING) {
-            stutterRadius = 3f;
+            stutterRadius = 1.5f;
         }
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
             // Off weapon cooldown.
