@@ -7,6 +7,7 @@ import org.danilopianini.util.SpatialIndex;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -73,6 +74,20 @@ public class Point2dMap<T>  {
         return internalGetStreamInRadius(point, radius)
                 .filter(result -> filter.test(result.item))
                 .min(Comparator.comparing(result -> result.distance))
+                .map(result -> result.item);
+    }
+
+    /**
+     * Return the result with the highest 'score' given a mapping function that takes the item
+     * and the distance to that item.
+     */
+    public Optional<T> getHighestScoreInRadius(Point2d point,
+                                               double radius,
+                                               Predicate<T> filter,
+                                               BiFunction<T, Double, Double> mapper) {
+        return internalGetStreamInRadius(point, radius)
+                .filter(result -> filter.test(result.item))
+                .max(Comparator.comparing(result -> mapper.apply(result.item, result.distance)))
                 .map(result -> result.item);
     }
 }

@@ -74,15 +74,21 @@ public class TerranMicro {
         float stutterRadius = 9f;
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
             // Off weapon cooldown.
-            goalPosition.ifPresent(position -> {
-                if (args.currentRegion().equals(args.targetRegion())) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
-                } else if (args.nextRegion().isPresent()) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().region().centrePoint(), false);
-                } else {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
-                }
-            });
+            Optional<Unit> bestTarget = enemyUnitMap
+                    .getHighestScoreInRadius(unit.getPosition().toPoint2d(),12f,
+                            enemy -> Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES.contains(enemy.getType()),
+                            (enemy, distance) -> distance);
+            bestTarget.ifPresentOrElse(
+                    target -> args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, target, false),
+                    () -> goalPosition.ifPresent(position -> {
+                        if (args.currentRegion().equals(args.targetRegion())) {
+                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+                        } else if (args.nextRegion().isPresent()) {
+                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().region().centrePoint(), false);
+                        } else {
+                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+                        }
+                    }));
         } else {
             // On weapon cooldown.
             Optional<Point2d> nearestEnemyUnit = enemyUnitMap

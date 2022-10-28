@@ -138,6 +138,25 @@ public class Constants {
             Units.PROTOSS_PHOTON_CANNON);
 
 
+    /**
+     * Things that should be focus-fired by antiair units like Vikings.
+     */
+    public static Set<UnitType> ANTIAIR_ATTACKABLE_UNIT_TYPES = Set.of(
+            Units.PROTOSS_COLOSSUS,
+            Units.PROTOSS_CARRIER,
+            Units.PROTOSS_ORACLE,
+            Units.PROTOSS_TEMPEST,
+            Units.PROTOSS_PHOENIX,
+            Units.TERRAN_LIBERATOR,
+            Units.TERRAN_LIBERATOR_AG,
+            Units.TERRAN_BANSHEE,
+            Units.TERRAN_VIKING_FIGHTER,
+            Units.ZERG_MUTALISK,
+            Units.ZERG_BROODLORD,
+            Units.ZERG_CORRUPTOR
+    );
+
+
     public static Set<UnitType> ANTI_AIR_UNIT_TYPES = Set.of(
             Units.PROTOSS_STALKER,
             Units.PROTOSS_ARCHON,
