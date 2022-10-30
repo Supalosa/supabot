@@ -387,7 +387,7 @@ public class BaseTerranTask implements BehaviourTask {
                     .getFirstBarracksWithAddonLocation();
         }
 
-        int maxParallel = Math.max(1, agentWithData.observation().getMinerals() / 150);
+        int maxParallel = Math.max(1, Math.min(2, agentWithData.observation().getMinerals() / 150));
 
         return tryBuildStructure(agentWithData, Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, Units.TERRAN_SCV, maxParallel,
                 position, Optional.of(PlacementRules.centreOfBase()));

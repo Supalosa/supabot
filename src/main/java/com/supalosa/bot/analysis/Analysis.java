@@ -9,11 +9,12 @@ import com.google.common.collect.SetMultimap;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
-import org.apache.logging.log4j.util.TriConsumer;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class Analysis {
@@ -453,24 +454,26 @@ public class Analysis {
         });
         Set<Tile> alreadyEnqueued = new HashSet<>();
         SetMultimap<Integer, Integer> connectedRegions = HashMultimap.create();
-        final TriConsumer<Integer, Tile, Tile> maybeEnqueue = (regionId, originTile, tile) -> {
-            if (tile.regionId != -1 && tile.regionId != regionId) {
+        final BiConsumer<Integer, Pair<Tile, Tile>> maybeEnqueue = (regionId, tiles) -> {
+            Tile originTile = tiles.getLeft();
+            Tile destinationTile = tiles.getRight();
+            if (destinationTile.regionId != -1 && destinationTile.regionId != regionId) {
                 // Found a connection.
-                connectedRegions.put(tile.regionId, regionId);
-                connectedRegions.put(regionId, tile.regionId);
+                connectedRegions.put(destinationTile.regionId, regionId);
+                connectedRegions.put(regionId, destinationTile.regionId);
                 allBorderTiles.put(originTile.regionId, originTile);
-                allBorderTiles.put(tile.regionId, tile);
+                allBorderTiles.put(destinationTile.regionId, destinationTile);
             }
-            if (alreadyEnqueued.contains(tile)) {
+            if (alreadyEnqueued.contains(destinationTile)) {
                 return;
             }
-            if (tile.distanceToBorder == 0) {
+            if (destinationTile.distanceToBorder == 0) {
                 return;
             }
-            if (tile.regionId == -1) {
-                tile.regionId = regionId;
-                alreadyEnqueued.add(tile);
-                queue.add(tile);
+            if (destinationTile.regionId == -1) {
+                destinationTile.regionId = regionId;
+                alreadyEnqueued.add(destinationTile);
+                queue.add(destinationTile);
             }
         };
         // Floodfill to expand the regions.
@@ -479,14 +482,14 @@ public class Analysis {
             regions.put(head.regionId, head);
             regionIdToCumulativeHeight.put(head.regionId,
                     regionIdToCumulativeHeight.getOrDefault(head.regionId, 0) + head.terrain);
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x - 1, head.y - 1));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x, head.y - 1));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x + 1, head.y - 1));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x - 1, head.y));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x + 1, head.y));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x - 1, head.y + 1));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x, head.y + 1));
-            maybeEnqueue.accept(head.regionId, head, grid.get(head.x + 1, head.y + 1));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x - 1, head.y - 1)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x, head.y - 1)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x + 1, head.y - 1)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x - 1, head.y)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x + 1, head.y)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x - 1, head.y + 1)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x, head.y + 1)));
+            maybeEnqueue.accept(head.regionId, Pair.of(head, grid.get(head.x + 1, head.y + 1)));
         }
         Map<Integer, Integer> regionIdToAverageHeight = new HashMap<>();
         regionIdToCumulativeHeight.forEach((regionId, cumulativeHeight) -> {

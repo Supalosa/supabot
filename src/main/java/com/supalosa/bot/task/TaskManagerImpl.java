@@ -46,6 +46,12 @@ public class TaskManagerImpl implements TaskManager {
     }
 
     @Override
+    public void releaseUnit(Tag unit, Task task) {
+        if (unitToTaskMap.get(unit) == task) {
+            unitToTaskMap.remove(unit);
+        }
+    }
+    @Override
     public void reserveUnit(Optional<Tag> unit, Task task) {
         if (unit.isPresent()) {
             reserveUnit(unit.get(), task);
@@ -170,9 +176,13 @@ public class TaskManagerImpl implements TaskManager {
 
     @Override
     public void debug(S2Agent agent) {
-        agent.debug().debugTextOut("Tasks (" + taskSet.size() + ")", Point2d.of(0.01f, 0.0f), Color.WHITE, 8);
-        final float spacing = 0.0125f;
         float yPosition = 0.01f;
+        final float spacing = 0.0125f;
+        agent.debug().debugTextOut("ResMin: " + totalReservedMinerals() + ", ResVes: " + totalReservedVespene(),
+                Point2d.of(0.01f, yPosition), Color.WHITE, 8);
+        yPosition += spacing;
+        agent.debug().debugTextOut("Tasks (" + taskSet.size() + ")", Point2d.of(0.01f, yPosition), Color.WHITE, 8);
+        yPosition += spacing;
         for (Map.Entry<String, Task> entry : taskSet.entrySet()) {
             Task task = entry.getValue();
             task.debug(agent);

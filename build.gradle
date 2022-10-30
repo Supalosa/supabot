@@ -8,6 +8,7 @@ version '0.1-SNAPSHOT'
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 jar {
@@ -41,8 +42,11 @@ dependencies {
 
     implementation 'org.jgrapht:jgrapht-core:1.5.1'
     implementation("com.google.guava:guava:31.1-jre")
-    implementation 'com.github.ocraft:ocraft-s2client-bot:0.4.9'
-    compileOnly 'com.github.ocraft:ocraft-s2client-api:0.4.9'
+    implementation 'com.github.ocraft:ocraft-s2client-bot:0.4.10-SNAPSHOT'
+    compileOnly 'com.github.ocraft:ocraft-s2client-api:0.4.10-SNAPSHOT'
+    //implementation files("ocraft-s2client-bot-0.4.10-SNAPSHOT.jar")
+    //implementation files("ocraft-s2client-protocol-0.4.10-SNAPSHOT.jar")
+    //implementation files("ocraft-s2client-api-0.4.10-SNAPSHOT.jar")
     implementation 'org.apache.commons:commons-lang3:3.12.0'
 
     implementation 'org.danilopianini:java-quadtree:0.2.0'

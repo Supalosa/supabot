@@ -46,6 +46,14 @@ public interface TaskManager {
     void reserveUnit(Optional<Tag> unit, Task task);
 
     /**
+     * Release a unit, as long as the provided Task matches the task the unit is assigned to.
+     *
+     * @param unit The unit to release
+     * @param task The task the unit should have been assigned to.
+     */
+    void releaseUnit(Tag unit, Task task);
+
+    /**
      * Finds a free unit that is not reserved. It will be reserved for the task until that task is complete.
      *
      * @param observationInterface Interface to test with.

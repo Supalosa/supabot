@@ -54,6 +54,10 @@ public class BuildStructureTask extends BaseTask {
     private long buildAttempts = 0;
     private boolean isComplete = false;
 
+    // Whether the order has been dispatched. This can go back to false if the worker dies or the construction site
+    // is destroyed.
+    private boolean isInProgress = false;
+
     private boolean isSuccess = false;
     private boolean aborted = false;
 
@@ -79,6 +83,7 @@ public class BuildStructureTask extends BaseTask {
         if (aborted) {
             isComplete = true;
             onFailure();
+            // Cancel the construction.
             if (assignedWorker.isPresent()) {
                 agentWithData.actions().unitCommand(assignedWorker.get(), Abilities.STOP, false);
             }
@@ -87,7 +92,9 @@ public class BuildStructureTask extends BaseTask {
         Optional<UnitInPool> worker = Optional.empty();
         long gameLoop = agentWithData.observation().getGameLoop();
         if (assignedWorker.isEmpty()) {
+            // No worker for the job - find one.
             if (gameLoop > nextAssignedWorkerAttempt) {
+                nextAssignedWorkerAttempt = gameLoop + 5L;
                 assignedWorker = findWorker(taskManager, agentWithData, agentWithData, placementRules);
                 // Resume the construction if applicable.
                 assignedWorker.ifPresent(theWorker -> {
@@ -100,6 +107,8 @@ public class BuildStructureTask extends BaseTask {
                 });
             }
         } else {
+            // Validate the assigned worker or the action.
+            // Check if the builder had an action error, then respond accordingly.
             agentWithData.observation().getActionErrors().stream().forEach(actionError -> {
                 if (assignedWorker.isPresent() && actionError.getUnitTag().equals(assignedWorker)) {
                     System.out.println("Assigned builder had an action error: " + actionError.getActionResult());
@@ -117,13 +126,12 @@ public class BuildStructureTask extends BaseTask {
                         return;
                     }
                 }
-                if (actionError.getActionResult() == ActionResult.CANT_FIND_PLACEMENT_LOCATION) {
-                    return;
-                }
             });
-            worker = assignedWorker
-                    .map(assignedWorkerTag -> agentWithData.observation().getUnit(assignedWorkerTag));
+            // Check if the worker still exists (maybe it died).
+            worker = assignedWorker.map(assignedWorkerTag ->
+                    agentWithData.observation().getUnit(assignedWorkerTag));
             if (worker.isEmpty()) {
+                // NOTE: a worker going into the vespene geyser also triggers this.
                 if (assignedWorker.isPresent()) {
                     // Worker was assigned but not found - the worker probably died.
                     ++buildAttempts;
@@ -134,7 +142,15 @@ public class BuildStructureTask extends BaseTask {
             }
         }
         if (worker.isPresent() && location.isEmpty()) {
+            // If we have a worker, find a location to place the structure.
             location = resolveLocation(worker.get(), agentWithData);
+            if (location.isEmpty()) {
+                // Try another worker.
+                taskManager.releaseUnit(worker.get().getTag(), this);
+                worker = Optional.empty();
+                assignedWorker = Optional.empty();
+                ++numWorkersUsed;
+            }
         }
         if (matchingUnitAtLocation.isEmpty()) {
             Optional<UnitInPool> finalWorker = worker;
@@ -158,6 +174,7 @@ public class BuildStructureTask extends BaseTask {
             );
             matchingUnitAtLocation = matchingUnits.stream().findFirst().map(unitInPool -> unitInPool.getTag());
         } else {
+            // Check the structure still exists.
             matchingUnitAtLocation = matchingUnitAtLocation.filter(tag -> agentWithData.observation().getUnit(tag) != null);
         }
 
@@ -222,8 +239,12 @@ public class BuildStructureTask extends BaseTask {
                 }
             }
         }
-        //System.out.println("Onstep for task " + targetUnitType.toString() + " (Worker: " + worker + ",
-        // MatchingUnit: " + matchingUnitAtLocation + ")");
+        if ((worker.isPresent() && matchingUnitAtLocation.isPresent()) ||
+                worker.filter(this::isWorkerOrderQueued).isPresent()) {
+            isInProgress = true;
+        } else {
+            isInProgress = false;
+        }
     }
 
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
@@ -245,7 +266,7 @@ public class BuildStructureTask extends BaseTask {
                             unitInPool.unit().getPosition().toPoint2d().distance(location.get()))
             ).map(unitInPool -> unitInPool.getTag());
         } else if (nearBaseOnly) {
-            // If the placement rules require the structure in the base, search near the base only.
+            // If the placement rules require the structure in the base, choose a worker in a player base only.
             Point2d baseLocation = data.mapAwareness()
                     .getDefenceLocation()
                     .orElse(agent.observation().getStartLocation().toPoint2d());
@@ -287,8 +308,6 @@ public class BuildStructureTask extends BaseTask {
                 .map(maybePosition -> maybePosition.map(point -> point.toPoint2d()))
                 .findFirst()
                 .orElse(Optional.empty());
-
-
     }
 
     private Optional<Point2d> resolveLocation(UnitInPool worker, AgentData data) {
@@ -299,10 +318,6 @@ public class BuildStructureTask extends BaseTask {
                 ability,
                 targetUnitType,
                 placementRules)));
-    }
-
-    private float getRandomScalar() {
-        return ThreadLocalRandom.current().nextFloat() * 2 - 1;
     }
 
     @Override
@@ -396,11 +411,11 @@ public class BuildStructureTask extends BaseTask {
 
     @Override
     public int reservedMinerals() {
-        return matchingUnitAtLocation.isEmpty() ? minimumMinerals.orElse(0) : 0;
+        return isInProgress ? 0 : minimumMinerals.orElse(0);
     }
 
     @Override
     public int reservedVespene() {
-        return matchingUnitAtLocation.isPresent() ? minimumVespene.orElse(0) : 0;
+        return isInProgress ? 0 : minimumVespene.orElse(0);
     }
 }

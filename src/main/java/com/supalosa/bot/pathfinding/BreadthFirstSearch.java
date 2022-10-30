@@ -3,7 +3,6 @@ package com.supalosa.bot.pathfinding;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.Tile;
 import com.supalosa.bot.analysis.utils.Grid;
-import io.vertx.codegen.doc.Tag;
 
 import java.util.*;
 import java.util.function.Function;
