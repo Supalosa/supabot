@@ -18,6 +18,7 @@ import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -63,7 +64,7 @@ public class ScoutTask implements Task {
             return;
         }
         if (agentWithData.observation().getVisibility(scoutTarget.get()) == Visibility.VISIBLE) {
-            scoutTarget = Optional.empty();
+            scoutTarget = agentWithData.mapAwareness().getNextScoutTarget();
             sleepCount = 0;
             return;
         }
@@ -78,7 +79,7 @@ public class ScoutTask implements Task {
                     agentWithData.observation(),
                 UnitFilter.builder()
                         .alliance(Alliance.SELF)
-                        .unitType(Units.TERRAN_SCV)
+                        .unitTypes(Set.of(Units.TERRAN_SCV, Units.TERRAN_MARINE))
                         .build());
             maybeScouter.ifPresent(scouter -> {
                 scouters.add(scouter.unit());
@@ -88,7 +89,6 @@ public class ScoutTask implements Task {
 
         assignedScouters = scouters.stream().map(unit -> unit.getTag()).collect(Collectors.toList());
         if (scouters.size() > 0) {
-            // TODO maybe better repair task.
             agentWithData.actions().unitCommand(scouters, Abilities.MOVE, scoutTarget.get(), false);
         }
     }

@@ -32,8 +32,10 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<Point2d> startPosition;
     private final List<Point2d> knownEnemyBases;
     private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
-    private Set<Point2d> unscoutedLocations = new HashSet<>();
-    private long unscoutedLocationsNextResetAt = 0L;
+    // A map of locations that should be scouted, and when they should be scouted next.
+    private final Map<Point2d, Long> scoutableLocationsToNextScoutTime = new HashMap<>();
+    private final Set<Point2d> scoutableLocations = new HashSet<>();
+    private static final long RESCOUT_TIME = 180L * 22L;
     private final Map<Expansion, Long> expansionNextValidAt = new HashMap<>();
     private static final long EXPANSION_BACKOFF_TIME = (15 * 22L);
     LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
@@ -178,9 +180,6 @@ public class MapAwarenessImpl implements MapAwareness {
 
         analyseCreep(data, agent);
         updateRegionData(data, agent);
-
-        lockedScoutTarget = lockedScoutTarget.filter(point2d ->
-                agent.observation().getVisibility(point2d) != Visibility.VISIBLE);
 
         this.maybeEnemyPositionNearEnemy = findEnemyPositionNearPoint(agent.observation(), true);
         this.maybeEnemyPositionNearBase = findEnemyPositionNearPoint(agent.observation(), false);
@@ -357,27 +356,19 @@ public class MapAwarenessImpl implements MapAwareness {
             return enemyUnits.stream()
                     .filter(unitInPool -> unitInPool.unit().getType() != Units.ZERG_LARVA)
                     .min(comparator)
-                    .map(minUnit -> minUnit.unit().getPosition().toPoint2d())
-                    .or(() -> findRandomEnemyPosition());
+                    .map(minUnit -> minUnit.unit().getPosition().toPoint2d());
         } else {
-            return findRandomEnemyPosition();
+            return Optional.empty();
         }
     }
 
-    private Optional<Point2d> lockedScoutTarget = Optional.empty();
-
-    // Tries to find a random location that can be pathed to on the map.
-    // Returns Point2d if a new, random location has been found that is pathable by the unit.
-    private Optional<Point2d> findRandomEnemyPosition() {
-        if (lockedScoutTarget.isEmpty()) {
-            if (unscoutedLocations.size() > 0) {
-                lockedScoutTarget = Optional.of(new ArrayList<>(unscoutedLocations)
-                        .get(ThreadLocalRandom.current().nextInt(unscoutedLocations.size())));
-            } else {
-                return Optional.empty();
-            }
-        }
-        return lockedScoutTarget;
+    /**
+     * Returns a random, unscouted position on the map - either an expansion or a starting location
+     * that we haven't seen yet.
+     */
+    private Optional<Point2d> findRandomUnscoutedLocation() {
+        // We're somewhat reliant on the undefined ordering of the keys of a hashmap...
+        return scoutableLocations.stream().findAny();
     }
 
     private void manageScouting(
@@ -387,11 +378,14 @@ public class MapAwarenessImpl implements MapAwareness {
             QueryInterface queryInterface) {
 
         if (knownEnemyStartLocation.isEmpty()) {
-            Optional<Point2d> randomEnemyPosition = findRandomEnemyPosition();
             observationInterface.getGameInfo().getStartRaw().ifPresent(startRaw -> {
                 // Note: startRaw.getStartLocations() is actually potential `enemy` locations.
                 // If there's only one enemy location, the opponent is there.
                 Set<Point2d> enemyStartLocations = startRaw.getStartLocations();
+                if (scoutableLocationsToNextScoutTime.isEmpty()) {
+                    enemyStartLocations.forEach(location ->
+                            scoutableLocationsToNextScoutTime.put(location, Long.MIN_VALUE));
+                }
                 if (enemyStartLocations.size() == 1) {
                     knownEnemyStartLocation = enemyStartLocations.stream().findFirst();
                     System.out.println("Pre-determined enemy location at " + knownEnemyStartLocation.get());
@@ -440,24 +434,24 @@ public class MapAwarenessImpl implements MapAwareness {
                     Expansions.calculateExpansionLocations(observationInterface, queryInterface, parameters)));
             if (expansionLocations.isPresent()) {
                 data.structurePlacementCalculator().ifPresent(spc -> spc.onExpansionsCalculated(expansionLocations.get()));
+                expansionLocations.get().stream().map(Expansion::position).forEach(point ->
+                        scoutableLocationsToNextScoutTime.put(point.toPoint2d(), 0L));
             }
         }
-        if (observationInterface.getGameLoop() > unscoutedLocationsNextResetAt) {
-            observationInterface.getGameInfo().getStartRaw().ifPresent(startRaw -> {
-                unscoutedLocations = new HashSet<>(startRaw.getStartLocations());
-            });
-            // TODO: there is an accidental race here to get the scout out before expansionLocations gets calculated
-            // and this block gets called - this is lucky (as it means the scout goes directly to enemy base) but bad
-            // design
-            expansionLocations.ifPresent(locations ->
-                    locations.forEach(expansion -> unscoutedLocations.add(expansion.position().toPoint2d())));
-            unscoutedLocationsNextResetAt = observationInterface.getGameLoop() + 22 * 180;
-        }
-        if (unscoutedLocations.size() > 0) {
-            unscoutedLocations = unscoutedLocations.stream()
-                    .filter(point -> observationInterface.getVisibility(point) != Visibility.VISIBLE)
-                    .collect(Collectors.toSet());
-        }
+        long gameLoop = observationInterface.getGameLoop();
+        scoutableLocations.clear();
+        scoutableLocationsToNextScoutTime.entrySet().forEach(entry -> {
+            Point2d location = entry.getKey();
+            long lastSeenTime = entry.getValue();
+            Visibility visibility = observationInterface.getVisibility(location);
+            if (visibility == Visibility.VISIBLE) {
+                lastSeenTime = gameLoop;
+                scoutableLocationsToNextScoutTime.put(location, gameLoop);
+            }
+            if (gameLoop > lastSeenTime + RESCOUT_TIME) {
+                scoutableLocations.add(location);
+            }
+        });
     }
 
     @Override
@@ -477,7 +471,7 @@ public class MapAwarenessImpl implements MapAwareness {
 
     @Override
     public Optional<Point2d> getNextScoutTarget() {
-        return findRandomEnemyPosition();
+        return findRandomUnscoutedLocation();
     }
 
     @Override

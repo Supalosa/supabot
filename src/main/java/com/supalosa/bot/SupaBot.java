@@ -48,6 +48,7 @@ public class SupaBot extends AgentWithData {
     private Map<UnitType, UnitTypeData> unitTypeData = null;
     private long lastRebalanceAt = 0L;
     private long resetActionsTime = 0L;
+    private long lastScoutTask = 0L;
 
     private Multimap<Integer, Task> singletonTasksToDispatch = ArrayListMultimap.create();
 
@@ -121,6 +122,12 @@ public class SupaBot extends AgentWithData {
             });
             suppliesReached.forEach(supplyTrigger -> singletonTasksToDispatch.removeAll(supplyTrigger));
             notDispatched.forEach((task, supplyTrigger) -> singletonTasksToDispatch.put(supplyTrigger, task));
+        }
+
+        // Every 2 minutes ensure there's a scout sent out.
+        if (observation().getGameLoop() > lastScoutTask + 120 * 22L && mapAwareness.getNextScoutTarget().isPresent()) {
+            taskManager.addTask(new ScoutTask(mapAwareness.getNextScoutTarget(), 1), 1);
+            lastScoutTask = observation().getGameLoop();
         }
 
         if (behaviourTask.isComplete()) {
