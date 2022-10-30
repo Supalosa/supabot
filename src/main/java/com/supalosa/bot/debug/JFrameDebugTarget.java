@@ -93,7 +93,8 @@ public class JFrameDebugTarget implements DebugTarget {
             VisualisationUtils.renderTileSet(
                     placementBmp,
                     spc.getMutableFreePlacementGrid(),
-                    placeable -> placeable ? WHITE : RED,
+                    // A 0-tag means the cell is buildable.
+                    reserved -> reserved.getValue() == 0 ? WHITE : RED,
                     (existingValue, newValue) -> newValue == RED ? newValue : existingValue);
         });
         if (data.enemyAwareness().getPotentialEnemyArmy().isPresent()) {

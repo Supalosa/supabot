@@ -55,7 +55,11 @@ public class StructurePlacementCalculator {
     // This grid is STATIC and should not be modified during the game.
     private final Grid<Boolean> staticFreePlacementGrid;
     // This grid can (and should) be modified to mark tiles that should not be built on.
-    private final Grid<Boolean> mutableFreePlacementGrid;
+    // Each tile represents a tag that the tile is reserved for. If the value is equal to `BUILDABLE`, then it is
+    // buildable.
+    private final Grid<Tag> mutableFreePlacementGrid;
+    private static final Tag BUILDABLE = Tag.of(0L);
+    private static final Tag NOT_BUILDABLE = Tag.of(1L);
 
     private List<DebugStructureFootprint> debugStructureFootprints = new ArrayList<>();
     private long debugStructureFootprintsResetAt = 0L;
@@ -83,10 +87,10 @@ public class StructurePlacementCalculator {
                 Boolean.class,
                 mapAnalysisResult.getGrid(), () -> true, tile -> tile.placeable);
         this.mutableFreePlacementGrid = new InMemoryGrid<>(
-                Boolean.class,
+                Tag.class,
                 mapAnalysisResult.getGrid().getWidth(),
                 mapAnalysisResult.getGrid().getHeight(),
-                () -> true);
+                () -> BUILDABLE);
     }
 
     void updateFreePlacementGrid() {
@@ -94,21 +98,21 @@ public class StructurePlacementCalculator {
             // has been calculated
             Optional<Point2d> maybeLocation = firstSupplyDepotLocation.get();
             maybeLocation.ifPresent(location -> {
-                updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 2, 2);
+                updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 2, 2, false);
             });
         }
         if (secondSupplyDepotLocation.isPresent()) {
             // has been calculated
             Optional<Point2d> maybeLocation = secondSupplyDepotLocation.get();
             maybeLocation.ifPresent(location -> {
-                updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 2, 2);
+                updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 2, 2, false);
             });
         }
         if (barracksWithAddonLocation.isPresent()) {
             // has been calculated
             Optional<Point2d> maybeLocation = barracksWithAddonLocation.get();
             maybeLocation.ifPresent(location -> {
-                updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 3, 3);
+                updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)location.getX(), (int)location.getY(), 3, 3, false);
             });
         }
     }
@@ -116,14 +120,14 @@ public class StructurePlacementCalculator {
     /**
      * Marks the tiles under a structure positioned at (x,y) with width (w,h) as unplaceable.
      */
-    void updatePlacementGridWithFootprint(Grid<Boolean> grid, int x, int y, int w, int h) {
+    <T> void updatePlacementGridWithFootprint(Grid<T> grid, int x, int y, int w, int h, T value) {
         // Note that a structure's origin is at its centre (biased to northeast for even numbers, hence the `ceil`)
         int xStart = (int)Math.ceil(x - w / 2);
         int yStart = (int)Math.ceil(y - h / 2);
         for (int xx = xStart; xx < xStart + w; ++xx) {
             for (int yy = yStart; yy < yStart + h; ++yy) {
                 if (grid.isInBounds(xx, yy)) {
-                    grid.set(xx, yy, false);
+                    grid.set(xx, yy, value);
                 }
             }
         }
@@ -388,7 +392,7 @@ public class StructurePlacementCalculator {
                             point3d.sub(-0.05f, -0.05f, 0.1f),
                             point3d.sub(-0.95f, -0.95f, -0.1f), Color.GRAY);
                 }
-                if (mutableFreePlacementGrid.get(x, y) == false) {
+                if (mutableFreePlacementGrid.get(x, y) != BUILDABLE) {
                     agent.debug().debugBoxOut(
                             point3d.sub(-0.1f, -0.1f, 0.2f),
                             point3d.sub(-0.9f, -0.9f, -0.2f), Color.of(156, 156, 156));
@@ -412,7 +416,10 @@ public class StructurePlacementCalculator {
         // Block out the town hall position and the space between the resources and the town hall to prevent
         // blockage.
         expansionLocations.forEach(expansion -> {
-           updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)expansion.position().getX(), (int)expansion.position().getY(), 5, 5);
+           updatePlacementGridWithFootprint(staticFreePlacementGrid,
+                   (int)expansion.position().getX(),
+                   (int)expansion.position().getY(), 5, 5,
+                   false);
             // reserve points between the expansion and the resource.
             // Just a few points should be enough to stop most structures being placed here.
             int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
@@ -435,7 +442,7 @@ public class StructurePlacementCalculator {
                 updatePlacementGridWithRectangle(staticFreePlacementGrid, minX, minY, maxX - minX, maxY - minY);
                 expansion.resourcePositions().forEach(position -> {
                    // TODO: use the correct footprint for the resource.
-                   updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)position.getX(), (int)position.getY(), 3, 3);
+                   updatePlacementGridWithFootprint(staticFreePlacementGrid, (int)position.getX(), (int)position.getY(), 3, 3, false);
                 });
             }
         });
@@ -487,7 +494,9 @@ public class StructurePlacementCalculator {
                     (int)suggestedLocation.get().getX(),
                     (int)suggestedLocation.get().getY(),
                     structureWidth,
-                    structureHeight);
+                    structureHeight,
+                    NOT_BUILDABLE
+                    );
         }
         return suggestedLocation;
     }
@@ -668,16 +677,16 @@ public class StructurePlacementCalculator {
     }
 
     private boolean canPlaceAt(Point2d origin, int width, int height) {
-        return canPlaceAt(origin, width, height, true);
+        return canPlaceAt(origin, width, height, true, Optional.empty());
     }
 
     private boolean canPlaceAtIgnoringStaticGrid(Point2d origin, int width, int height) {
-        return canPlaceAt(origin, width, height, false);
+        return canPlaceAt(origin, width, height, false, Optional.empty());
     }
 
-    private boolean canPlaceAt(Point2d origin, int width, int height, boolean checkStatic) {
+    private boolean canPlaceAt(Point2d origin, int width, int height, boolean checkStatic, Optional<Tag> forTag) {
         // Intercept the calls so we can log position checks.
-        if (_canPlaceAt(origin, width, height, checkStatic)) {
+        if (_canPlaceAt(origin, width, height, checkStatic, forTag)) {
             debugStructureFootprints.add(new DebugStructureFootprint(origin, width, height, true));
             return true;
         } else {
@@ -686,7 +695,7 @@ public class StructurePlacementCalculator {
         }
     }
 
-    private boolean _canPlaceAt(Point2d origin, int width, int height, boolean checkStatic) {
+    private boolean _canPlaceAt(Point2d origin, int width, int height, boolean checkStatic, Optional<Tag> forTag) {
         int x = (int)origin.getX();
         int y = (int)origin.getY();
         int xStart = (int)Math.ceil(x - width / 2);
@@ -696,7 +705,7 @@ public class StructurePlacementCalculator {
                 if (checkStatic && staticFreePlacementGrid.get(xx, yy) == false) {
                     return false;
                 }
-                if (mutableFreePlacementGrid.get(xx, yy) == false) {
+                if (mutableFreePlacementGrid.get(xx, yy) != forTag.orElse(BUILDABLE)) {
                     return false;
                 }
             }
@@ -713,7 +722,13 @@ public class StructurePlacementCalculator {
 
     private static final long MY_STRUCTURE_UPDATE_INTERVAL = 22L * 2;
 
+    private void updateMutableGridForStructure(AgentData data, Unit unit) {
+        updateMutableGridForStructure(data, unit.getPosition().toPoint2d(), unit.getType(), Optional.of(unit.getTag()));
+    }
     private void updateMutableGridForStructure(AgentData data, Point2d position, UnitType unitType) {
+        updateMutableGridForStructure(data, position, unitType, Optional.empty());
+    }
+    private void updateMutableGridForStructure(AgentData data, Point2d position, UnitType unitType, Optional<Tag> tag) {
         Optional<Point2d> maybeFootprint = data.gameData().getUnitFootprint(unitType);
         maybeFootprint.ifPresent(footprint -> {
             Pair<Point2d, Point2d> modifiedFootprint = modifyFootprint(
@@ -724,7 +739,7 @@ public class StructurePlacementCalculator {
             int y = (int)modifiedFootprint.getLeft().getY();
             int width = (int)(modifiedFootprint.getRight().getX());
             int height = (int)(modifiedFootprint.getRight().getY());
-            updatePlacementGridWithFootprint(mutableFreePlacementGrid, x, y, width, height);
+            updatePlacementGridWithFootprint(mutableFreePlacementGrid, x, y, width, height, tag.orElse(NOT_BUILDABLE));
         });
     }
 
@@ -747,8 +762,7 @@ public class StructurePlacementCalculator {
 
                 updateMutableGridForStructure(
                         data,
-                        unitInPool.unit().getPosition().toPoint2d(),
-                        unitInPool.unit().getType());
+                        unitInPool.unit());
 
                 Optional<UnitTypeData> maybeUnitTypeData = data.gameData().getUnitTypeData(unitInPool.unit().getType());
                 return maybeUnitTypeData.map(unitType ->
@@ -799,7 +813,7 @@ public class StructurePlacementCalculator {
         return Pair.of(existingPosition, existingFootprint);
     }
 
-    public Grid<Boolean> getMutableFreePlacementGrid() {
+    public Grid<Tag> getMutableFreePlacementGrid() {
         return this.mutableFreePlacementGrid;
     }
 
@@ -810,6 +824,18 @@ public class StructurePlacementCalculator {
      * @return True if that unit can fit an addon, false otherwise.
      */
     public boolean canFitAddon(Unit unit) {
-        return canPlaceAt(unit.getPosition().toPoint2d().add(3f, 0f), 2, 2);
+        return canPlaceAtFor(unit, unit.getPosition().toPoint2d().add(3f, 0f), 2, 2);
+    }
+
+    /**
+     * Returns true if a structure
+     * @param unit
+     * @param position
+     * @param w
+     * @param h
+     * @return
+     */
+    private boolean canPlaceAtFor(Unit unit, Point2d position, int w, int h) {
+        return _canPlaceAt(position, w, h, true, Optional.of(unit.getTag()));
     }
 }
