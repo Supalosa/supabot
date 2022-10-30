@@ -15,16 +15,14 @@ import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
+import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class BuildStructureTask extends BaseTask {
@@ -48,6 +46,9 @@ public class BuildStructureTask extends BaseTask {
     // that if the construction is started again, we know to dispatch the event again.
     private Optional<Tag> dispatchedMatchingUnitAtLocation = Optional.empty();
     private Optional<Tag> assignedWorker = Optional.empty();
+
+    // Set of workers we're not going to try again.
+    private Set<Tag> bannedWorkers = new HashSet<>();
 
     private final String taskKey;
     private long lastBuildAttempt = 0;
@@ -97,13 +98,16 @@ public class BuildStructureTask extends BaseTask {
                 nextAssignedWorkerAttempt = gameLoop + 5L;
                 assignedWorker = findWorker(taskManager, agentWithData, agentWithData, placementRules);
                 // Resume the construction if applicable.
-                assignedWorker.ifPresent(theWorker -> {
+                assignedWorker.ifPresentOrElse(theWorker -> {
                     matchingUnitAtLocation.ifPresent(tag -> {
                         UnitInPool unit = agentWithData.observation().getUnit(tag);
                         if (unit != null) {
                             agentWithData.actions().unitCommand(theWorker, Abilities.SMART, unit.unit(), false);
                         }
                     });
+                }, () -> {
+                    //Reset the banned worker set if we couldn't find a worker.
+                    bannedWorkers.clear();
                 });
             }
         } else {
@@ -146,6 +150,7 @@ public class BuildStructureTask extends BaseTask {
             location = resolveLocation(worker.get(), agentWithData);
             if (location.isEmpty()) {
                 // Try another worker.
+                bannedWorkers.add(worker.get().getTag());
                 taskManager.releaseUnit(worker.get().getTag(), this);
                 worker = Optional.empty();
                 assignedWorker = Optional.empty();
@@ -260,6 +265,7 @@ public class BuildStructureTask extends BaseTask {
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            !bannedWorkers.contains(unitInPool.getTag()) &&
                             !UnitInPool.isCarryingMinerals().test(unitInPool) &&
                             !UnitInPool.isCarryingVespene().test(unitInPool),
                     Comparator.comparing((UnitInPool unitInPool) ->
@@ -267,22 +273,22 @@ public class BuildStructureTask extends BaseTask {
             ).map(unitInPool -> unitInPool.getTag());
         } else if (nearBaseOnly) {
             // If the placement rules require the structure in the base, choose a worker in a player base only.
-            Point2d baseLocation = data.mapAwareness()
-                    .getDefenceLocation()
-                    .orElse(agent.observation().getStartLocation().toPoint2d());
-            return taskManager.findFreeUnitForTask(
+            Optional<RegionData> playerBaseRegion = data.mapAwareness().getRandomPlayerBaseRegion();
+            Optional<Point2d> baseLocation = playerBaseRegion.map(RegionData::region).map(Region::centrePoint);
+            return baseLocation.flatMap(location -> taskManager.findFreeUnitForTask(
                     this,
                     agent.observation(),
                     unitInPool -> unitInPool.unit() != null &&
                             Constants.WORKER_TYPES.contains(unitInPool.unit().getType()) &&
+                            !bannedWorkers.contains(unitInPool.getTag()) &&
                             !UnitInPool.isCarryingMinerals().test(unitInPool) &&
                             !UnitInPool.isCarryingVespene().test(unitInPool) &&
                             data.mapAwareness()
                                     .getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())
                                     .map(RegionData::isPlayerBase).orElse(false),
                     Comparator.comparing((UnitInPool unitInPool) ->
-                            unitInPool.unit().getPosition().toPoint2d().distance(baseLocation))
-            ).map(unitInPool -> unitInPool.getTag());
+                            unitInPool.unit().getPosition().toPoint2d().distance(location))))
+                    .map(unitInPool -> unitInPool.getTag());
         } else {
             // Take any worker.
             return taskManager.findFreeUnitForTask(

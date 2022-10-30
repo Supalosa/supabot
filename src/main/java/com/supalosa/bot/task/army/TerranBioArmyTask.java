@@ -39,6 +39,9 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     private int numMedivacs = 0;
     private int basePriority;
 
+    // Whether the army wants units as they are produced.
+    private boolean wantsUnits = true;
+
     private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
     private long desiredCompositionUpdatedAt = Long.MIN_VALUE;
 
@@ -296,5 +299,14 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     @Override
     public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
         return Optional.empty();
+    }
+
+    public void setWantsUnits(boolean wantsUnits) {
+        this.wantsUnits = wantsUnits;
+    }
+
+    @Override
+    public boolean wantsUnit(Unit unit) {
+        return wantsUnits && super.wantsUnit(unit);
     }
 }

@@ -28,7 +28,7 @@ public class LocalMain {
         List<String> processArgs = List.of(
                 gameRoot.toString(),
                 "-listen", "0.0.0.0",
-                "-port", "15000",
+                "-port", "8000",
                 "-displayMode", "0",
                 "-dataVersion", "B89B5D6FA7CBF6452E721311BFBC6CB2",
                 "-windowwidth", "500",
@@ -42,8 +42,8 @@ public class LocalMain {
                 .directory(new File("D:\\Starcraft II\\Support64"));
         Process sc2Process = null;
         try {
-            //sc2Process = builder.start();
-            //Thread.sleep(10000);
+            sc2Process = builder.start();
+            Thread.sleep(10000);
             SupaBot supaBot = new SupaBot(true, new JFrameDebugTarget());
             MultiplayerOptions multiplayerOptions = MultiplayerOptions.multiplayerSetup()
                     .sharedPort(8002)
@@ -61,8 +61,8 @@ public class LocalMain {
                     .setParticipants(
                             S2Coordinator.createParticipant(Race.TERRAN, supaBot, "Ocraft_Bot01"),
                             S2Coordinator.createParticipant(Race.TERRAN))
-                    //.connect("127.0.0.1", 8000)
-                    .launchStarcraft()
+                    .connect("127.0.0.1", 8000)
+                    //.launchStarcraft()
                     //.joinGame();
                     .startGame(LocalMap.of(Paths.get("2000AtmospheresAIE.SC2Map")));
 

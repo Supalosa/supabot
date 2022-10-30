@@ -32,13 +32,14 @@ public class LaunchClientSc2 {
                 "-windowx", "0",
                 "-windowy", "0",
                 "-verbose");*/
-        Path gameRoot = Paths.get("D:\\StarCraft II\\Versions\\Base88500\\SC2_x64.exe");
+        //Path gameRoot = Paths.get("D:\\StarCraft II\\Versions\\Base88500\\SC2_x64.exe");
+        Path gameRoot = Paths.get("D:\\StarCraft II\\Versions\\Base75689\\SC2_x64.exe");
         List<String> processArgs = List.of(
                 gameRoot.toString(),
                 "-listen", "0.0.0.0",
                 "-port", "15000",
                 "-displayMode", "0",
-                //"-dataVersion", "B89B5D6FA7CBF6452E721311BFBC6CB2",
+                "-dataVersion", "B89B5D6FA7CBF6452E721311BFBC6CB2",
                 "-windowwidth", "500",
                 "-windowheight", "300",
                 "-windowx", "0",

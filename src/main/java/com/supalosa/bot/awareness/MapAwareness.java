@@ -46,6 +46,8 @@ public interface MapAwareness {
 
     List<Point2d> getKnownEnemyBases();
 
+    Optional<RegionData> getRandomPlayerBaseRegion();
+
     /**
      * Returns a list of all expansion locations if applicable.
      *

@@ -121,15 +121,6 @@ public class FightManager {
                 armyTasks.add(harassTask);
             }
         }
-        /*if (data.mapAwareness().getValidExpansionLocations().isPresent() && agent.observation().getArmyCount() > 80) {
-            // Start parking units around the map
-            DefaultArmyTask mapTask = new TerranMapControlArmyTask("Parked", 100);
-            if (taskManager.addTask(mapTask, data.mapAwareness().getValidExpansionLocations().get().size())) {
-                mapTask.setPathRules(MapAwareness.PathRules.AVOID_ENEMY_ARMY);
-                mapTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_AGGRESSION);
-                armyTasks.add(mapTask);
-            }
-        }*/
     }
 
 
@@ -139,6 +130,9 @@ public class FightManager {
             addedTasks = true;
             taskManager.addTask(attackingArmy, 1);
             taskManager.addTask(reserveArmy, 1);
+
+            // Stops the attacking army from taking units.
+            attackingArmy.setWantsUnits(false);
         }
 
         onStepTerranBio(taskManager, data);
@@ -178,6 +172,7 @@ public class FightManager {
 
         if (pendingReinforcement) {
             pendingReinforcement = false;
+            canAttack = false;
             DefaultArmyTask reinforcingArmy = attackingArmy.createChildArmy();
             if (taskManager.addTask(reinforcingArmy, 1)) {
                 reinforcingArmy.takeAllFrom(taskManager, agent.observation(), reserveArmy);

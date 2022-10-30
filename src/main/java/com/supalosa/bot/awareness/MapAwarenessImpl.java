@@ -125,6 +125,19 @@ public class MapAwarenessImpl implements MapAwareness {
         return knownEnemyBases;
     }
 
+    @Override
+    public Optional<RegionData> getRandomPlayerBaseRegion() {
+        List<RegionData> playerBaseRegions = regionData.values().stream()
+                .filter(RegionData::isPlayerBase)
+                .collect(Collectors.toList());
+        if (playerBaseRegions.size() > 0) {
+            int returnIndex = ThreadLocalRandom.current().nextInt(playerBaseRegions.size());
+            return Optional.of(playerBaseRegions.get(returnIndex));
+        } else {
+            return Optional.empty();
+        }
+    }
+
     /**
      * Returns a list of all expansion locations if applicable.
      *
