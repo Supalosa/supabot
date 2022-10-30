@@ -1,10 +1,13 @@
 package com.supalosa.bot.task.army.micro;
 
 import com.github.ocraft.s2client.protocol.data.Abilities;
+import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.Buffs;
 import com.github.ocraft.s2client.protocol.data.UnitAttribute;
+import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
@@ -18,7 +21,23 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TerranMicro {
 
+    // Used to filter out duplicate move commands.
+    // TODO change this to 'tokens' or something
+    private static boolean isAlreadyMovingTo(Point2d position, Optional<UnitOrder> order) {
+        return isAlreadyUsingAbilityAt(Abilities.MOVE, position, order);
+    }
+
+    private static boolean isAlreadyAttackMovingTo(Point2d position, Optional<UnitOrder> order) {
+        return isAlreadyUsingAbilityAt(Abilities.ATTACK, position, order);
+    }
+
+    private static boolean isAlreadyUsingAbilityAt(Ability ability, Point2d position, Optional<UnitOrder> order) {
+        return order.filter(unitOrder -> unitOrder.getAbility().equals(ability) &&
+                unitOrder.getTargetedWorldSpacePosition().map(Point::toPoint2d).equals(Optional.of(position))).isPresent();
+    }
+
     public static void handleMarineMarauderMicro(Unit unit, Optional<Point2d> goalPosition, DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap, AtomicLong remainingUnitsToStim) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // Stutter-step micro. The more we're winning, the smaller the stutter radius.
         float stutterRadius = 10f;
         if (args.fightPerformance() == FightPerformance.STABLE) {
@@ -29,11 +48,10 @@ public class TerranMicro {
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
             // Off weapon cooldown.
             goalPosition.ifPresent(position -> {
-                if (args.currentRegion().equals(args.targetRegion())) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
-                } else if (args.nextRegion().isPresent()) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().region().centrePoint(), false);
-                } else {
+                if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
+                    position = args.nextRegion().get().region().centrePoint();
+                }
+                if (!isAlreadyAttackMovingTo(position, currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
                 }
             });
@@ -54,7 +72,9 @@ public class TerranMicro {
                             1.5f))
                     .or(() -> goalPosition);
             retreatPosition.ifPresent(retreatPoint2d -> {
-                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                if (!isAlreadyMovingTo(retreatPoint2d, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                }
             });
         }
         // Marine and marauder stimpack usage.
@@ -70,6 +90,7 @@ public class TerranMicro {
 
     public static void handleVikingMicro(Unit unit, Optional<Point2d> goalPosition,
                                          DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // Stutter-step micro. The more we're winning, the smaller the stutter radius.
         float stutterRadius = 9f;
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
@@ -81,11 +102,10 @@ public class TerranMicro {
             bestTarget.ifPresentOrElse(
                     target -> args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, target, false),
                     () -> goalPosition.ifPresent(position -> {
-                        if (args.currentRegion().equals(args.targetRegion())) {
-                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
-                        } else if (args.nextRegion().isPresent()) {
-                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().region().centrePoint(), false);
-                        } else {
+                        if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
+                            position = args.nextRegion().get().region().centrePoint();
+                        }
+                        if (!isAlreadyAttackMovingTo(position, currentOrder)) {
                             args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
                         }
                     }));
@@ -106,13 +126,16 @@ public class TerranMicro {
                             1.5f))
                     .or(() -> goalPosition);
             retreatPosition.ifPresent(retreatPoint2d -> {
-                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                if (!isAlreadyMovingTo(retreatPoint2d, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                }
             });
         }
     }
 
     public static void handleGhostMicro(Unit unit, Optional<Point2d> goalPosition,
                                         DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         if (unit.getEnergy().orElse(0f) > 50f) {
             // Ghost handle targeting.
             Optional<Unit> nearestEnergyTarget = enemyUnitMap
@@ -136,11 +159,10 @@ public class TerranMicro {
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
             // Ghost Off weapon cooldown.
             goalPosition.ifPresent(position -> {
-                if (args.currentRegion().equals(args.targetRegion())) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
-                } else if (args.nextRegion().isPresent()) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.nextRegion().get().region().centrePoint(), false);
-                } else {
+                if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
+                    position = args.nextRegion().get().region().centrePoint();
+                }
+                if (!isAlreadyAttackMovingTo(position, currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
                 }
             });
@@ -161,13 +183,16 @@ public class TerranMicro {
                             2.5f))
                     .or(() -> goalPosition);
             retreatPosition.ifPresent(retreatPoint2d -> {
-                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                if (!isAlreadyMovingTo(retreatPoint2d, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                }
             });
         }
     }
 
     public static void handleMedivacMicro(Unit unit, DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
                                           Point2dMap<Unit> enemyUnitMap) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // Medivacs move to the centre of mass or away from the enemy unit if too close.
         Optional<Point2d> nearestEnemyUnit = enemyUnitMap
                 .getNearestInRadius(unit.getPosition().toPoint2d(), 6f)
@@ -179,9 +204,14 @@ public class TerranMicro {
                         1.5f));
         args.centreOfMass().ifPresent(centreOfMass -> {
             if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.1f) {
-                args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, centreOfMass, false);
+                if (!isAlreadyAttackMovingTo(centreOfMass, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, centreOfMass, false);
+                }
             } else {
-                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPosition.orElse(centreOfMass), false);
+                final Point2d movePosition = retreatPosition.orElse(centreOfMass);
+                if (!isAlreadyMovingTo(movePosition, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, movePosition, false);
+                }
             }
         });
         double distanceToCentreOfMass = args.centreOfMass()

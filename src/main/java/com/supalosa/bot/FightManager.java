@@ -235,7 +235,7 @@ public class FightManager {
             if (data.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
                     attackingArmy.predictFightAgainst(data.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.BADLY_LOSING) {
                 if (attackPosition.isPresent()) {
-                    System.err.println("Aborted aggressive attack because we think we will badly lose.");
+                    //System.err.println("Aborted aggressive attack because we think we will badly lose.");
                 }
                 attackPosition = Optional.empty();
             }
