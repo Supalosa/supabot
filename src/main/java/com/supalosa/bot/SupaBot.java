@@ -1,11 +1,13 @@
 package com.supalosa.bot;
 
 import com.github.ocraft.s2client.bot.S2Agent;
+import com.github.ocraft.s2client.bot.gateway.ActionInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.ChatReceived;
+import com.github.ocraft.s2client.protocol.response.ResponseType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
@@ -18,6 +20,7 @@ import com.supalosa.bot.builds.ThreeRaxStimCombatConcussivePush;
 import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.engagement.ThreatCalculator;
+import com.supalosa.bot.instrumentation.InstrumentedActionInterface;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.terran.BaseTerranTask;
@@ -31,6 +34,8 @@ import java.util.*;
 
 public class SupaBot extends AgentWithData {
 
+    private InstrumentedActionInterface instrumentedActionInterface;
+
     private final TaskManager taskManager;
     private final FightManager fightManager;
     private final GameData gameData;
@@ -42,6 +47,7 @@ public class SupaBot extends AgentWithData {
     private Optional<StructurePlacementCalculator> structurePlacementCalculator = Optional.empty();
     private Map<UnitType, UnitTypeData> unitTypeData = null;
     private long lastRebalanceAt = 0L;
+    private long resetActionsTime = 0L;
 
     private Multimap<Integer, Task> singletonTasksToDispatch = ArrayListMultimap.create();
 
@@ -57,6 +63,12 @@ public class SupaBot extends AgentWithData {
         this.enemyAwareness = new EnemyAwarenessImpl(threatCalculator);
         this.gameData = new GameData(observation());
         this.debugTarget = debugTarget;
+        this.instrumentedActionInterface = new InstrumentedActionInterface(super.actions());
+    }
+
+    @Override
+    public ActionInterface actions() {
+        return this.instrumentedActionInterface;
     }
 
     @Override
@@ -138,7 +150,14 @@ public class SupaBot extends AgentWithData {
             }
         }
 
+        if (observation().getGameLoop() > this.resetActionsTime + (long)(22.4 * 60.0)) {
+            long actionsSentInMinute = instrumentedActionInterface.getCountAndReset();
+            System.out.println("[" + observation().getGameLoop() + "] Actions sent in last minute: "  + actionsSentInMinute);
+            this.resetActionsTime = observation().getGameLoop();
+        }
+
         debugTarget.onStep(this, this);
+
         if (isDebug) {
             if (isSlow) {
                 try {
