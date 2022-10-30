@@ -6,6 +6,7 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface EnemyAwareness {
@@ -17,7 +18,7 @@ public interface EnemyAwareness {
      * If there are multiple armies, it is the biggest one we see.
      * All unknown units are silently added to armies that we can't see.
      */
-    Optional<Army> getMaybeEnemyArmy(Point2d point2d);
+    List<Army> getMaybeEnemyArmies(Point2d point2d, float inRange);
 
     /**
      * Returns the actual observed largest enemy army, including the position it was seen at.

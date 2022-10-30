@@ -298,17 +298,19 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         } else {
             nextRegion = Optional.empty();
         }
-        Optional<Army> enemyArmy = centreOfMass.flatMap(point2d -> agentWithData.enemyAwareness().getMaybeEnemyArmy(point2d));
-        List<Army> armyList = enemyArmy.map(army -> List.of(army)).orElse(Collections.emptyList());
-
+        float enemyArmySearchRadius = 15f;
+        List<Army> armyList = centreOfMass
+                .map(point2d -> agentWithData.enemyAwareness().getMaybeEnemyArmies(point2d, enemyArmySearchRadius))
+                .orElse(Collections.emptyList());
+        Army virtualArmy = Army.toVirtualArmy(armyList);
         // Analyse our performance in the fight.
         currentFightPerformance = calculateFightPerformance(
                 agentWithData.observation().getGameLoop(),
                 previousEnemyArmyObservation,
-                enemyArmy,
+                virtualArmy,
                 previousComposition,
                 currentComposition);
-        FightPerformance predictedFightPerformance = enemyArmy.map(this::predictFightAgainst).orElse(FightPerformance.STABLE);
+        FightPerformance predictedFightPerformance = predictFightAgainst(virtualArmy);
 
         AggressionState newAggressionState = aggressionState;
         ImmutableBaseArgs baseArgs = ImmutableBaseArgs.of(
@@ -341,15 +343,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             getBehaviourHandlerForState().onEnterState(baseArgs);
         }
 
-        previousEnemyArmyObservation = enemyArmy;
+        previousEnemyArmyObservation = Optional.of(virtualArmy);
         previousComposition = new HashMap<>(currentComposition);
-        // If the enemy army is near us, update more frequently.
-        if (enemyArmy.flatMap(Army::position).isPresent() &&
-                centreOfMass.isPresent() &&
-                enemyArmy.flatMap(Army::position).get().distance(centreOfMass.get()) < 20.0) {
-            return 2;
-        }
-        return 11;
+        return aggressionState.getUpdateInterval();
     }
 
     private <T> AggressionState handleState(DefaultArmyTaskBehaviourStateHandler<T> handler,
@@ -374,12 +370,12 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     protected FightPerformance calculateFightPerformance(
             long gameLoop,
             Optional<Army> previousEnemyObservation,
-            Optional<Army> currentEnemyObservation,
+            Army currentEnemyObservation,
             Map<UnitType, Integer> previousComposition,
             Map<UnitType, Integer> currentComposition) {
-        double currentEnemyThreat = currentEnemyObservation.map(Army::threat).orElse(0.0);
+        double currentEnemyThreat = currentEnemyObservation.threat();
         double threatDelta = currentEnemyThreat -
-                previousEnemyObservation.map(Army::threat).orElse(0.0);;
+                previousEnemyObservation.map(Army::threat).orElse(0.0);
         double currentPower = threatCalculator.calculatePower(currentComposition);
         double powerDelta = currentPower -
                 threatCalculator.calculatePower(previousComposition);
@@ -523,6 +519,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     @Override
     public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
         return Optional.empty();
+    }
+
+    public double getPower() {
+        return threatCalculator.calculatePower(currentComposition);
     }
 
     /**

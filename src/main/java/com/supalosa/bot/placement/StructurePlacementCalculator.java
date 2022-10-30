@@ -12,6 +12,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.GameData;
 import com.supalosa.bot.analysis.AnalysisResults;
@@ -55,6 +56,24 @@ public class StructurePlacementCalculator {
     private final Grid<Boolean> staticFreePlacementGrid;
     // This grid can (and should) be modified to mark tiles that should not be built on.
     private final Grid<Boolean> mutableFreePlacementGrid;
+
+    private List<DebugStructureFootprint> debugStructureFootprints = new ArrayList<>();
+    private long debugStructureFootprintsResetAt = 0L;
+
+    class DebugStructureFootprint {
+        Point2d position;
+        int width;
+        int height;
+        int index;
+        boolean success;
+
+        public DebugStructureFootprint(Point2d origin, int width, int height, boolean success) {
+            this.position = origin;
+            this.width = width;
+            this.height = height;
+            this.success = success;
+        }
+    }
 
     public StructurePlacementCalculator(AnalysisResults mapAnalysisResult, GameData gameData, Point2d start) {
         this.mapAnalysisResult = mapAnalysisResult;
@@ -108,6 +127,14 @@ public class StructurePlacementCalculator {
                 }
             }
         }
+    }
+
+    private Pair<Point2d, Point2d> getFootprint(Point2d point, int w, int h) {
+        int x = (int)point.getX();
+        int y = (int)point.getY();
+        int xStart = (int)Math.ceil(x - w / 2);
+        int yStart = (int)Math.ceil(y - h / 2);
+        return Pair.of(Point2d.of(xStart, yStart), Point2d.of(xStart + w, yStart + h));
     }
 
     /**
@@ -366,19 +393,19 @@ public class StructurePlacementCalculator {
                             point3d.sub(-0.1f, -0.1f, 0.2f),
                             point3d.sub(-0.9f, -0.9f, -0.2f), Color.of(156, 156, 156));
                 }
-                /*int width = 2;
-                int h = 2;
-                int xStart = (int)Math.ceil(x - width / 2);
-                int yStart = (int)Math.ceil(y - h / 2);
-                if (canPlaceAt(point2d, 2, 2)) {
-                    Point p1 = Point.of(xStart, yStart, height);
-                    Point p2 = Point.of(xStart + width, yStart + h, height);
-                    agent.debug().debugBoxOut(
-                            p1,
-                            p2, Color.GREEN);
-                }*/
             }
         }
+        // Draw boxes around every position we tested in the last second.
+        debugStructureFootprints.forEach(footprint -> {
+            Pair<Point2d, Point2d> bounds = getFootprint(footprint.position, footprint.width, footprint.height);
+            float height1 = Math.min(agent.observation().terrainHeight(bounds.getLeft()) + 0.05f,
+                    agent.observation().terrainHeight(bounds.getRight()) + 0.05f);
+            float height2 = height1 + 1f;
+            Point point1 = Point.of(bounds.getLeft().getX(), bounds.getLeft().getY(), height1);
+            Point point2 = Point.of(bounds.getRight().getX(), bounds.getRight().getY(), height2);
+            Color color = footprint.success ? Color.of(64, 255, 64) : Color.of(255, 64, 64);
+            agent.debug().debugBoxOut(point1, point2, color);
+        });
     }
 
     public void onExpansionsCalculated(List<Expansion> expansionLocations) {
@@ -415,7 +442,7 @@ public class StructurePlacementCalculator {
     }
 
     // does NOT query for placement but will never suggest something that overlaps with a reserved tile.
-    public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
+    public Optional<Point2d> suggestLocationForFreePlacement(AgentWithData data,
                                                              Point2d origin,
                                                              int structureWidth,
                                                              int structureHeight,
@@ -480,7 +507,7 @@ public class StructurePlacementCalculator {
                                                        Optional<PlacementRules> placementRules,
                                                        int structureWidth,
                                                        int structureHeight,
-                                                       AgentData data) {
+                                                       AgentWithData data) {
         int actualSearchRadius = placementRules.map(PlacementRules::maxVariation).orElse(DEFAULT_MAX_PLACEMENT_VARIATION);
         List<Point2d> nearbyStructures = myStructures.stream()
                 .map(myStructure -> myStructure.getPosition().toPoint2d())
@@ -495,7 +522,7 @@ public class StructurePlacementCalculator {
                 return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
                         nearbyStructures);
             } else {
-                return findPlacementRelativeToBorder(structureWidth, data, maybeRegion, placementRegion);
+                return findPlacementRelativeToBorder(structureWidth, structureHeight, data, maybeRegion, placementRegion);
             }
         } else {
             return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
@@ -503,7 +530,7 @@ public class StructurePlacementCalculator {
         }
     }
 
-    private Optional<Point2d> findPlacementRelativeToBorder(int structureWidth, AgentData data, Optional<Region> maybeRegion, PlacementRules.Region placementRegion) {
+    private Optional<Point2d> findPlacementRelativeToBorder(int structureWidth, int structureHeight, AgentWithData data, Optional<Region> maybeRegion, PlacementRules.Region placementRegion) {
         Region region = maybeRegion.get();
         Pair<Point2d, Point2d> bounds = region.regionBounds();
         Point2d bottomLeftBound = bounds.getLeft();
@@ -520,7 +547,7 @@ public class StructurePlacementCalculator {
                 testPoint = startPoint;
                 continue;
             }
-            if (canPlaceAt(testPoint, structureWidth, structureWidth)) {
+            if (canPlaceAt(testPoint, structureWidth, structureHeight)) {
                 int score = placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER ?
                         -thisTile.get().distanceToBorder :
                         thisTile.get().distanceToBorder;
@@ -533,11 +560,14 @@ public class StructurePlacementCalculator {
             List<Point2d> candidates = new ArrayList<>();
             for (int dx = -1; dx <= 1; ++dx) {
                 for (int dy = -1; dy <= 1; ++dy) {
+                    if (dx == 0 && dy == 0) {
+                        continue;
+                    }
                     Point2d maybePoint = testPoint.add(dx, dy);
                     if (region.getTiles().contains(maybePoint)) {
                         Optional<Tile> nextTile = data.mapAnalysis().flatMap(analysis -> analysis.getTile(maybePoint));
                         nextTile.ifPresent(tile -> {
-                            if (tile.distanceToBorder < thisTile.get().distanceToBorder) {
+                            if (tile.distanceToBorder <= thisTile.get().distanceToBorder) {
                                 candidates.add(maybePoint);
                             }
                         });
@@ -605,7 +635,7 @@ public class StructurePlacementCalculator {
                                                      int structureWidth,
                                                      int structureHeight,
                                                      Optional<PlacementRules> placementRules,
-                                                     AgentData data) {
+                                                     AgentWithData data) {
         if (canPlaceAtIgnoringStaticGrid(point, structureWidth, structureHeight)) {
             return Optional.of(point);
         } else if (placementRules.isPresent() && placementRules.get().maxVariation() > 0) {
@@ -615,7 +645,7 @@ public class StructurePlacementCalculator {
         return Optional.empty();
     }
 
-    public Optional<Point2d> suggestLocationForFreePlacement(AgentData data,
+    public Optional<Point2d> suggestLocationForFreePlacement(AgentWithData data,
                                                              Point2d position,
                                                              Ability ability,
                                                              UnitType unitType,
@@ -646,6 +676,17 @@ public class StructurePlacementCalculator {
     }
 
     private boolean canPlaceAt(Point2d origin, int width, int height, boolean checkStatic) {
+        // Intercept the calls so we can log position checks.
+        if (_canPlaceAt(origin, width, height, checkStatic)) {
+            debugStructureFootprints.add(new DebugStructureFootprint(origin, width, height, true));
+            return true;
+        } else {
+            debugStructureFootprints.add(new DebugStructureFootprint(origin, width, height, false));
+            return false;
+        }
+    }
+
+    private boolean _canPlaceAt(Point2d origin, int width, int height, boolean checkStatic) {
         int x = (int)origin.getX();
         int y = (int)origin.getY();
         int xStart = (int)Math.ceil(x - width / 2);
@@ -689,6 +730,11 @@ public class StructurePlacementCalculator {
 
     public void onStep(AgentData data, S2Agent agent) {
         long gameLoop = agent.observation().getGameLoop();
+
+        if (gameLoop > debugStructureFootprintsResetAt + 22L * 15) {
+            debugStructureFootprints.clear();
+            debugStructureFootprintsResetAt = gameLoop;
+        }
 
         if (gameLoop > myStructuresUpdatedAt + MY_STRUCTURE_UPDATE_INTERVAL) {
             myStructuresUpdatedAt = gameLoop;
@@ -745,7 +791,7 @@ public class StructurePlacementCalculator {
                 unitType == Units.TERRAN_FACTORY ||
                 unitType == Units.TERRAN_STARPORT) {
             // Modify the footprint of terran production buildings to be larger,
-            // to accommodate the addon.
+            // to accommodate the addon and space to move units.
             return Pair.of(
                     existingPosition.add(1f, 0f),
                     existingFootprint.add(2f, 0f));
@@ -755,5 +801,15 @@ public class StructurePlacementCalculator {
 
     public Grid<Boolean> getMutableFreePlacementGrid() {
         return this.mutableFreePlacementGrid;
+    }
+
+    /**
+     * Returns true if the given structure can fit an addon next to it.
+     *
+     * @param unit Unit to test.
+     * @return True if that unit can fit an addon, false otherwise.
+     */
+    public boolean canFitAddon(Unit unit) {
+        return canPlaceAt(unit.getPosition().toPoint2d().add(3f, 0f), 2, 2);
     }
 }

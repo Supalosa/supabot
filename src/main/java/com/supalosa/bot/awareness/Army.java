@@ -9,10 +9,14 @@ import org.immutables.value.Value;
 import java.util.*;
 
 /**
- * Virtual representation of an enemy army.
+ * Representation of an enemy army.
+ * TODO: split into two:
+ *  - VirtualArmy, where the position is not known and the units are not necessarily real units.
+ *  - Army, where the position is known and we have unitTags.
  */
 @Value.Immutable
 public interface Army {
+
     /**
      * The position of the army, if known.
      */
@@ -56,5 +60,16 @@ public interface Army {
             result.put(unitType, result.getOrDefault(unitType, 0) + 1);
         });
         return result;
+    }
+
+    static Army empty() {
+        return ImmutableArmy.builder().build();
+    }
+
+    /**
+     * Convert a list of Army to a virtual army.
+     */
+    static Army toVirtualArmy(List<Army> armyList) {
+        return armyList.stream().reduce(Army.empty(), (prev, next) -> prev.plus(next));
     }
 }

@@ -112,7 +112,7 @@ public class FightManager {
                 armyTasks.add(harassTask);
             }
         }
-        if (agent.observation().getArmyCount() > 70) {
+        /*if (agent.observation().getArmyCount() > 70) {
             // Start a harass force.
             DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass2", 100, 100);
             if (taskManager.addTask(harassTask, 1)) {
@@ -120,7 +120,7 @@ public class FightManager {
                 harassTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_RETREAT);
                 armyTasks.add(harassTask);
             }
-        }
+        }*/
     }
 
 
@@ -186,8 +186,8 @@ public class FightManager {
      */
     private void updateTargetingLogic(AgentData data) {
         Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearOwnBase();
-        Optional<Army> enemyArmyNearBase = nearestEnemy.flatMap(enemyPosition -> data.enemyAwareness().getMaybeEnemyArmy(enemyPosition));
-
+        Army virtualAttackingArmy = Army.toVirtualArmy(nearestEnemy.map(enemyPosition ->
+                data.enemyAwareness().getMaybeEnemyArmies(enemyPosition, 20f)).orElse(Collections.emptyList()));
 
         Optional<Point2d> defencePosition = Optional.empty();
         Optional<Point2d> attackPosition = Optional.empty();
@@ -200,9 +200,8 @@ public class FightManager {
             defencePosition = nearestEnemy;
         }
 
-        Optional<Army> attackingEnemyArmy = data.enemyAwareness().getMaybeEnemyArmy(nearestEnemy.get());
-        if (attackingEnemyArmy.isPresent()) {
-            FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(attackingEnemyArmy.get());
+        if (virtualAttackingArmy.size() > 0) {
+            FightPerformance predictedOutcome = reserveArmy.predictFightAgainst(virtualAttackingArmy);
             if (defencePosition.isPresent() && predictedOutcome == FightPerformance.BADLY_LOSING) {
                 // Defending army needs help.
                 attackPosition = defencePosition;
@@ -241,10 +240,9 @@ public class FightManager {
                 attackPosition = Optional.empty();
             }
         }
-        // Harass bases which have half the enemy army threat diffused to them.
-        double minDiffuseThreat = data.enemyAwareness().getPotentialEnemyArmy()
-                .map(army -> army.threat() / 2.0)
-                .orElse(20.0);
+        // Harass the base with the least diffuse threat, as long as the diffuse threat is less half our attacking
+        // army's power.
+        double minDiffuseThreat = attackingArmy.getPower() / 2.0;
         RegionData minRegion = null;
         for (RegionData regionData : data.mapAwareness().getAllRegionData()) {
             if (attackPosition.isPresent()) {

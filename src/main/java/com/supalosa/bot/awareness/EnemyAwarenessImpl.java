@@ -178,20 +178,11 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
     }
 
     @Override
-    public Optional<Army> getMaybeEnemyArmy(Point2d point2d) {
-        Point closest = null;
-        double closestDistance = Float.MAX_VALUE;
-        for (Map.Entry<Point, ImmutableArmy> entry : this.enemyClusters.entrySet()) {
-            Point point = entry.getKey();
-            ImmutableArmy army = entry.getValue();
-            double distance = point2d.distance(point.toPoint2d());
-            // TODO configurable distance.
-            if (distance < 25f && distance < closestDistance) {
-                closestDistance = distance;
-                closest = point;
-            }
-        }
-        return Optional.ofNullable(this.enemyClusters.get(closest));
+    public List<Army> getMaybeEnemyArmies(Point2d point2d, float searchRadius) {
+        return this.enemyClusters.values().stream()
+                .filter(immutableArmy -> immutableArmy.position().isPresent())
+                .filter(immutableArmy -> point2d.distance(immutableArmy.position().get()) <= searchRadius)
+                .collect(Collectors.toList());
     }
 
     @Override

@@ -5,6 +5,8 @@ import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
+import com.github.ocraft.s2client.protocol.debug.Color;
+import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
@@ -92,11 +94,15 @@ public class BaseTerranTask implements BehaviourTask {
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_FACTORY).test(unitInPool)).forEach(unit -> {
-                agentWithData.actions().unitCommand(unit.unit(),
-                        countUnitType(Units.TERRAN_FACTORY_TECHLAB) == 0 ?
-                                Abilities.BUILD_TECHLAB_FACTORY :
-                                Abilities.BUILD_REACTOR_FACTORY, unit.unit().getPosition().toPoint2d(),
-                        false);
+                if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
+                    agentWithData.actions().unitCommand(unit.unit(),
+                            countUnitType(Units.TERRAN_FACTORY_TECHLAB) == 0 ?
+                                    Abilities.BUILD_TECHLAB_FACTORY :
+                                    Abilities.BUILD_REACTOR_FACTORY, unit.unit().getPosition().toPoint2d(),
+                            false);
+                } else {
+                    agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);
+                }
             });
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_FACTORY_TECHLAB, Map.of(
                     Upgrades.DRILL_CLAWS, Abilities.RESEARCH_DRILLING_CLAWS
@@ -133,22 +139,30 @@ public class BaseTerranTask implements BehaviourTask {
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
-                agentWithData.actions().unitCommand(unit.unit(),
-                        countUnitType(Units.TERRAN_STARPORT_REACTOR) == 0 ?
-                                Abilities.BUILD_REACTOR_STARPORT :
-                                Abilities.BUILD_TECHLAB_STARPORT, unit.unit().getPosition().toPoint2d(),
-                        false);
+                if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
+                    agentWithData.actions().unitCommand(unit.unit(),
+                            countUnitType(Units.TERRAN_STARPORT_REACTOR) == 0 ?
+                                    Abilities.BUILD_REACTOR_STARPORT :
+                                    Abilities.BUILD_TECHLAB_STARPORT, unit.unit().getPosition().toPoint2d(),
+                            false);
+                } else {
+                    agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);
+                }
             });
         }
         if (supply > 40) {
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
-                Ability ability = Abilities.BUILD_REACTOR;
-                if (countUnitType(Units.TERRAN_BARRACKS_TECHLAB) == 0 || ThreadLocalRandom.current().nextBoolean()) {
-                    ability = Abilities.BUILD_TECHLAB;
+                if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
+                    Ability ability = Abilities.BUILD_REACTOR;
+                    if (countUnitType(Units.TERRAN_BARRACKS_TECHLAB) == 0 || ThreadLocalRandom.current().nextBoolean()) {
+                        ability = Abilities.BUILD_TECHLAB;
+                    }
+                    agentWithData.actions().unitCommand(unit.unit(), ability, unit.unit().getPosition().toPoint2d(), false);
+                } else {
+                    agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);
                 }
-                agentWithData.actions().unitCommand(unit.unit(), ability, unit.unit().getPosition().toPoint2d(), false);
             });
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
                     Upgrades.COMBAT_SHIELD, Abilities.RESEARCH_COMBAT_SHIELD,
@@ -222,6 +236,10 @@ public class BaseTerranTask implements BehaviourTask {
         BuildUtils.defaultTerranRamp(agentWithData);
 
         agentWithData.fightManager().setCanAttack(true);
+    }
+
+    private boolean canFitAddon(AgentWithData agentWithData, Unit unit) {
+        return agentWithData.structurePlacementCalculator().map(spc -> spc.canFitAddon(unit)).orElse(false);
     }
 
     @Override

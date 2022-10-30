@@ -316,7 +316,7 @@ public class BuildStructureTask extends BaseTask {
                 .orElse(Optional.empty());
     }
 
-    private Optional<Point2d> resolveLocation(UnitInPool worker, AgentData data) {
+    private Optional<Point2d> resolveLocation(UnitInPool worker, AgentWithData data) {
         //System.out.println("Worker: " + worker);
         return location.or(() -> data.structurePlacementCalculator().flatMap(spc -> spc.suggestLocationForFreePlacement(
                 data,
