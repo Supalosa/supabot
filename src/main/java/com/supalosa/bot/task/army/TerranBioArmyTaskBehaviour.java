@@ -12,7 +12,6 @@ import com.supalosa.bot.task.army.micro.TerranMicro;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.task.terran.ImmutableScanRequestTaskMessage;
 import com.supalosa.bot.utils.Point2dMap;
-import com.supalosa.bot.utils.Utils;
 import org.immutables.value.Value;
 
 import java.util.List;
@@ -107,11 +106,11 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
             } else if (unit.getType() == Units.TERRAN_GHOST) {
                 TerranMicro.handleGhostMicro(unit, goalPosition, args, enemyUnitMap);
             } else if (unit.getType() == Units.TERRAN_WIDOWMINE) {
-                TerranMicro.handleWidowmineMicro(unit, args, enemyUnitMap);
+                TerranMicro.handleWidowmineMicro(unit, goalPosition, args, enemyUnitMap);
             } else if (unit.getType() == Units.TERRAN_WIDOWMINE_BURROWED) {
                 TerranMicro.handleWidowmineBurrowedMicro(unit, args, enemyUnitMap);
             } else if (unit.getType() == Units.TERRAN_MEDIVAC || unit.getType() == Units.TERRAN_RAVEN) {
-                TerranMicro.handleMedivacMicro(unit, args, enemyUnitMap);
+                TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
             } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
                 TerranMicro.handleVikingMicro(unit, goalPosition, args, enemyUnitMap);
             }
@@ -134,8 +133,8 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
-            return dispersion.orElse(0.0) <= 2.0 && currentRegionData.hasEnemyBase() == false;
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
+            return dispersion.orElse(0.0) <= 2.0 && currentRegionData.hasEnemyBase() == false && (childArmies.size() == 0);
         }
     }
 
@@ -187,11 +186,11 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                 } else if (unit.getType() == Units.TERRAN_GHOST) {
                     TerranMicro.handleGhostMicro(unit, goalPosition, args, enemyUnitMap);
                 } else if (unit.getType() == Units.TERRAN_WIDOWMINE) {
-                    TerranMicro.handleWidowmineMicro(unit, args, enemyUnitMap);
+                    TerranMicro.handleWidowmineMicro(unit, goalPosition, args, enemyUnitMap);
                 } else if (unit.getType() == Units.TERRAN_WIDOWMINE_BURROWED) {
                     TerranMicro.handleWidowmineBurrowedMicro(unit, args, enemyUnitMap);
                 } else if (unit.getType() == Units.TERRAN_MEDIVAC || unit.getType() == Units.TERRAN_RAVEN) {
-                    TerranMicro.handleMedivacMicro(unit, args, enemyUnitMap);
+                    TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
                 } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
                     TerranMicro.handleVikingMicro(unit, goalPosition, args, enemyUnitMap);
                 }
@@ -214,7 +213,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
             return true;
         }
     }
@@ -241,7 +240,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
             return true;
         }
     }
@@ -279,7 +278,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
             return true;
         }
     }

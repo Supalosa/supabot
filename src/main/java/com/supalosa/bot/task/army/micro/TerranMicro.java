@@ -32,8 +32,13 @@ public class TerranMicro {
     }
 
     private static boolean isAlreadyUsingAbilityAt(Ability ability, Point2d position, Optional<UnitOrder> order) {
-        return order.filter(unitOrder -> unitOrder.getAbility().equals(ability) &&
-                unitOrder.getTargetedWorldSpacePosition().map(Point::toPoint2d).equals(Optional.of(position))).isPresent();
+        // Do not allow the same ability to be used within 0.5 distance of the existing order.
+        return order.filter(unitOrder -> unitOrder.getAbility().equals(ability))
+                    .flatMap(UnitOrder::getTargetedWorldSpacePosition)
+                    .map(Point::toPoint2d)
+                    .map(position::distance)
+                    .filter(distance -> distance < 0.5)
+                    .isPresent();
     }
 
     public static void handleMarineMarauderMicro(Unit unit, Optional<Point2d> goalPosition, DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap, AtomicLong remainingUnitsToStim) {
@@ -47,12 +52,10 @@ public class TerranMicro {
         }
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
             // Off weapon cooldown.
-            goalPosition.ifPresent(position -> {
-                if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
-                    position = args.nextRegion().get().region().centrePoint();
-                }
-                if (!isAlreadyAttackMovingTo(position, currentOrder)) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+            Optional<Point2d> position = getNextPosition(goalPosition, args);
+            position.ifPresent(attackPosition -> {
+                if (!isAlreadyAttackMovingTo(attackPosition, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackPosition, false);
                 }
             });
         } else {
@@ -91,43 +94,45 @@ public class TerranMicro {
     public static void handleVikingMicro(Unit unit, Optional<Point2d> goalPosition,
                                          DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
         Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
-        // Stutter-step micro. The more we're winning, the smaller the stutter radius.
-        float stutterRadius = 9f;
-        if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
+        // Move out of range of anti-air units.
+        Optional<Point2d> nearestEnemyUnit = enemyUnitMap
+                .getNearestInRadius(unit.getPosition().toPoint2d(), 9f, enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
+                .map(enemy -> enemy.getPosition().toPoint2d());
+        Optional<Unit> bestTarget = enemyUnitMap
+                .getHighestScoreInRadius(unit.getPosition().toPoint2d(),12f,
+                        enemy -> Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES.contains(enemy.getType()),
+                        (enemy, distance) -> distance);
+        if (nearestEnemyUnit.isEmpty() && (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f)) {
             // Off weapon cooldown.
-            Optional<Unit> bestTarget = enemyUnitMap
-                    .getHighestScoreInRadius(unit.getPosition().toPoint2d(),12f,
-                            enemy -> Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES.contains(enemy.getType()),
-                            (enemy, distance) -> distance);
+            Optional<Point2d> position = getNextPosition(goalPosition, args);
             bestTarget.ifPresentOrElse(
                     target -> args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, target, false),
-                    () -> goalPosition.ifPresent(position -> {
+                    () -> position.ifPresent(attackMovePosition -> {
                         if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
-                            position = args.nextRegion().get().region().centrePoint();
+                            attackMovePosition = args.nextRegion().get().region().centrePoint();
                         }
-                        if (!isAlreadyAttackMovingTo(position, currentOrder)) {
-                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+                        if (!isAlreadyAttackMovingTo(attackMovePosition, currentOrder)) {
+                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackMovePosition, false);
                         }
                     }));
         } else {
             // On weapon cooldown.
-            Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                    .getNearestInRadius(unit.getPosition().toPoint2d(), 10f, enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
-                    .map(enemy -> enemy.getPosition().toPoint2d());
-            float finalStutterRadius = stutterRadius;
             // If the nearest enemy is within stutterRadius, walk away, otherwise walk towards it.
             // Bias towards the region we came from.
             Optional<Point2d> retreatPosition = nearestEnemyUnit
-                    .filter(enemyPosition -> enemyPosition.distance(unit.getPosition().toPoint2d()) < finalStutterRadius)
                     .map(enemyPosition -> Utils.getBiasedRetreatPosition(
                             unit.getPosition().toPoint2d(),
                             enemyPosition,
                             args.centreOfMass().or(() -> args.previousRegion().map(RegionData::region).map(Region::centrePoint)),
                             1.5f))
                     .or(() -> goalPosition);
-            retreatPosition.ifPresent(retreatPoint2d -> {
+            retreatPosition.ifPresentOrElse(retreatPoint2d -> {
                 if (!isAlreadyMovingTo(retreatPoint2d, currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, retreatPoint2d, false);
+                }
+            }, () -> {
+                if (bestTarget.isPresent() && !isAlreadyAttackMovingTo(bestTarget.get().getPosition().toPoint2d(), currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, bestTarget.get().getPosition().toPoint2d(), false);
                 }
             });
         }
@@ -158,17 +163,12 @@ public class TerranMicro {
         }
         if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f) {
             // Ghost Off weapon cooldown.
-            goalPosition.ifPresent(position -> {
-                if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
-                    position = args.nextRegion().get().region().centrePoint();
-                }
-                if (!isAlreadyAttackMovingTo(position, currentOrder)) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position, false);
+            Optional<Point2d> position = getNextPosition(goalPosition, args);
+            position.ifPresent(attackPosition -> {
+                if (!isAlreadyAttackMovingTo(attackPosition, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackPosition, false);
                 }
             });
-            if (!goalPosition.isPresent()) {
-
-            }
         } else {
             // Ghost on weapon cooldown.
             Optional<Point2d> nearestEnemyUnit = enemyUnitMap
@@ -190,19 +190,20 @@ public class TerranMicro {
         }
     }
 
-    public static void handleMedivacMicro(Unit unit, DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
+    public static void handleMedivacMicro(Unit unit, Optional<Point2d> goalPosition, DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
                                           Point2dMap<Unit> enemyUnitMap) {
         Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
-        // Medivacs move to the centre of mass or away from the enemy unit if too close.
+        // Medivacs move halfway between the centre of mass and the target location
         Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(), 6f)
+                .getNearestInRadius(unit.getPosition().toPoint2d(), 10f)
                 .map(enemy -> enemy.getPosition().toPoint2d());
         Optional<Point2d> retreatPosition = nearestEnemyUnit
                 .map(enemyPosition -> Utils.getBiasedRetreatPosition(
                         unit.getPosition().toPoint2d(),
                         enemyPosition, args.previousRegion().map(RegionData::region).map(Region::centrePoint),
                         1.5f));
-        args.centreOfMass().ifPresent(centreOfMass -> {
+        Optional<Point2d> nextPositionSafe = getNextPositionSafe(goalPosition, args);
+        nextPositionSafe.ifPresent(centreOfMass -> {
             if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.1f) {
                 if (!isAlreadyAttackMovingTo(centreOfMass, currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, centreOfMass, false);
@@ -228,22 +229,69 @@ public class TerranMicro {
     public static void handleWidowmineBurrowedMicro(Unit unit, DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
                                                     Point2dMap<Unit> enemyUnitMap) {
         Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(), 15f)
+                .getNearestInRadius(unit.getPosition().toPoint2d(), 18f)
                 .map(enemy -> enemy.getPosition().toPoint2d());
         if (nearestEnemyUnit.isEmpty()) {
             args.agentWithData().actions().unitCommand(unit, Abilities.BURROW_UP_WIDOWMINE, false);
         }
     }
 
-    public static void handleWidowmineMicro(Unit unit, DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
+    public static void handleWidowmineMicro(Unit unit, Optional<Point2d> goalPosition, DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
                                             Point2dMap<Unit> enemyUnitMap) {
         Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(), 10f)
+                .getNearestInRadius(unit.getPosition().toPoint2d(), 12f)
                 .map(enemy -> enemy.getPosition().toPoint2d());
-        if (nearestEnemyUnit.isPresent() && nearestEnemyUnit.get().distance(unit.getPosition().toPoint2d()) < 10f) {
+        Optional<Point2d> nextPositionSafe = getNextPositionSafe(goalPosition, args);
+        if (nearestEnemyUnit.isPresent()) {
              args.agentWithData().actions().unitCommand(unit, Abilities.BURROW_DOWN_WIDOWMINE, false);
-        } else if (args.centreOfMass().isPresent()) {
-            args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, args.centreOfMass().get(), false);
+        } else if (nextPositionSafe.isPresent()) {
+            Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
+            if (!isAlreadyMovingTo(nextPositionSafe.get(), currentOrder)) {
+                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, nextPositionSafe.get(), false);
+            }
         }
+    }
+
+    /**
+     * Return an appropriate next position, given the current/next region.
+     */
+    private static Optional<Point2d> getNextPosition(Optional<Point2d> goalPosition,
+                                                     DefaultArmyTaskBehaviourStateHandler.BaseArgs args) {
+        Optional<Point2d> position;
+        if (!args.currentRegion().equals(args.targetRegion())) {
+            position = args.nextRegion().map(region -> region.region().centrePoint());
+            if (position.isEmpty()) {
+                //position = args.currentRegion().map(RegionData::region).map(Region::centrePoint);
+                position = args.centreOfMass();
+            }
+        } else {
+            position = goalPosition;
+        }
+        return position;
+    }
+
+    /**
+     * Return an appropriate next position, given the current/next region. Tries to stay near the centre of mass.
+     */
+    private static Optional<Point2d> getNextPositionSafe(Optional<Point2d> goalPosition,
+                                                     DefaultArmyTaskBehaviourStateHandler.BaseArgs args) {
+        return getNextPosition(goalPosition, args);
+        /*
+        Optional<Point2d> centreOfMass = args.centreOfMass();
+        Optional<Point2d> position;
+        if (!args.currentRegion().equals(args.targetRegion())) {
+            position = args.nextRegion().map(region -> region.region().centrePoint());
+            if (position.isEmpty()) {
+                position = args.currentRegion().map(RegionData::region).map(Region::centrePoint);
+            }
+        } else {
+            position = goalPosition;
+        }
+        // In order: Return the point halfway between the centre of mass and the goal point,
+        // or the centre of mass,
+        // or the goal point.
+        Optional<Point2d> finalPosition = position;
+        Optional<Point2d> result = centreOfMass.flatMap(com -> finalPosition.map(com::add).map(pos -> pos.div(2f))).or(() -> finalPosition);
+        return result;*/
     }
 }

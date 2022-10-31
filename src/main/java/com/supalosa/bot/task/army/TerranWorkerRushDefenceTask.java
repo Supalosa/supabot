@@ -43,7 +43,7 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
     }
 
     @Override
-    public DefaultArmyTask createChildArmy() {
+    public DefaultArmyTask createChildArmyImpl() {
         throw new NotImplementedException("Cannot reinforce this army.");
     }
 

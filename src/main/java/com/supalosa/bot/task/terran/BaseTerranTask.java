@@ -133,17 +133,20 @@ public class BaseTerranTask implements BehaviourTask {
         if (supply > 50) {
             int targetStarports = supply > 160 ? 2 : 1;
             if (supply == 200) {
-                targetStarports = 4;
+                targetStarports = 3;
             }
             tryBuildMax(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 2, targetStarports, Optional.of(PlacementRules.borderOfBase()));
+            int numReactors = countUnitType(Units.TERRAN_STARPORT_REACTOR);
+            int numTechLabs = countUnitType(Units.TERRAN_STARPORT_TECHLAB);
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
                 if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
-                    agentWithData.actions().unitCommand(unit.unit(),
-                            countUnitType(Units.TERRAN_STARPORT_REACTOR) == 0 ?
+                    // Reactor, Techlab, Reactor
+                    agentWithData.actions().unitCommand(unit.unit(), numReactors == 0 ?
                                     Abilities.BUILD_REACTOR_STARPORT :
-                                    Abilities.BUILD_TECHLAB_STARPORT, unit.unit().getPosition().toPoint2d(),
+                                    numTechLabs == 0 ? Abilities.BUILD_TECHLAB_STARPORT : Abilities.BUILD_REACTOR_STARPORT,
+                            unit.unit().getPosition().toPoint2d(),
                             false);
                 } else {
                     agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);

@@ -32,6 +32,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
     private final ThreatCalculator threatCalculator;
 
+    // Whether the army wants units as they are produced. Typically will be false for the main attacking army (as we
+    // use child armies to reinforce) and child armies (same reason).
+    private boolean wantsUnits = true;
+
     // This is another army task that exists, that this army will try to merge into by moving close to it.
     private Optional<DefaultArmyTask<A,D,R,I>> parentArmy = Optional.empty();
     private Optional<Point2d> targetPosition = Optional.empty();
@@ -64,7 +68,11 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     private boolean isComplete = false;
 
+    private List<DefaultArmyTask> childArmies = new ArrayList<>();
+
     private final DefaultArmyTaskBehaviour<A,D,R,I> behaviour;
+
+    private boolean shouldMoveFromRegion = true;
 
     public DefaultArmyTask(String armyName,
                            int basePriority,
@@ -106,7 +114,16 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
      *
      * @return A new army of this type, that has its parent set to this army.
      */
-    public abstract DefaultArmyTask<A,D,R,I> createChildArmy();
+    public final DefaultArmyTask<A,D,R,I> createChildArmy() {
+        DefaultArmyTask<A,D,R,I> childArmy = createChildArmyImpl();
+        // Inherit some settings from this army.
+        childArmy.setWantsUnits(this.wantsUnits);
+        childArmy.setAggressionLevel(this.aggressionLevel);
+        childArmies.add(childArmy);
+        return childArmy;
+    }
+
+    protected abstract DefaultArmyTask<A,D,R,I> createChildArmyImpl();
 
     public String getArmyName() {
         return this.armyName;
@@ -153,6 +170,12 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 }
             }
         }
+
+        // Remove child armies that are dead.
+        childArmies = childArmies.stream()
+                .filter(task -> task.isComplete() == false)
+                .filter(task -> taskManager.hasTask(task))
+                .collect(Collectors.toList());
 
         if (gameLoop > nextArmyLogicUpdateAt) {
             nextArmyLogicUpdateAt = gameLoop + armyLogicUpdate(agentWithData, allUnits);
@@ -217,13 +240,16 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         Optional<RegionData> previousCurrentRegion = currentRegion;
         Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> agentWithData.mapAwareness().getRegionDataForPoint(centre));
         currentRegion = currentRegionData;
+        if (currentRegion.isEmpty() && centreOfMass.isPresent()) {
+            // Never let the current region be empty unless we have no units.
+            currentRegion = previousCurrentRegion;
+        }
 
-        final boolean shouldMoveFromRegion = currentRegion
-                .filter(region -> region.equals(regionWaypoints.stream().findFirst()))
+        this.shouldMoveFromRegion = currentRegion
                 .map(region -> getBehaviourHandlerForState().shouldMoveFromRegion(
                     agentWithData,
                     region,
-                    nextRegion, dispersion)).orElse(false);
+                    nextRegion, dispersion, childArmies)).orElse(false);
 
         if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
                 currentRegion.get().equals(regionWaypoints.get(0)) ||
@@ -295,7 +321,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         if (waypointsCalculatedTo.isPresent() && regionWaypoints.size() > 0) {
             nextRegion = regionWaypoints.stream().findFirst().flatMap(region ->
                     agentWithData.mapAwareness().getRegionDataForId(region.regionId()));
-        } else {
+        } else if (centreOfMass.isPresent()) {
             nextRegion = Optional.empty();
         }
         float enemyArmySearchRadius = 15f;
@@ -324,7 +350,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 targetPosition,
                 currentRegion,
                 previousRegion,
-                nextRegion,
+                shouldMoveFromRegion ? nextRegion : Optional.empty(),
                 targetRegion,
                 retreatRegion);
         if (aggressionState == AggressionState.ATTACKING) {
@@ -341,6 +367,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         if (newAggressionState != aggressionState) {
             aggressionState = newAggressionState;
             getBehaviourHandlerForState().onEnterState(baseArgs);
+            // Reset power tracking after each state change.
+            resetFightPerformance();
         }
 
         previousEnemyArmyObservation = Optional.of(virtualArmy);
@@ -415,6 +443,12 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             return FightPerformance.STABLE;
         }
     }
+
+    private void resetFightPerformance() {
+        cumulativeThreatDelta = 0;
+        cumulativePowerDelta = 0;
+    }
+
     @Override
     public void setPathRules(MapAwareness.PathRules pathRules) {
         this.pathRules = pathRules;
@@ -523,6 +557,15 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     public double getPower() {
         return threatCalculator.calculatePower(currentComposition);
+    }
+
+    public void setWantsUnits(boolean wantsUnits) {
+        this.wantsUnits = wantsUnits;
+    }
+
+    @Override
+    public boolean wantsUnit(Unit unit) {
+        return wantsUnits && super.wantsUnit(unit);
     }
 
     /**

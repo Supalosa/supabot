@@ -251,4 +251,9 @@ public class TaskManagerImpl implements TaskManager {
     public int totalReservedVespene() {
         return taskSet.values().stream().mapToInt(Task::reservedVespene).sum();
     }
+
+    @Override
+    public boolean hasTask(Task task) {
+        return taskSet.containsKey(task.getKey());
+    }
 }

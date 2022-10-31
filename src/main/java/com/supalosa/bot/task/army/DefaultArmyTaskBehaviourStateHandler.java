@@ -85,7 +85,7 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         Optional<RegionData> previousRegion();
 
         /**
-         * The next region that we're moving to.
+         * The next region that we're moving to. It will be absent if {@code shouldMoveFromRegion} is returning false.
          */
         @Value.Parameter
         Optional<RegionData> nextRegion();
@@ -147,7 +147,10 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      * @param currentRegionData The data for the region that we're in.
      * @param nextRegion The next region to travel to, or none if we're already in the target region.
      * @param dispersion The dispersion of the army, which is the root mean squared distance.
+     * @param childArmies List of child armies of this one, for example to see if we have reinforcements on the way.
      * @return If we should move to another region.
      */
-    boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion);
+    boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData,
+                                 Optional<RegionData> nextRegion, Optional<Double> dispersion,
+                                 List<DefaultArmyTask> childArmies);
 }
