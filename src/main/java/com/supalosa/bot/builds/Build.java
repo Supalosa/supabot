@@ -6,6 +6,8 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.placement.PlacementRules;
+import com.supalosa.bot.strategy.StrategicObservation;
+import com.supalosa.bot.strategy.Zerg12PoolStrategicObservation;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.terran.SwapAddonsTask;
 import com.supalosa.bot.utils.UnitFilter;
@@ -76,6 +78,15 @@ public class Build {
                     new SimpleBuildOrderCondition.AtAbilityCountCondition(new HashMap<>(expectedCountOfAbility)));
         }
 
+        /**
+         * Does not perform the next step unless the observation is sighted.
+         * Non-blocking condition, so may happen later in the build.
+         */
+        public BuilderWithCondition onObservationOf(Class<? extends StrategicObservation> observation) {
+            return new BuilderWithCondition(this,
+                    new SimpleBuildOrderCondition.StrategicObservationCondition(observation));
+        }
+
         // Mutators (which modify the previously added stage) go here.
         public Builder at(PlacementRules rules) {
             Validate.isTrue(stages.size() > 0);
@@ -97,7 +108,7 @@ public class Build {
 
         private Builder addStage(SimpleBuildOrderStage stage) {
             this.stages.add(stage);
-            if (stage.ability().isPresent()) {
+            if (stage.trigger().isBlocking() == false && stage.ability().isPresent()) {
                 this.expectedCountOfAbility.compute(stage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
             }
             return this;

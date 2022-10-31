@@ -174,9 +174,9 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         public DisengagingContext onArmyUnitStep(DisengagingContext context, Unit unit, BaseArgs args) {
             Point2dMap<Unit> enemyUnitMap = context.enemyUnitMap();
             Optional<Point2d> goalPosition = args.previousRegion()
-                    .or(args::retreatRegion)
                     .map(RegionData::region)
-                    .map(Region::centrePoint);
+                    .map(Region::centrePoint)
+                    .or(() -> args.retreatPosition());
             // If we're close enough to the centre of mass, and the army is together, we fight.
             if (args.centreOfMass().isPresent() &&
                     args.centreOfMass().get().distance(unit.getPosition().toPoint2d()) < 5f &&

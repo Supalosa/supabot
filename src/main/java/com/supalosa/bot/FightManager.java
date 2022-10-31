@@ -211,7 +211,9 @@ public class FightManager {
                 // This stops the defending army from mindlessly running to fight.
                 defencePosition = Optional.empty();
             }
-        } else {
+        }
+        if (defencePosition.isEmpty()) {
+            // If there's nothing to defend or we think we're gonna lose, fall back to the top of the ramp.
             defencePosition = data.structurePlacementCalculator().flatMap(spc -> {
                 // Defend from behind the barracks, or else the position of the barracks.
                 return spc.getMainRamp()

@@ -151,6 +151,7 @@ public class BuildUtils {
         // Open or close the ramp.
         agentWithData.structurePlacementCalculator().ifPresent(spc -> {
             AtomicBoolean rampClosed = new AtomicBoolean(false);
+            Set<Tag> rampDepots = new HashSet<>();
             spc.getFirstSupplyDepot(agentWithData.observation()).ifPresent(supplyDepot -> {
                 if (agentWithData.observation().getUnits(Alliance.ENEMY).stream()
                         .anyMatch(enemyUnit -> enemyUnit
@@ -164,6 +165,7 @@ public class BuildUtils {
                 } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
                     agentWithData.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
                 }
+                rampDepots.add(supplyDepot.getTag());
             });
             spc.getSecondSupplyDepot(agentWithData.observation()).ifPresent(supplyDepot -> {
                 if (!rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT) {
@@ -171,9 +173,13 @@ public class BuildUtils {
                 } else if (rampClosed.get() && supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT_LOWERED) {
                     agentWithData.actions().unitCommand(supplyDepot.getTag(), Abilities.MORPH_SUPPLY_DEPOT_RAISE, false);
                 }
+                rampDepots.add(supplyDepot.getTag());
             });
             for (UnitInPool supplyDepot : agentWithData.observation().getUnits(UnitFilter.mine(Units.TERRAN_SUPPLY_DEPOT))) {
-                agentWithData.actions().unitCommand(supplyDepot.unit(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                // Lower everything except the ramp depots.
+                if (!rampDepots.contains(supplyDepot.getTag())) {
+                    agentWithData.actions().unitCommand(supplyDepot.unit(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
+                }
             }
         });
     }

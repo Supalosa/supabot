@@ -38,6 +38,10 @@ public interface Army {
         return threatCalculator.calculateThreat(this.composition());
     }
 
+    default int getCount(UnitType type) {
+        return composition().getOrDefault(type, 0);
+    }
+
     /**
      * Returns this army plus another army. Note that the position will be unknown.
      */

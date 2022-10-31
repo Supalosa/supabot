@@ -61,8 +61,8 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     @Override
     public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         this.simpleBuildOrder.onStep(agentWithData.observation(), agentWithData.gameData());
-        List<BuildOrderOutput> outputs = this.simpleBuildOrder.getOutput(agentWithData.observation(), agentWithData.gameData());
-        this.nextStage = this.simpleBuildOrder.getWaitingStage(agentWithData.observation(), agentWithData.gameData());
+        List<BuildOrderOutput> outputs = this.simpleBuildOrder.getOutput(agentWithData);
+        this.nextStage = this.simpleBuildOrder.getWaitingStage(agentWithData.observation(), agentWithData);
         this.lastOutput = outputs;
         mineGas(agentWithData);
         rebalanceWorkers(agentWithData);

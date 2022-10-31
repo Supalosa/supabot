@@ -6,7 +6,9 @@ import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.GameData;
+import com.supalosa.bot.strategy.StrategicObservation;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;
@@ -19,6 +21,7 @@ public class SimpleBuildOrder implements BuildOrder {
 
     private final List<SimpleBuildOrderStage> stages;
     private final Set<SimpleBuildOrderStage> repeatingStages;
+    private final List<SimpleBuildOrderStage> asynchronousStages;
     private int targetGasMiners;
     private int currentStageNumber;
     private final Map<UnitType, Integer> expectedCountOfUnitType;
@@ -28,9 +31,11 @@ public class SimpleBuildOrder implements BuildOrder {
     private boolean isTimedOut = false;
     private boolean isAttackPermitted = false;
 
+
     SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
         this.stages = stages;
         this.repeatingStages = new HashSet<>();
+        this.asynchronousStages = new ArrayList<>();
         this.targetGasMiners = 0; //Integer.MAX_VALUE;
         this.currentStageNumber = 0;
         this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised initially onStep.
@@ -77,14 +82,23 @@ public class SimpleBuildOrder implements BuildOrder {
     }
 
     @Override
-    public List<BuildOrderOutput> getOutput(ObservationInterface observationInterface, GameData gameData) {
+    public List<BuildOrderOutput> getOutput(AgentWithData agentWithData) {
         if (currentStageNumber >= stages.size()) {
             return new ArrayList<>();
         } else {
+            // Check if any asynchronous stages have triggered.
+            List<SimpleBuildOrderStage> asynchronousTriggered = asynchronousStages.stream().filter(stage ->
+                            stage.trigger().accept(this, agentWithData.observation(), agentWithData))
+                    .collect(Collectors.toList());
+            asynchronousStages.removeAll(asynchronousTriggered);
+            if (asynchronousTriggered.size() > 0) {
+                System.out.println("Inserted " + asynchronousTriggered.size() + " stages as their async trigger returned true");
+                stages.addAll(currentStageNumber, asynchronousTriggered);
+            }
+
             SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
             List<BuildOrderOutput> output = new ArrayList<>();
-            final int currentSupply = observationInterface.getFoodUsed();
-            if (currentStage.trigger().accept(this, observationInterface, gameData)) {
+            if (currentStage.trigger().accept(this, agentWithData.observation(), agentWithData)) {
                 output.add(convertStageToOutput(currentStage));
             }
             output.addAll(repeatingStages.stream().map(this::convertStageToOutput)
@@ -96,10 +110,10 @@ public class SimpleBuildOrder implements BuildOrder {
     /**
      * Returns the stage that we're waiting for (if applicable).
      */
-    public Optional<SimpleBuildOrderStage> getWaitingStage(ObservationInterface observationInterface, GameData gameData) {
+    public Optional<SimpleBuildOrderStage> getWaitingStage(ObservationInterface observationInterface, AgentWithData agentWithData) {
         if (currentStageNumber < stages.size()) {
             SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
-            if (!currentStage.trigger().accept(this, observationInterface, gameData)) {
+            if (!currentStage.trigger().accept(this, observationInterface, agentWithData)) {
                 return Optional.of(currentStage);
             }
         }
@@ -132,6 +146,11 @@ public class SimpleBuildOrder implements BuildOrder {
                 }
                 if (currentStage.attack().isPresent()) {
                     isAttackPermitted = currentStage.attack().get();
+                }
+                while (nextStage.trigger().isBlocking() == false) {
+                    asynchronousStages.add(nextStage);
+                    currentStageNumber += 1;
+                    nextStage = stages.get(currentStageNumber);
                 }
             }
         }

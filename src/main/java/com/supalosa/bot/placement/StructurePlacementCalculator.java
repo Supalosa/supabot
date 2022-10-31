@@ -23,6 +23,7 @@ import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
+import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -43,6 +44,7 @@ public class StructurePlacementCalculator {
 
     private Optional<Tag> firstSupplyDepotTag = Optional.empty();
     private Optional<Tag> secondSupplyDepotTag = Optional.empty();
+    private Optional<Tag> barracksWithAddonTag = Optional.empty();
 
     private Optional<Optional<Point2d>> firstSupplyDepotLocation = Optional.empty();
     private Optional<Optional<Point2d>> secondSupplyDepotLocation = Optional.empty();
@@ -231,6 +233,38 @@ public class StructurePlacementCalculator {
             updateFreePlacementGrid();
         }
         return barracksWithAddonLocation.get();
+    }
+
+    /**
+     * Returns the actual barracks depot that (should be) on the main ramp.
+     * @param observation Observation to query.
+     * @return
+     */
+    public Optional<UnitInPool> getFirstBarracksWithAddon(ObservationInterface observation) {
+        if (barracksWithAddonTag.isPresent()) {
+            UnitInPool unit = observation.getUnit(barracksWithAddonTag.get());
+            if (unit != null && unit.isAlive()) {
+                return Optional.of(unit);
+            } else {
+                barracksWithAddonTag = Optional.empty();
+            }
+        }
+        Optional<Point2d> barracksLocation = getFirstBarracksWithAddonLocation();
+        if (barracksLocation.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<UnitInPool> barracks;
+        List<UnitInPool> barracksAtLocation = observation.getUnits(UnitFilter.builder()
+                        .alliance(Alliance.SELF)
+                        .inRangeOf(barracksLocation.get())
+                        .range(1.0f)
+                        .build());
+        if (barracksAtLocation.size() == 0) {
+            return Optional.empty();
+        } else {
+            barracksWithAddonTag = Optional.of(barracksAtLocation.get(0).getTag());
+            return Optional.of(barracksAtLocation.get(0));
+        }
     }
 
     Optional<Ramp> getRamp(Point2d start) {

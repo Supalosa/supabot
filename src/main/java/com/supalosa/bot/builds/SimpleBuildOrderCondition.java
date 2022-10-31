@@ -6,14 +6,24 @@ import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.GameData;
+import com.supalosa.bot.strategy.StrategicObservation;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public interface SimpleBuildOrderCondition {
 
-    boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, GameData gameData);
+    /**
+     * Returns whether the condition (and associated stage) is blocking or not.
+     * A non-blocking task will be added to the front of the stage list as a blocking task once the condition is met.
+     */
+    default boolean isBlocking() {
+        return true;
+    }
+
+    boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, AgentWithData gameData);
 
     class AtSupplyCondition implements SimpleBuildOrderCondition {
 
@@ -24,7 +34,7 @@ public interface SimpleBuildOrderCondition {
         }
 
         @Override
-        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, GameData gameData) {
+        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, AgentWithData gameData) {
             return observationInterface.getFoodUsed() >= atSupply;
         }
 
@@ -43,7 +53,7 @@ public interface SimpleBuildOrderCondition {
         }
 
         @Override
-        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, GameData gameData) {
+        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, AgentWithData gameData) {
             for (Map.Entry<Ability, Integer> entry : buildOrder.getAbilitiesUsedCount().entrySet()) {
                 Ability ability = entry.getKey();
                 int expectedCountOfAbility = expectedCount.getOrDefault(ability, 0);
@@ -71,7 +81,7 @@ public interface SimpleBuildOrderCondition {
         }
 
         @Override
-        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, GameData gameData) {
+        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, AgentWithData gameData) {
             Map<UnitType, Integer> currentCount = new HashMap<>();
             observationInterface.getUnits(Alliance.SELF).forEach(unitInPool -> {
                 Unit unit = unitInPool.unit();
@@ -108,7 +118,7 @@ public interface SimpleBuildOrderCondition {
         }
         @Override
         public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface,
-                              GameData gameData) {
+                              AgentWithData gameData) {
             return condition1.accept(buildOrder, observationInterface, gameData) ||
                     condition2.accept(buildOrder, observationInterface, gameData);
         }
@@ -116,6 +126,34 @@ public interface SimpleBuildOrderCondition {
         @Override
         public String toString() {
             return "(" + condition1 + " or " + condition2 + ")";
+        }
+    }
+
+    /**
+     * Triggers the condition when the StrategicObservation is matched.
+     */
+    class StrategicObservationCondition implements SimpleBuildOrderCondition {
+
+        private final Class<? extends StrategicObservation> observation;
+
+        public StrategicObservationCondition(Class<? extends StrategicObservation> observation) {
+            this.observation = observation;
+        }
+
+        @Override
+        public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface,
+                              AgentWithData data) {
+            return data.strategyTask().hasSeenObservation(observation);
+        }
+
+        @Override
+        public boolean isBlocking() {
+            return false;
+        }
+
+        @Override
+        public String toString() {
+            return "Scouted " + observation.getSimpleName();
         }
     }
 }

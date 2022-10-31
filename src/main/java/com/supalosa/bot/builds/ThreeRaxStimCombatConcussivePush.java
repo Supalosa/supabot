@@ -3,6 +3,7 @@ package com.supalosa.bot.builds;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.supalosa.bot.placement.PlacementRules;
+import com.supalosa.bot.strategy.Zerg12PoolStrategicObservation;
 
 import java.util.Set;
 
@@ -23,6 +24,9 @@ public class ThreeRaxStimCombatConcussivePush extends SimpleBuildOrder {
                 .atSupply(0).startRepeatingUnit(Set.of(CC, ORBITAL), Abilities.TRAIN_SCV)
                 .atSupply(0).startRepeatingUnit(Set.of(CC, ORBITAL), Abilities.TRAIN_SCV)
                 .atSupply(0).setGasMiners(12)
+                // Wall off earlier if a 12 pool is coming.
+                .onObservationOf(Zerg12PoolStrategicObservation.class).buildSupplyDepot().at(PlacementRules.mainRampSupplyDepot2())
+                .onObservationOf(Zerg12PoolStrategicObservation.class).trainUnit(Units.TERRAN_BARRACKS, Abilities.TRAIN_MARINE)
                 .atSupply(14).buildSupplyDepot().at(PlacementRules.mainRampSupplyDepot1())
                 .then().buildStructure(Abilities.BUILD_BARRACKS).at(PlacementRules.mainRampBarracksWithAddon())
                 .then().buildStructure(Abilities.BUILD_REFINERY)

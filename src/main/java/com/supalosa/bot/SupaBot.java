@@ -1,13 +1,11 @@
 package com.supalosa.bot;
 
-import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ActionInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.ChatReceived;
-import com.github.ocraft.s2client.protocol.response.ResponseType;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
@@ -26,6 +24,7 @@ import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.terran.BaseTerranTask;
 import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.task.SimpleBuildOrderTask;
+import com.supalosa.bot.task.terran.TerranStrategyTask;
 import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
@@ -54,6 +53,7 @@ public class SupaBot extends AgentWithData {
 
     private final DebugTarget debugTarget;
     private BehaviourTask behaviourTask;
+    private StrategyTask strategyTask = new TerranStrategyTask();
 
     public SupaBot(boolean isDebug, DebugTarget debugTarget) {
         this.isDebug = isDebug;
@@ -97,6 +97,7 @@ public class SupaBot extends AgentWithData {
                 new ThreeRaxStimCombatConcussivePush(),
                 () -> new BaseTerranTask());
         dispatchTaskOnce(1, behaviourTask);
+        dispatchTaskOnce(1, strategyTask);
     }
 
     @Override
@@ -270,6 +271,11 @@ public class SupaBot extends AgentWithData {
     @Override
     public EnemyAwareness enemyAwareness() {
         return enemyAwareness;
+    }
+
+    @Override
+    public StrategyTask strategyTask() {
+        return strategyTask;
     }
 
     @Override

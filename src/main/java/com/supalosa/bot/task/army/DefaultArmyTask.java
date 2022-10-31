@@ -357,6 +357,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 currentFightPerformance,
                 predictedFightPerformance,
                 targetPosition,
+                retreatPosition,
                 currentRegion,
                 previousRegion,
                 shouldMoveFromRegion ? nextRegion : Optional.empty(),

@@ -4,6 +4,7 @@ import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.EnemyAwareness;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
+import com.supalosa.bot.task.StrategyTask;
 import com.supalosa.bot.task.TaskManager;
 
 import java.util.Optional;
@@ -23,4 +24,6 @@ public interface AgentData {
     TaskManager taskManager();
 
     EnemyAwareness enemyAwareness();
+
+    StrategyTask strategyTask();
 }

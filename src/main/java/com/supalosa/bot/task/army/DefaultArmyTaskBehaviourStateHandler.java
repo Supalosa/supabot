@@ -73,6 +73,12 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         Optional<Point2d> attackPosition();
 
         /**
+         * The exact position that we are retreating to.
+         */
+        @Value.Parameter
+        Optional<Point2d> retreatPosition();
+
+        /**
          * The region that we are currently in.
          */
         @Value.Parameter
