@@ -34,10 +34,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     // Whether the army wants units as they are produced. Typically will be false for the main attacking army (as we
     // use child armies to reinforce) and child armies (same reason).
-    private boolean wantsUnits = true;
+    private boolean acceptingUnits = true;
 
-    // This is another army task that exists, that this army will try to merge into by moving close to it.
-    private Optional<DefaultArmyTask<A,D,R,I>> parentArmy = Optional.empty();
     private Optional<Point2d> targetPosition = Optional.empty();
     private Optional<Point2d> retreatPosition = Optional.empty();
     private Optional<Point2d> centreOfMass = Optional.empty();
@@ -68,7 +66,13 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     private boolean isComplete = false;
 
+    // This is another army task that exists, that this army will try to merge into by moving close to it.
+    private Optional<DefaultArmyTask<A,D,R,I>> parentArmy = Optional.empty();
+    // This a list of all (live) child armies that have this army set as its parent.
     private List<DefaultArmyTask> childArmies = new ArrayList<>();
+    // This is an army that this army is delegated to, and will defer production queries to. This is used so that the
+    // 'reserve' army will take the desired composition of the 'main' army.
+    private Optional<DefaultArmyTask<A,D,R,I>> productionDelegateArmy = Optional.empty();
 
     private final DefaultArmyTaskBehaviour<A,D,R,I> behaviour;
 
@@ -117,7 +121,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     public final DefaultArmyTask<A,D,R,I> createChildArmy() {
         DefaultArmyTask<A,D,R,I> childArmy = createChildArmyImpl();
         // Inherit some settings from this army.
-        childArmy.setWantsUnits(this.wantsUnits);
+        childArmy.setAcceptingUnits(this.acceptingUnits);
         childArmy.setAggressionLevel(this.aggressionLevel);
         childArmies.add(childArmy);
         return childArmy;
@@ -168,6 +172,11 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 if (armyUnits.size() == 0) {
                     markComplete();
                 }
+            }
+        }
+        if (productionDelegateArmy.isPresent()) {
+            if (productionDelegateArmy.get().isComplete() || !taskManager.hasTask(productionDelegateArmy.get())) {
+                productionDelegateArmy = Optional.empty();
             }
         }
 
@@ -559,13 +568,25 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         return threatCalculator.calculatePower(currentComposition);
     }
 
-    public void setWantsUnits(boolean wantsUnits) {
-        this.wantsUnits = wantsUnits;
+    public void setAcceptingUnits(boolean acceptingUnits) {
+        this.acceptingUnits = acceptingUnits;
     }
 
     @Override
     public boolean wantsUnit(Unit unit) {
-        return wantsUnits && super.wantsUnit(unit);
+        // Check if the production delegate wants it, otherwise check if we want it.
+        // We have to bypass the `acceptingUnits` check for the delegate.
+        return productionDelegateArmy
+                .map(delegate -> delegate.wantsUnitIgnoringOverride(unit))
+                .orElseGet(() -> acceptingUnits && wantsUnitIgnoringOverride(unit));
+    }
+
+    private boolean wantsUnitIgnoringOverride(Unit unit) {
+        return super.wantsUnit(unit);
+    }
+
+    public void setProductionDelegateArmy(DefaultArmyTask<A, D, R, I> productionDelegateArmy) {
+        this.productionDelegateArmy = Optional.of(productionDelegateArmy);
     }
 
     /**

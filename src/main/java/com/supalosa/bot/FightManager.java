@@ -132,7 +132,9 @@ public class FightManager {
             taskManager.addTask(reserveArmy, 1);
 
             // Stops the attacking army from taking units.
-            attackingArmy.setWantsUnits(false);
+            attackingArmy.setAcceptingUnits(false);
+            // Make the reserve army delegate production decisions to the attacking army.
+            reserveArmy.setProductionDelegateArmy(attackingArmy);
         }
 
         onStepTerranBio(taskManager, data);
@@ -356,6 +358,7 @@ public class FightManager {
     }
 
     public List<UnitTypeRequest> getRequestedUnitTypes() {
+        // Compute what units the attacking army wants.
         Map<UnitType, Integer> requestedAmount = new HashMap<>();
         Map<UnitType, Optional<UnitType>> alternateForm = new HashMap<>();
         Map<UnitType, UnitType> producingUnitType = new HashMap<>();

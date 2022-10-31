@@ -179,6 +179,7 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
 
         return null;
     }
+
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
         return desiredComposition;

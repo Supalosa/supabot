@@ -275,6 +275,7 @@ public class TerranMicro {
      */
     private static Optional<Point2d> getNextPositionSafe(Optional<Point2d> goalPosition,
                                                      DefaultArmyTaskBehaviourStateHandler.BaseArgs args) {
+        // Disabled as what we had didn't work very well.
         return getNextPosition(goalPosition, args);
         /*
         Optional<Point2d> centreOfMass = args.centreOfMass();
