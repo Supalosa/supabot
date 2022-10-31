@@ -54,6 +54,10 @@ public class FightManager {
     private boolean canAttack = false;
     private boolean pendingReinforcement = false;
 
+    private long lastBaseAttackAt = 0L;
+    // Amount of loops after a base attack before we can reinforce the attacking army.
+    private static final long REINFORCE_COOLDOWN_TIME_AFTER_ATTACK = 22L * 30;
+
     public FightManager(S2Agent agent) {
         this.agent = agent;
         armyTasks = new ArrayList<>();
@@ -124,7 +128,7 @@ public class FightManager {
     }
 
 
-    public void onStep(TaskManager taskManager, AgentData data) {
+    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         // hack, should be an ongamestart function
         if (!addedTasks) {
             addedTasks = true;
@@ -137,7 +141,7 @@ public class FightManager {
             reserveArmy.setProductionDelegateArmy(attackingArmy);
         }
 
-        onStepTerranBio(taskManager, data);
+        onStepTerranBio(taskManager, agentWithData);
 
         // Remove complete tasks.
         List<ArmyTask> validArmyTasks = armyTasks.stream().filter(armyTask -> !armyTask.isComplete()).collect(Collectors.toList());
@@ -148,7 +152,7 @@ public class FightManager {
 
         if (gameLoop > positionalLogicUpdatedAt + 22L) {
             positionalLogicUpdatedAt = gameLoop;
-            updateTargetingLogic(data);
+            updateTargetingLogic(agentWithData);
         }
 
         agent.observation().getUnits(Alliance.SELF).stream().forEach(unit -> {
@@ -161,7 +165,7 @@ public class FightManager {
                 float prevHealth = rememberedUnitHealth.get(tag);
                 float currentHealth = unit.unit().getHealth().get();
                 // TODO dispatch damage taken event to armies
-                if (data.gameData().isStructure(unit.unit().getType())) {
+                if (agentWithData.gameData().isStructure(unit.unit().getType())) {
                     createRepairTask(taskManager, unit.unit());
                 }
             }
@@ -172,7 +176,7 @@ public class FightManager {
             lastCloakOrBurrowedUpdate = gameLoop;
         }
 
-        if (pendingReinforcement) {
+        if (pendingReinforcement && gameLoop > lastBaseAttackAt + REINFORCE_COOLDOWN_TIME_AFTER_ATTACK) {
             pendingReinforcement = false;
             canAttack = false;
             DefaultArmyTask reinforcingArmy = attackingArmy.createChildArmy();
@@ -186,7 +190,7 @@ public class FightManager {
     /**
      * Make decisions on where to attack and defend.
      */
-    private void updateTargetingLogic(AgentData data) {
+    private void updateTargetingLogic(AgentWithData data) {
         Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearOwnBase();
         Army virtualAttackingArmy = Army.toVirtualArmy(nearestEnemy.map(enemyPosition ->
                 data.enemyAwareness().getMaybeEnemyArmies(enemyPosition, 20f)).orElse(Collections.emptyList()));
@@ -194,6 +198,8 @@ public class FightManager {
         Optional<Point2d> defencePosition = Optional.empty();
         Optional<Point2d> attackPosition = Optional.empty();
         Optional<Point2d> harassPosition = Optional.empty();
+
+        long gameLoop = data.observation().getGameLoop();
 
         boolean defenceNeedsAssistance = false;
 
@@ -211,6 +217,7 @@ public class FightManager {
                 // This stops the defending army from mindlessly running to fight.
                 defencePosition = Optional.empty();
             }
+            lastBaseAttackAt = gameLoop;
         }
         if (defencePosition.isEmpty()) {
             // If there's nothing to defend or we think we're gonna lose, fall back to the top of the ramp.
