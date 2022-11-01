@@ -1,9 +1,6 @@
 package com.supalosa.bot.task.army.micro;
 
-import com.github.ocraft.s2client.protocol.data.Abilities;
-import com.github.ocraft.s2client.protocol.data.Ability;
-import com.github.ocraft.s2client.protocol.data.Buffs;
-import com.github.ocraft.s2client.protocol.data.UnitAttribute;
+import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Unit;
@@ -16,6 +13,7 @@ import com.supalosa.bot.task.army.FightPerformance;
 import com.supalosa.bot.utils.Point2dMap;
 import com.supalosa.bot.utils.Utils;
 
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -60,13 +58,16 @@ public class TerranMicro {
             });
         } else {
             // On weapon cooldown.
-            Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                    .getNearestInRadius(unit.getPosition().toPoint2d(), 10f)
+            Optional<Unit> nearestEnemyUnit = enemyUnitMap
+                    .getNearestInRadius(unit.getPosition().toPoint2d(), 10f);
+            Optional<Point2d> nearestEnemyUnitPosition =  nearestEnemyUnit
                     .map(enemy -> enemy.getPosition().toPoint2d());
-            float finalStutterRadius = stutterRadius;
+            // Clamp the stutter radius by the enemy's range.
+            Float nearestEnemyUnitRange = nearestEnemyUnit.flatMap(enemy -> args.agentWithData().gameData().getMaxUnitRange(enemy.getType())).orElse(1.5f);
+            float finalStutterRadius = Math.min(Math.max(1.5f, nearestEnemyUnitRange), stutterRadius);
             // If the nearest enemy is within stutterRadius, walk away, otherwise walk towards it.
             // Bias towards the region we came from.
-            Optional<Point2d> retreatPosition = nearestEnemyUnit
+            Optional<Point2d> retreatPosition = nearestEnemyUnitPosition
                     .filter(enemyPosition -> enemyPosition.distance(unit.getPosition().toPoint2d()) < finalStutterRadius)
                     .map(enemyPosition -> Utils.getBiasedRetreatPosition(
                             unit.getPosition().toPoint2d(),

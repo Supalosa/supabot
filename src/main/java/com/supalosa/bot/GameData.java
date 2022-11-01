@@ -28,6 +28,7 @@ public class GameData {
     private final Map<Ability, UnitType> abilityToUnitType = new HashMap<>();
     private Map<UnitType, Boolean> structureTypes = new HashMap<>();
     private Map<Tag, Set<Ability>> availableAbilities;
+    private Map<UnitType, Optional<Float>> unitMaxRange = new HashMap<>();
 
     public GameData(ObservationInterface observationInterface) {
         this.observationInterface = observationInterface;
@@ -190,5 +191,19 @@ public class GameData {
         return maybeUnitTypeData
                 .map(unitTypeData -> unitTypeData.getAttributes())
                 .orElse(Collections.emptySet());
+    }
+
+    public Optional<Float> getMaxUnitRange(UnitType unitType) {
+        final Function<Set<Weapon>, Optional<Float>> mapper = weapons ->
+                weapons.stream().max(Comparator.comparingDouble(Weapon::getRange)).map(Weapon::getRange);
+        if (unitMaxRange.containsKey(unitType)) {
+            return unitMaxRange.get(unitType);
+        } else {
+            Optional<Float> range = getUnitTypeData(unitType)
+                    .map(UnitTypeData::getWeapons)
+                    .flatMap(mapper);
+            unitMaxRange.put(unitType, range);
+            return range;
+        }
     }
 }
