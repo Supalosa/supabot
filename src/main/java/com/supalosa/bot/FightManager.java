@@ -84,29 +84,6 @@ public class FightManager {
 
     // these will be moved to a playstyle-specific class
     private void onStepTerranBio(TaskManager taskManager, AgentData data) {
-        if (agent.observation().getFoodUsed() < 40) {
-            // Worker rush defence. Also used for crisis modes.
-            Optional<RegionData> startRegionData = data.mapAwareness()
-                    .getRegionDataForPoint(agent.observation().getStartLocation().toPoint2d());
-            if (data.mapAwareness().shouldDefendLocation(agent.observation().getStartLocation().toPoint2d())) {
-                List<UnitInPool> numNearbyWorkers = agent.observation().getUnits(
-                        UnitFilter.builder()
-                                .alliance(Alliance.ENEMY)
-                                .unitTypes(Constants.WORKER_TYPES)
-                                .inRangeOf(agent.observation().getStartLocation().toPoint2d())
-                                .range(15f)
-                                .build());
-                if (numNearbyWorkers.size() > 8) {
-                    DefaultArmyTask defenceTask = new TerranWorkerRushDefenceTask("WorkerDefence", 100);
-                    if (taskManager.addTask(defenceTask, 1)) {
-                        agent.actions().sendChat("Worker rush defence started.", ActionChat.Channel.BROADCAST);
-                        defenceTask.setPathRules(MapAwareness.PathRules.NORMAL);
-                        defenceTask.setAggressionLevel(DefaultArmyTask.AggressionLevel.FULL_AGGRESSION);
-                        armyTasks.add(defenceTask);
-                    }
-                }
-            }
-        }
         if (agent.observation().getArmyCount() > 40) {
             // Start a harass force.
             DefaultArmyTask harassTask = new TerranBioHarassArmyTask("Harass1", 100, 50);

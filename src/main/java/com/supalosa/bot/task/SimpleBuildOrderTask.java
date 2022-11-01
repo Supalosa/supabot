@@ -51,6 +51,7 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     private boolean isComplete = false;
     private List<BuildOrderOutput> lastOutput = new ArrayList<>();
     private Optional<SimpleBuildOrderStage> nextStage = Optional.empty();
+    private boolean hasAnnouncedFailure = false;
 
     public SimpleBuildOrderTask(SimpleBuildOrder simpleBuildOrder, Supplier<BehaviourTask> nextBehaviourTask) {
         super();
@@ -202,15 +203,19 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     }
 
     private void announceFailure(ObservationInterface observationInterface, ActionInterface actionInterface) {
+        if (hasAnnouncedFailure) {
+            return;
+        }
+        hasAnnouncedFailure = true;
         String outputsAsString = renderOutputsToString(lastOutput);
-        actionInterface.sendChat("Tag:buildorder-terminated-" +
-                simpleBuildOrder.getCurrentStageNumber() + "/" + simpleBuildOrder.getTotalStages() + "/" + observationInterface.getGameLoop(),
+        actionInterface.sendChat("Tag:build terminated " +
+                simpleBuildOrder.getCurrentStageNumber() + " " + simpleBuildOrder.getTotalStages() + " " + observationInterface.getGameLoop(),
                 ActionChat.Channel.BROADCAST);
-        actionInterface.sendChat("Tag:buildorder-current-" + outputsAsString, ActionChat.Channel.BROADCAST);
-        actionInterface.sendChat("Tag:buildorder-minerals-" + observationInterface.getMinerals(), ActionChat.Channel.BROADCAST);
-        actionInterface.sendChat("Tag:buildorder-supply-" + observationInterface.getFoodUsed() + "/" + observationInterface.getFoodCap(), ActionChat.Channel.BROADCAST);
+        actionInterface.sendChat("Tag:build current " + outputsAsString, ActionChat.Channel.BROADCAST);
+        actionInterface.sendChat("Tag:build minerals " + observationInterface.getMinerals(), ActionChat.Channel.BROADCAST);
+        actionInterface.sendChat("Tag:build supply " + observationInterface.getFoodUsed() + " " + observationInterface.getFoodCap(), ActionChat.Channel.BROADCAST);
         nextStage.ifPresent(next ->
-                actionInterface.sendChat("Tag:buildorder-next-trigger-" + next.trigger().toString(), ActionChat.Channel.BROADCAST));
+                actionInterface.sendChat("Tag:build nexttrigger " + next.trigger().toString(), ActionChat.Channel.BROADCAST));
         System.out.println("Build order terminated at stage " + simpleBuildOrder.getCurrentStageNumber() + ": " + outputsAsString);
         nextStage.ifPresent(next ->
                 System.out.println("Next stage trigger: " + next.trigger().toString()));

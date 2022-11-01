@@ -24,7 +24,8 @@ public interface StrategicObservation extends TaskMessage {
 
     static List<StrategicObservation> allObservations() {
         return List.of(
-                new Zerg12PoolStrategicObservation()
+                new Zerg12PoolStrategicObservation(),
+                new WorkerRushStrategicObservation()
         );
     }
 }
