@@ -38,6 +38,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
     @Value.Immutable
     interface DisengagingContext {
         Point2dMap<Unit> enemyUnitMap();
+        Optional<Point2d> nextRetreatPoint();
     }
 
     @Value.Immutable
@@ -62,6 +63,13 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
     }
 
     private static class AttackHandler implements DefaultArmyTaskBehaviourStateHandler<AttackContext> {
+
+        // For tracking.
+        private Optional<Region> enteredRegion = Optional.empty();
+        private long enteredRegionAt = 0L;
+        // Time to spend in a region per child army on the way.
+        private static final long DELAY_TIME_IN_REGION = 22L * 2;
+
         @Override
         public void onEnterState(BaseArgs args) {
 
@@ -134,7 +142,18 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
 
         @Override
         public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
-            return dispersion.orElse(0.0) <= 2.0 && currentRegionData.hasEnemyBase() == false && (childArmies.size() == 0);
+            long gameLoop = agentWithData.observation().getGameLoop();
+            // Delay longer in a region the more child regions we have.
+            if (gameLoop < enteredRegionAt + (childArmies.size()) * DELAY_TIME_IN_REGION) {
+                return false;
+            }
+            Optional<Region> currentRegion = Optional.of(currentRegionData.region());
+            if (!enteredRegion.map(Region::regionId).equals(currentRegion.map(Region::regionId))) {
+                enteredRegion = currentRegion;
+                enteredRegionAt = agentWithData.observation().getGameLoop();
+            }
+            return dispersion.orElse(0.0) <= 2.0 &&
+                    currentRegionData.hasEnemyBase() == false;
         }
     }
 
@@ -167,16 +186,24 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
 
         @Override
         public DisengagingContext onArmyStep(BaseArgs args) {
-            return ImmutableDisengagingContext.builder().enemyUnitMap(constructEnemyUnitMap(args)).build();
+            Optional<Region> previousRegion = args.previousRegion()
+                    .map(RegionData::region);
+            Optional<Region> retreatRegion = args.retreatRegion()
+                    .map(RegionData::region);
+            boolean isInRetreatRegion = previousRegion.map(Region::regionId).equals(retreatRegion.map(Region::regionId));
+            Optional<Point2d> goalPosition = isInRetreatRegion ?
+                    args.retreatPosition() :
+                    previousRegion.map(Region::centrePoint).or(() -> args.retreatPosition());
+            return ImmutableDisengagingContext.builder()
+                    .enemyUnitMap(constructEnemyUnitMap(args))
+                    .nextRetreatPoint(goalPosition)
+                    .build();
         }
 
         @Override
         public DisengagingContext onArmyUnitStep(DisengagingContext context, Unit unit, BaseArgs args) {
             Point2dMap<Unit> enemyUnitMap = context.enemyUnitMap();
-            Optional<Point2d> goalPosition = args.previousRegion()
-                    .map(RegionData::region)
-                    .map(Region::centrePoint)
-                    .or(() -> args.retreatPosition());
+            Optional<Point2d> goalPosition = context.nextRetreatPoint();
             // If we're close enough to the centre of mass, and the army is together, we fight.
             if (args.centreOfMass().isPresent() &&
                     args.centreOfMass().get().distance(unit.getPosition().toPoint2d()) < 5f &&

@@ -203,13 +203,15 @@ public class TerranMicro {
                         enemyPosition, args.previousRegion().map(RegionData::region).map(Region::centrePoint),
                         1.5f));
         Optional<Point2d> nextPositionSafe = getNextPositionSafe(goalPosition, args);
-        nextPositionSafe.ifPresent(centreOfMass -> {
-            if (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.1f) {
-                if (!isAlreadyAttackMovingTo(centreOfMass, currentOrder)) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, centreOfMass, false);
+        nextPositionSafe.ifPresent(nextPosition -> {
+            double distance = nextPosition.distance(unit.getPosition().toPoint2d());
+            // if the medivac is far from the next position, move instead of attack-move.
+            if (distance < 8f && (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.1f)) {
+                if (!isAlreadyAttackMovingTo(nextPosition, currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, nextPosition, false);
                 }
             } else {
-                final Point2d movePosition = retreatPosition.orElse(centreOfMass);
+                final Point2d movePosition = retreatPosition.orElse(nextPosition);
                 if (!isAlreadyMovingTo(movePosition, currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, movePosition, false);
                 }

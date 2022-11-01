@@ -578,7 +578,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         // Check if the production delegate wants it, otherwise check if we want it.
         // We have to bypass the `acceptingUnits` check for the delegate.
         return productionDelegateArmy
-                .map(delegate -> delegate.wantsUnitIgnoringOverride(unit))
+                .map(delegate -> delegate.wantsUnitIgnoringOverride(unit) || super.wantsUnit(unit))
                 .orElseGet(() -> acceptingUnits && wantsUnitIgnoringOverride(unit));
     }
 

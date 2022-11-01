@@ -30,7 +30,7 @@ public class ThreeRaxStimCombatConcussivePush extends SimpleBuildOrder {
                 .onObservationOf(WorkerRushStrategicObservation.class).dispatchTask(() -> new TerranWorkerRushDefenceTask())
                 // Wall off earlier if a 12 pool is coming.
                 .onObservationOf(Zerg12PoolStrategicObservation.class).buildSupplyDepot().at(PlacementRules.mainRampSupplyDepot2())
-                .onObservationOf(Zerg12PoolStrategicObservation.class).trainUnit(Units.TERRAN_BARRACKS, Abilities.TRAIN_MARINE)
+                .onObservationOf(Zerg12PoolStrategicObservation.class).startRepeatingUnit(Units.TERRAN_BARRACKS, Abilities.TRAIN_MARINE)
                 .atSupply(14).buildSupplyDepot().at(PlacementRules.mainRampSupplyDepot1())
                 .then().buildStructure(Abilities.BUILD_BARRACKS).at(PlacementRules.mainRampBarracksWithAddon())
                 .then().buildStructure(Abilities.BUILD_REFINERY)

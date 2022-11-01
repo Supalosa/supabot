@@ -204,11 +204,17 @@ public class BuildStructureTask extends BaseTask {
                     if (specificTarget.isPresent()) {
                         agentWithData.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
                     } else if (location.isPresent()) {
-                        location.ifPresent(target -> {
-                            agentWithData.actions().unitCommand(assignedWorker.get(), ability, target, false);
-                        });
+                        // Should build structure?
+                        Optional<RegionData> locationRegionData = agentWithData.mapAwareness().getRegionDataForPoint(location.get());
+                        // TODO tidy this syntax up
+                        if (locationRegionData.isPresent() && locationRegionData.get().enemyThreat() > locationRegionData.get().playerThreat() * 1.25f) {
+                            System.err.println("Delaying construction due to threat in region greater than 125% of our power.");
+                        } else {
+                            location.ifPresent(target -> {
+                                agentWithData.actions().unitCommand(assignedWorker.get(), ability, target, false);
+                            });
+                        }
                     }
-                    //System.out.println("BuildTask " + targetUnitType + " attempted (Attempt " + buildAttempts + ")");
                     lastBuildAttempt = gameLoop;
                     ++buildAttempts;
                     if (buildAttempts > MAX_BUILD_ATTEMPTS / 2) {

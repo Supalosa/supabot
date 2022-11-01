@@ -57,14 +57,16 @@ public class LocalMain {
                     //.setProcessPath(Path.of("D:\\StarCraft II\\Versions\\Base75689\\SC2_x64.exe"))
                     //.setDataVersion("B89B5D6FA7CBF6452E721311BFBC6CB2")
                     .setMultiplayerOptions(multiplayerOptions)
+                    .setStepSize(2)
                     //.setMultiplayerOptions(MultiplayerOptions.multiplayerSetupFor(8001, 3))
                     .setParticipants(
                             S2Coordinator.createParticipant(Race.TERRAN, supaBot, "Ocraft_Bot01"),
-                            S2Coordinator.createParticipant(Race.TERRAN))
+                            S2Coordinator.createParticipant(Race.ZERG))
                     .connect("127.0.0.1", 8000)
                     //.launchStarcraft()
                     //.joinGame();
-                    .startGame(LocalMap.of(Paths.get("2000AtmospheresAIE.SC2Map")));
+                    .startGame(LocalMap.of(Paths.get("BerlingradAIE.SC2Map")));
+                    //.startGame(LocalMap.of(Paths.get("2000AtmospheresAIE.SC2Map")));
 
             while (s2Coordinator.update()) {
             }

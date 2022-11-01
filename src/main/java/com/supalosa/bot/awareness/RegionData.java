@@ -10,16 +10,16 @@ import java.util.*;
  * Represents the dynamic data of a region (calculated periodically).
  */
 @Value.Immutable
-public interface RegionData {
+public abstract class RegionData {
 
-    Region region();
+    public abstract Region region();
 
     /**
      * A value from 0.0 to infinity affecting the cost of entering this region.
      * 1.0 is the default.
      */
     @Value.Default
-    default double weight() {
+    public double weight() {
         return 1.0;
     }
 
@@ -29,7 +29,7 @@ public interface RegionData {
      * is on the highground.
      */
     @Value.Default
-    default double killzoneFactor() {
+    public double killzoneFactor() {
         return 1.0;
     }
 
@@ -38,7 +38,7 @@ public interface RegionData {
      * A value of 1.0 is default.
      */
     @Value.Default
-    default double enemyArmyFactor() {
+    public double enemyArmyFactor() {
         return 1.0;
     }
 
@@ -47,7 +47,7 @@ public interface RegionData {
      * (or faster if we have visibility on the region)
      */
     @Value.Default
-    default double enemyThreat() {
+    public double enemyThreat() {
         return 0.0;
     }
 
@@ -55,7 +55,7 @@ public interface RegionData {
      * A scalar figure indicating the enemy threat of this region and all neighbouring regions.
      */
     @Value.Default
-    default double nearbyEnemyThreat() {
+    public double nearbyEnemyThreat() {
         return 0.0;
     }
 
@@ -64,18 +64,18 @@ public interface RegionData {
      * the threat value diffuses through the graph.
      */
     @Value.Default
-    default double diffuseEnemyThreat() { return 0.0; }
+    public double diffuseEnemyThreat() { return 0.0; }
 
     /**
      * A scalar figure indicating the player's threat in this region.
      */
     @Value.Default
-    default double playerThreat() {
+    public double playerThreat() {
         return 0.0;
     }
 
     @Value.Default
-    default boolean isBlocked() {
+    public boolean isBlocked() {
         return false;
     }
 
@@ -84,7 +84,7 @@ public interface RegionData {
      * This is a snapshot of the current visibility.
      */
     @Value.Default
-    default double visibilityPercent() {
+    public double visibilityPercent() {
         return 0.0;
     }
 
@@ -93,31 +93,40 @@ public interface RegionData {
      * This is value decays slowly so as not to drop to zero as soon as we leave a region.
      */
     @Value.Default
-    default double decayingVisibilityPercent() {
+    public double decayingVisibilityPercent() {
         return 0.0;
     }
 
     @Value.Default
-    default boolean hasEnemyBase() {
+    public boolean hasEnemyBase() {
         return false;
     }
 
     @Value.Default
-    default boolean isPlayerBase() { return false; }
+    public boolean isPlayerBase() { return false; }
 
     @Value.Default
-    default double estimatedCreepPercentage() { return 0.0; }
+    public double estimatedCreepPercentage() { return 0.0; }
 
     /**
      * Returns the borders of this region that face towards the enemy.
      */
     @Value.Default
-    default Set<Point2d> borderTilesTowardsEnemy() {
+    public Set<Point2d> borderTilesTowardsEnemy() {
         return new HashSet<>();
     }
 
     /**
      * Returns the best tile that faces towards the enemy.
      */
-    Optional<Point2d> bestTileTowardsEnemy();
+    public abstract Optional<Point2d> bestTileTowardsEnemy();
+
+    @Override
+    public boolean equals(Object object) {
+        if (object instanceof RegionData) {
+            return this.region().regionId() == ((RegionData)object).region().regionId();
+        } else {
+            return false;
+        }
+    }
 }
