@@ -62,6 +62,8 @@ public class BuildStructureTask extends BaseTask {
     private boolean isSuccess = false;
     private boolean aborted = false;
 
+    private boolean isSafeToBuildStructure = true;
+
     public BuildStructureTask(Ability ability,
                               UnitType targetUnitType,
                               Optional<Point2d> location,
@@ -183,6 +185,18 @@ public class BuildStructureTask extends BaseTask {
             matchingUnitAtLocation = matchingUnitAtLocation.filter(tag -> agentWithData.observation().getUnit(tag) != null);
         }
 
+        // Check if it's safe to build.
+        if (location.isPresent()) {
+            // Should build structure only if 125% of our power is greater than theirs.
+            Optional<RegionData> locationRegionData = agentWithData.mapAwareness().getRegionDataForPoint(location.get());
+            isSafeToBuildStructure = locationRegionData.map(RegionData::playerThreat).orElse(0.0) * 1.25f >=
+                    locationRegionData.map(RegionData::enemyThreat).orElse(0.0);
+            // Add an override for certain production buildings etc.
+            if (Constants.CRITICAL_STRUCTURE_TYPES.contains(targetUnitType)) {
+                isSafeToBuildStructure = true;
+            }
+        }
+
         if (buildAttempts > MAX_BUILD_ATTEMPTS) {
             agentWithData.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
             System.out.println("Build task of " + targetUnitType + " failed");
@@ -203,17 +217,10 @@ public class BuildStructureTask extends BaseTask {
                 if (agentWithData.gameData().unitHasAbility(assignedWorker.get(), ability)) {
                     if (specificTarget.isPresent()) {
                         agentWithData.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
-                    } else if (location.isPresent()) {
-                        // Should build structure?
-                        Optional<RegionData> locationRegionData = agentWithData.mapAwareness().getRegionDataForPoint(location.get());
-                        // TODO tidy this syntax up
-                        if (locationRegionData.isPresent() && locationRegionData.get().enemyThreat() > locationRegionData.get().playerThreat() * 1.25f) {
-                            System.err.println("Delaying construction due to threat in region greater than 125% of our power.");
-                        } else {
-                            location.ifPresent(target -> {
-                                agentWithData.actions().unitCommand(assignedWorker.get(), ability, target, false);
-                            });
-                        }
+                    } else if (location.isPresent() && isSafeToBuildStructure) {
+                        location.ifPresent(target -> {
+                            agentWithData.actions().unitCommand(assignedWorker.get(), ability, target, false);
+                        });
                     }
                     lastBuildAttempt = gameLoop;
                     ++buildAttempts;
@@ -423,11 +430,13 @@ public class BuildStructureTask extends BaseTask {
 
     @Override
     public int reservedMinerals() {
-        return isInProgress ? 0 : minimumMinerals.orElse(0);
+        // If it's not safe to build this, then don't reserve the minerals.
+        return (isInProgress || !isSafeToBuildStructure) ? 0 : minimumMinerals.orElse(0);
     }
 
     @Override
     public int reservedVespene() {
-        return isInProgress ? 0 : minimumVespene.orElse(0);
+        // If it's not safe to build this, then don't reserve the vespene.
+        return (isInProgress || !isSafeToBuildStructure) ? 0 : minimumVespene.orElse(0);
     }
 }

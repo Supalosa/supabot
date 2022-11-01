@@ -137,6 +137,26 @@ public class Constants {
             Units.PROTOSS_STALKER,
             Units.PROTOSS_PHOTON_CANNON);
 
+    /**
+     * Structures that should be built, even if the region is under attack. The idea is that these are
+     * structures that might help defend.
+     */
+    public static final Set<UnitType> CRITICAL_STRUCTURE_TYPES = Set.of(
+            Units.TERRAN_BARRACKS,
+            Units.TERRAN_FACTORY,
+            Units.TERRAN_STARPORT,
+            Units.TERRAN_SUPPLY_DEPOT,
+            Units.TERRAN_BUNKER,
+            Units.TERRAN_MISSILE_TURRET,
+            Units.PROTOSS_FORGE,
+            Units.PROTOSS_GATEWAY,
+            Units.PROTOSS_PHOTON_CANNON,
+            Units.PROTOSS_PYLON,
+            Units.PROTOSS_SHIELD_BATTERY,
+            Units.ZERG_SPAWNING_POOL,
+            Units.ZERG_SPINE_CRAWLER,
+            Units.ZERG_SPORE_CRAWLER
+    );
 
     /**
      * Things that should be focus-fired by antiair units like Vikings.
