@@ -134,8 +134,17 @@ public class Constants {
             Units.PROTOSS_TEMPEST,
             Units.PROTOSS_SENTRY,
             Units.PROTOSS_DISRUPTOR,
+            Units.PROTOSS_DISRUPTOR_PHASED,
             Units.PROTOSS_STALKER,
             Units.PROTOSS_PHOTON_CANNON);
+
+    /**
+     * Units that our units should micro away from.
+     */
+    public static final Set<UnitType> EXPLODING_UNITS = Set.of(
+            Units.ZERG_BANELING,
+            Units.PROTOSS_DISRUPTOR_PHASED
+    );
 
     /**
      * Structures that should be built, even if the region is under attack. The idea is that these are

@@ -203,11 +203,8 @@ public class FightManager {
         Optional<Point2d> mostRecentAttackedLocation = lastAttackedLocation.entrySet().stream()
                 .max(Comparator.comparingLong(Map.Entry::getValue)).map(Map.Entry::getKey);
         if (mostRecentAttackedLocation.isPresent()) {
-            // Defend where we could place a 1x1 structure. Stops us from defending on top of a structure. Hack?
-            defenceAttackPosition = data.structurePlacementCalculator().flatMap(spc ->
-                spc.suggestLocationForFreePlacement(data, mostRecentAttackedLocation.get(), 1, 1,
-                        Optional.of(ImmutablePlacementRules.builder().regionType(PlacementRules.Region.PLAYER_BASE_ANY).maxVariation(5).build()))
-            );
+            // Defend only on placable tiles.
+            defenceAttackPosition = mostRecentAttackedLocation.filter(pos -> agent.observation().isPlacable(pos));
         }
 
         if (attackPosition.isEmpty()) {
