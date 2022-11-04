@@ -121,6 +121,8 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                 TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
             } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
                 TerranMicro.handleVikingMicro(unit, goalPosition, args, enemyUnitMap);
+            } else {
+                TerranMicro.handleDefaultMicro(unit, goalPosition, args, enemyUnitMap);
             }
             return context;
         }
@@ -152,8 +154,9 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                 enteredRegion = currentRegion;
                 enteredRegionAt = agentWithData.observation().getGameLoop();
             }
+            // max 30s attacking a base (prevent it from getting stuck)
             return dispersion.orElse(0.0) <= 2.0 &&
-                    currentRegionData.hasEnemyBase() == false;
+                    (currentRegionData.hasEnemyBase() == false || gameLoop > enteredRegionAt + 30 * 22L);
         }
     }
 
@@ -220,6 +223,8 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                     TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
                 } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
                     TerranMicro.handleVikingMicro(unit, goalPosition, args, enemyUnitMap);
+                } else {
+                    TerranMicro.handleDefaultMicro(unit, goalPosition, args, enemyUnitMap);
                 }
             } else {
                 goalPosition.ifPresent(position ->

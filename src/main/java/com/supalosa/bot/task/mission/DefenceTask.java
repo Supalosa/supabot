@@ -232,7 +232,7 @@ public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
             return;
         }
         RegionData regionData = latestRegionData.get();
-        Optional<Point2d> positionToAttack = regionData.bestTileTowardsEnemy();
+        Optional<Point2d> positionToAttack = regionData.getDefenceRallyPoint();
         List<Point2d> enemyArmyPoints = armyList.stream()
                 .filter(army -> army.position().isPresent())
                 .map(army -> army.position().get())

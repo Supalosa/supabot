@@ -21,14 +21,6 @@ public interface EnemyAwareness {
     List<Army> getMaybeEnemyArmies(Point2d point2d, float inRange);
 
     /**
-     * Returns the actual observed largest enemy army, including the position it was seen at.
-     * Deprecated unless we need the position, because we should be looking for the
-     * potential enemy army.
-     */
-    @Deprecated
-    Optional<Army> getLargestEnemyArmy();
-
-    /**
      * Returns the entire potential of the enemy army, including units we've seen previously in the last 60 seconds.
      */
     Optional<Army> getPotentialEnemyArmy();

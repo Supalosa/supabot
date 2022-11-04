@@ -62,8 +62,8 @@ public class TerranBioHarassArmyTask extends TerranBioArmyTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
-        super.onStep(taskManager, agentWithData);
+    public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
+        super.onStepImpl(taskManager, agentWithData);
         long gameLoop = agentWithData.observation().getGameLoop();
 
         if (gameLoop > desiredCompositionUpdatedAt + 22L) {

@@ -257,7 +257,7 @@ public class MapAwarenessImpl implements MapAwareness {
                                     .reversed())
                     .findFirst()
                     .flatMap(mostValuableRegionId -> getRegionDataForId(mostValuableRegionId.getKey()))
-                    .flatMap(RegionData::bestTileTowardsEnemy);
+                    .flatMap(RegionData::getDefenceRallyPoint);
         }
     }
 
@@ -457,7 +457,7 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public void debug(S2Agent agent) {
         this.regionData.values().forEach(regionData -> {
-            regionData.bestTileTowardsEnemy().ifPresent(bestTileTowardsEnemy -> {
+            regionData.getDefenceRallyPoint().ifPresent(bestTileTowardsEnemy -> {
             });
         });
         final long gameLoop = agent.observation().getGameLoop();

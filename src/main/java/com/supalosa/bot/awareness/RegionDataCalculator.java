@@ -163,8 +163,7 @@ public class RegionDataCalculator {
                     .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()))
                     .isPlayerBase(regionIdsWithPlayerBases.contains(region.regionId()))
                     .estimatedCreepPercentage(regionCreepPercentage)
-                    .borderTilesTowardsEnemy(borderTilesTowardsEnemy)
-                    .bestTileTowardsEnemy(averageBorderTileTowardsEnemy);
+                    .defenceRallyPoint(averageBorderTileTowardsEnemy);
 
             result.put(region.regionId(), builder.build());
         });

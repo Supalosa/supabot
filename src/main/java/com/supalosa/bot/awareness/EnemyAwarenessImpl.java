@@ -193,11 +193,6 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
     }
 
     @Override
-    public Optional<Army> getLargestEnemyArmy() {
-        return maybeLargestEnemyArmy.map(Function.identity());
-    }
-
-    @Override
     public Optional<Army> getPotentialEnemyArmy() {
         return potentialEnemyArmy;
     }

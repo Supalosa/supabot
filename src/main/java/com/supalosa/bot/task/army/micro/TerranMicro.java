@@ -39,6 +39,17 @@ public class TerranMicro {
                     .isPresent();
     }
 
+
+    public static void handleDefaultMicro(Unit unit, Optional<Point2d> goalPosition, DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
+        Optional<Point2d> position = getNextPosition(goalPosition, args);
+        position.ifPresent(attackPosition -> {
+            if (!isAlreadyAttackMovingTo(attackPosition, currentOrder)) {
+                args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackPosition, false);
+            }
+        });
+    }
+
     public static void handleMarineMarauderMicro(Unit unit, Optional<Point2d> goalPosition, DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap, AtomicLong remainingUnitsToStim) {
         Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // Stutter-step micro. The more we're winning, the smaller the stutter radius.
@@ -64,7 +75,7 @@ public class TerranMicro {
                     .map(enemy -> enemy.getPosition().toPoint2d());
             // Clamp the stutter radius by the enemy's range.
             Float nearestEnemyUnitRange = nearestEnemyUnit.flatMap(enemy -> args.agentWithData().gameData().getMaxUnitRange(enemy.getType())).orElse(1.5f);
-            float finalStutterRadius = Math.min(Math.max(1.5f, nearestEnemyUnitRange), stutterRadius);
+            float finalStutterRadius = Math.min(Math.max(1.0f, nearestEnemyUnitRange), stutterRadius);
             // If the nearest enemy is within stutterRadius, walk away, otherwise walk towards it.
             // Bias towards the region we came from.
             Optional<Point2d> retreatPosition = nearestEnemyUnitPosition

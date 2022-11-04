@@ -109,17 +109,9 @@ public abstract class RegionData {
     public double estimatedCreepPercentage() { return 0.0; }
 
     /**
-     * Returns the borders of this region that face towards the enemy.
+     * Returns the most defendable tile in this region.
      */
-    @Value.Default
-    public Set<Point2d> borderTilesTowardsEnemy() {
-        return new HashSet<>();
-    }
-
-    /**
-     * Returns the best tile that faces towards the enemy.
-     */
-    public abstract Optional<Point2d> bestTileTowardsEnemy();
+    public abstract Optional<Point2d> getDefenceRallyPoint();
 
     @Override
     public boolean equals(Object object) {

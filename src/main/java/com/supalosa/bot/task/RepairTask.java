@@ -120,6 +120,7 @@ public class RepairTask implements Task {
             targetRepairers = Math.max(1, Math.min((int)((unitToRepair.unit().getRadius() + 1)*2), unitsNearby.size()));
         }*/
         if (gameLoop > previousHpObservationAt + HP_OBSERVATION_INTERVAL) {
+            int maxRepairers = (int)Math.max(1f, unitToRepair.unit().getRadius()) * 2;
             float currentHpObservation = unitToRepair.unit().getHealth().orElse(previousHpObservation);
             if (previousHpObservation < 0f) {
                 previousHpObservation = currentHpObservation;
@@ -127,8 +128,8 @@ public class RepairTask implements Task {
             if (currentHpObservation < previousHpObservation) {
                 float delta = previousHpObservation - currentHpObservation;
                 double healingRequiredPerObservation = (HP_OBSERVATION_INTERVAL * healingPerTick(unitToRepair.unit(), agentWithData.gameData()));
-                int neededExtraRepairers = (int) Math.ceil(delta / healingRequiredPerObservation);
-                targetRepairers = Math.min(4, Math.max(1, targetRepairers + neededExtraRepairers));
+                int neededExtraRepairers = (int) Math.floor(delta / healingRequiredPerObservation);
+                targetRepairers = Math.min(maxRepairers, Math.max(1, targetRepairers + neededExtraRepairers));
                 hpObservationCyclesGainingHp = 0;
             } else {
                 ++hpObservationCyclesGainingHp;

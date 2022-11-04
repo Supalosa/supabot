@@ -1,5 +1,6 @@
 package com.supalosa.bot.task.terran;
 
+import SC2APIProtocol.Raw;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
@@ -153,10 +154,12 @@ public class BuildUtils {
             AtomicBoolean rampClosed = new AtomicBoolean(false);
             Set<Tag> rampDepots = new HashSet<>();
             spc.getFirstSupplyDepot(agentWithData.observation()).ifPresent(supplyDepot -> {
+                final boolean isRaised = (supplyDepot.unit().getType() == Units.TERRAN_SUPPLY_DEPOT);
+                final float enemyRadius = isRaised ? 12f : 8f;
                 if (agentWithData.observation().getUnits(Alliance.ENEMY).stream()
                         .anyMatch(enemyUnit -> enemyUnit
                                 .getUnit()
-                                .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < 8)
+                                .filter(uip -> uip.getPosition().distance(supplyDepot.unit().getPosition()) < enemyRadius)
                                 .isPresent())) {
                     rampClosed.set(true);
                 }
@@ -181,6 +184,16 @@ public class BuildUtils {
                     agentWithData.actions().unitCommand(supplyDepot.unit(), Abilities.MORPH_SUPPLY_DEPOT_LOWER, false);
                 }
             }
+            // Rally the barracks behind it.
+            spc.getFirstBarracksWithAddon(agentWithData.observation()).ifPresent(barracks -> {
+                Optional<Point2d> location = spc.getMainRamp()
+                        .map(ramp -> ramp.projection(5.0f))
+                        .orElse(spc.getFirstBarracksWithAddonLocation());
+                location.ifPresent(rally -> {
+                    barracks.unit();
+                    agentWithData.actions().unitCommand(barracks.unit(), Abilities.RALLY_BUILDING, rally, false);
+                });
+            });
         });
     }
 
