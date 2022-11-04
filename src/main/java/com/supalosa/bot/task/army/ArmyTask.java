@@ -61,4 +61,9 @@ public interface ArmyTask extends TaskWithUnits {
      * Predict how fight against a certain army will go.
      */
     FightPerformance predictFightAgainst(Army army);
+
+    /**
+     * Estimated power of this army.
+     */
+    double getPower();
 }

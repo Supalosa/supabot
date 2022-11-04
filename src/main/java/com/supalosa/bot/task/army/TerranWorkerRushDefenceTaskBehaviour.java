@@ -2,23 +2,19 @@ package com.supalosa.bot.task.army;
 
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
-import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.awareness.RegionData;
-import com.supalosa.bot.task.army.micro.TerranMicro;
 import com.supalosa.bot.utils.Point2dMap;
 import com.supalosa.bot.utils.UnitFilter;
 import org.immutables.value.Value;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Worker rush
@@ -120,12 +116,18 @@ public class TerranWorkerRushDefenceTaskBehaviour extends BaseDefaultArmyTaskBeh
                     } else if (args.attackPosition().isPresent()) {
                         args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.attackPosition().get(), false);
                     } else {
+                        // No enemy in range
+                        Optional<UnitInPool> nearbyEnemy = enemyUnitsNearStartPosition.stream()
+                                .filter(enemyUnit ->
+                                        unit.getPosition().distance(enemyUnit.unit().getPosition()) < 10f)
+                                .findFirst();
                         // Drone drill on mineral with lowest tag.
                         Optional<UnitInPool> lowestMineral = context.mineralsNearStartPosition().stream()
                                 .sorted(Comparator.comparing((UnitInPool mineral) -> mineral.getTag().getValue()))
                                 .findFirst();
-                        lowestMineral.ifPresent(mineral -> {
-                            args.agentWithData().actions().unitCommand(unit, Abilities.SMART, mineral.unit(), false);
+                        Optional<UnitInPool> toAttack = nearbyEnemy.or(() -> lowestMineral);
+                        toAttack.ifPresent(unitToAttack -> {
+                            args.agentWithData().actions().unitCommand(unit, Abilities.SMART, unitToAttack.unit(), false);
                         });
                     }
                 }

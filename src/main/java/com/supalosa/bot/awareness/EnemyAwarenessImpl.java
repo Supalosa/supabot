@@ -19,7 +19,14 @@ import com.supalosa.bot.Expansions;
 import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.utils.UnitFilter;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -79,7 +86,7 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                     List<UnitInPool> units = entry.getValue();
                     Collection<UnitType> composition = getComposition(units);
                     double threat = threatCalculator.calculateThreat(composition);
-                    if (threat >= 1.0f) {
+                    if (threat >= 0.5f) {
                         ImmutableArmy army = ImmutableArmy.builder()
                                 .position(point.toPoint2d())
                                 .size(units.size())

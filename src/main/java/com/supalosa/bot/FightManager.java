@@ -11,6 +11,7 @@ import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.*;
+import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
@@ -18,13 +19,18 @@ import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.placement.ImmutablePlacementRules;
 import com.supalosa.bot.placement.PlacementRules;
+import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.army.*;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.task.mission.DefenceTask;
+import com.supalosa.bot.task.mission.DummyAttackTask;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.List;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class FightManager {
@@ -48,9 +54,10 @@ public class FightManager {
     private boolean canAttack = false;
     private boolean pendingReinforcement = false;
 
-    private Map<Point2d, Long> lastAttackedLocation = new HashMap<>();
-    private static final long FORGET_LAST_ATTACKED_LOCATION_AFTER = 22L * 30;
-    private static final double LAST_ATTACKED_LOCATION_CLUSTER_DISTANCE = 10.0;
+    private DummyAttackTask dummyAttackTask;
+    private Map<Region, DefenceTask> defenceTasks = new HashMap<>();
+    private Function<DefenceTask, ArmyTask> defenceArmySupplier = defenceTask ->
+            new TerranBioDefenceArmyTask("Defence." + UUID.randomUUID(), defenceTask);
 
     public FightManager(S2Agent agent) {
         this.agent = agent;
@@ -68,7 +75,7 @@ public class FightManager {
     }
 
     private void setDefencePosition(Optional<Point2d> defencePosition) {
-        this.reserveArmy.setTargetPosition(defencePosition);
+        //this.reserveArmy.setTargetPosition(defencePosition);
         armyTasks.forEach(armyTask -> {
                 armyTask.setRetreatPosition(defencePosition);
         });
@@ -102,7 +109,17 @@ public class FightManager {
             // Make the reserve army delegate production decisions to the attacking army.
             reserveArmy.setProductionDelegateArmy(attackingArmy);
         }
-
+        if (dummyAttackTask == null) {
+            Optional<RegionData> startPointRegion = agentWithData.mapAwareness()
+                    .getRegionDataForPoint(agentWithData.observation().getStartLocation().toPoint2d());
+            if (startPointRegion.isPresent()) {
+                dummyAttackTask = new DummyAttackTask(
+                        startPointRegion
+                                .map(RegionData::region)
+                                .orElseThrow(() -> new IllegalStateException("No region found for start location.")));
+                taskManager.addTask(dummyAttackTask, 1);
+            }
+        }
         onStepTerranBio(taskManager, agentWithData);
 
         // Remove complete tasks.
@@ -113,11 +130,10 @@ public class FightManager {
 
         final long gameLoop = agent.observation().getGameLoop();
 
-        // Forget last-attacked-locations after FORGET_LAST_ATTACKED_LOCATION_AFTER loops.
-        Set<Point2d> lastAttackedLocationsToRemove = lastAttackedLocation.entrySet().stream()
-                .filter(entry -> gameLoop > entry.getValue() + FORGET_LAST_ATTACKED_LOCATION_AFTER).map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
-        lastAttackedLocationsToRemove.forEach(lastAttackedLocation::remove);
+        // Remove defence tasks that are complete.
+        Set<Region> regionDefenceTasksComplete = defenceTasks.entrySet().stream()
+                .filter(entry -> entry.getValue().isComplete()).map(Map.Entry::getKey).collect(Collectors.toSet());
+        regionDefenceTasksComplete.forEach(defenceTasks::remove);
 
         if (gameLoop > positionalLogicUpdatedAt + 22L) {
             positionalLogicUpdatedAt = gameLoop;
@@ -159,24 +175,24 @@ public class FightManager {
     /**
      * Make decisions on where to attack and defend.
      */
-    private void updateTargetingLogic(AgentWithData data) {
-        Optional<Point2d> nearestEnemy = data.mapAwareness().getMaybeEnemyPositionNearOwnBase();
+    private void updateTargetingLogic(AgentWithData agentWithData) {
+        Optional<Point2d> nearestEnemy = agentWithData.mapAwareness().getMaybeEnemyPositionNearOwnBase();
         Army virtualAttackingArmy = Army.toVirtualArmy(nearestEnemy.map(enemyPosition ->
-                data.enemyAwareness().getMaybeEnemyArmies(enemyPosition, 20f)).orElse(Collections.emptyList()));
+                agentWithData.enemyAwareness().getMaybeEnemyArmies(enemyPosition, 20f)).orElse(Collections.emptyList()));
 
         Optional<Point2d> defenceRetreatPosition = Optional.empty();
         Optional<Point2d> defenceAttackPosition = Optional.empty();
         Optional<Point2d> attackPosition = Optional.empty();
         Optional<Point2d> harassPosition = Optional.empty();
 
-        long gameLoop = data.observation().getGameLoop();
+        long gameLoop = agentWithData.observation().getGameLoop();
 
         boolean defenceNeedsAssistance = false;
 
-        if (nearestEnemy.isPresent() && data.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
+        if (nearestEnemy.isPresent() && agentWithData.mapAwareness().shouldDefendLocation(nearestEnemy.get())) {
             // Enemy detected near our base, attack them.
             defenceRetreatPosition = nearestEnemy;
-            onLocationAttacked(nearestEnemy.get(), gameLoop);
+            onLocationAttacked(nearestEnemy.get(), agentWithData);
         }
 
         if (virtualAttackingArmy.size() > 0) {
@@ -190,21 +206,14 @@ public class FightManager {
             }
         }
         if (defenceRetreatPosition.isEmpty()) {
-            // If there's nothing to defend or we think we're gonna lose, fall back to the top of the ramp.
-            defenceRetreatPosition = data.structurePlacementCalculator().flatMap(spc -> {
+            // If there's nothing to defend, or we think we're gonna lose, fall back to the top of the ramp.
+            defenceRetreatPosition = agentWithData.structurePlacementCalculator().flatMap(spc -> {
                 // Defend from behind the barracks, or else the position of the barracks.
-                return spc.getMainRamp()
+                Optional<Point2d> location = spc.getMainRamp()
                         .map(ramp -> ramp.projection(5.0f))
                         .orElse(spc.getFirstBarracksWithAddonLocation());
+                return location;
             });
-        }
-
-        // Set the defensive army to attack the most recently attacked location (might wanna revisit this).
-        Optional<Point2d> mostRecentAttackedLocation = lastAttackedLocation.entrySet().stream()
-                .max(Comparator.comparingLong(Map.Entry::getValue)).map(Map.Entry::getKey);
-        if (mostRecentAttackedLocation.isPresent()) {
-            // Defend only on placable tiles.
-            defenceAttackPosition = mostRecentAttackedLocation.filter(pos -> agent.observation().isPlacable(pos));
         }
 
         if (attackPosition.isEmpty()) {
@@ -212,18 +221,18 @@ public class FightManager {
             Optional<Point2d> searchOrigin = attackingArmy
                     .getCentreOfMass()
                     .or(attackingArmy::getTargetPosition)
-                    .or(() -> data.mapAwareness().getMaybeEnemyPositionNearEnemyBase())
-                    .or(() -> data.mapAwareness().getMaybeEnemyPositionNearOwnBase())
-                    .or(() -> data.mapAwareness().getNextScoutTarget());
+                    .or(() -> agentWithData.mapAwareness().getMaybeEnemyPositionNearEnemyBase())
+                    .or(() -> agentWithData.mapAwareness().getMaybeEnemyPositionNearOwnBase())
+                    .or(() -> agentWithData.mapAwareness().getNextScoutTarget());
             if (searchOrigin.isPresent()) {
-                attackPosition = data.mapAwareness().findEnemyPositionNearPoint(agent.observation(), searchOrigin.get());
+                attackPosition = agentWithData.mapAwareness().findEnemyPositionNearPoint(agent.observation(), searchOrigin.get());
             } else {
                 System.err.println("No target or target area found to attack - how did we get here?");
             }
 
             // Moderate the attack with checking if we could win a fight or not.
-            if (data.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
-                    attackingArmy.predictFightAgainst(data.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.BADLY_LOSING) {
+            if (agentWithData.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
+                    attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.BADLY_LOSING) {
                 if (attackPosition.isPresent()) {
                     //System.err.println("Aborted aggressive attack because we think we will badly lose.");
                 }
@@ -234,7 +243,7 @@ public class FightManager {
         // army's power.
         double minDiffuseThreat = attackingArmy.getPower() / 2.0;
         RegionData minRegion = null;
-        for (RegionData regionData : data.mapAwareness().getAllRegionData()) {
+        for (RegionData regionData : agentWithData.mapAwareness().getAllRegionData()) {
             if (attackPosition.isPresent()) {
                 if (regionData.hasEnemyBase()) {
                     if (regionData.diffuseEnemyThreat() < minDiffuseThreat) {
@@ -247,7 +256,7 @@ public class FightManager {
         if (minRegion != null) {
             harassPosition = Optional.of(minRegion.region().centrePoint());
         } else {
-            harassPosition = data.mapAwareness().getNextScoutTarget();
+            harassPosition = agentWithData.mapAwareness().getNextScoutTarget();
         }
         if (attackPosition.isEmpty()) {
             attackPosition = harassPosition;
@@ -274,17 +283,17 @@ public class FightManager {
     }
 
     // Called when a position (which we are trying to defend) is attacked.
-    private void onLocationAttacked(Point2d position, long gameLoop) {
-        Set<Point2d> existingPositions = lastAttackedLocation.keySet();
-        Optional<Point2d> existingCluster = existingPositions.stream().filter(existingPosition ->
-                existingPosition.distance(position) < LAST_ATTACKED_LOCATION_CLUSTER_DISTANCE).findFirst();
-
-        existingCluster.ifPresentOrElse(existingPosition -> {
-            lastAttackedLocation.remove(existingPosition);
-            Point2d newLocation = existingPosition.add(position).div(2f);
-            lastAttackedLocation.put(newLocation, gameLoop);
-        }, () -> {
-            lastAttackedLocation.put(position, gameLoop);
+    private void onLocationAttacked(Point2d position, AgentWithData agentWithData) {
+        Optional<RegionData> maybeRegionData = agentWithData.mapAwareness().getRegionDataForPoint(position);
+        maybeRegionData.ifPresent(regionData -> {
+            if (!defenceTasks.containsKey(regionData.region())) {
+                DefenceTask newTask = new DefenceTask(regionData.region(), 1, defenceArmySupplier);
+                if (agentWithData.taskManager().addTask(newTask, 1)) {
+                    defenceTasks.put(regionData.region(), newTask);
+                }
+            } else {
+                defenceTasks.get(regionData.region()).onRegionAttacked();
+            }
         });
     }
 
@@ -362,13 +371,6 @@ public class FightManager {
     }
 
     public void debug(S2Agent agent) {
-        long gameLoop = agent.observation().getGameLoop();
-        lastAttackedLocation.forEach((point2d, attackedAt) -> {
-            float height = agent.observation().terrainHeight(point2d);
-            Point point = Point.of(point2d.getX(), point2d.getY(), height);
-            float radius = 5f * ((attackedAt + FORGET_LAST_ATTACKED_LOCATION_AFTER) - gameLoop) / (float)FORGET_LAST_ATTACKED_LOCATION_AFTER;
-            agent.debug().debugSphereOut(point, Math.max(0.1f, radius), Color.PURPLE);
-        });
     }
 
     public List<UnitTypeRequest> getRequestedUnitTypes() {

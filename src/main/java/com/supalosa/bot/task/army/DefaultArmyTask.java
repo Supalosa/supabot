@@ -19,12 +19,13 @@ import com.supalosa.bot.pathfinding.RegionGraphPath;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
+import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits implements ArmyTask {
+public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits implements ArmyTask, TaskWithParent {
 
     private static final long NORMAL_UPDATE_INTERVAL = 11;
     private final String armyName;
@@ -57,7 +58,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private MapAwareness.PathRules pathRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
     // These are used for observing if we're winning or losing a fight.
     private Optional<Army> previousEnemyArmyObservation = Optional.empty();
-    private Map<UnitType, Integer> previousComposition = currentComposition;
+    private Map<UnitType, Integer> previousComposition = currentCompositionCache;
     private FightPerformance currentFightPerformance = FightPerformance.STABLE;
     private AggressionLevel aggressionLevel = AggressionLevel.BALANCED;
     private double cumulativeThreatDelta = 0.0;
@@ -140,14 +141,13 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     @Override
     public int getSize() {
-        return this.armyUnits.size();
+        return this.getAssignedUnits().size();
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
-        super.onStep(taskManager, agentWithData);
+    public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
         List<Unit> allUnits = new ArrayList<>();
-        for (Tag tag : armyUnits) {
+        for (Tag tag : getAssignedUnits()) {
             UnitInPool unit = agentWithData.observation().getUnit(tag);
             if (unit != null) {
                 allUnits.add(unit.unit());
@@ -165,11 +165,11 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 if (centreOfMass.isPresent() && targetPosition.isPresent() && centreOfMass.get().distance(targetPosition.get()) < 5f) {
                     parentArmy.get().takeAllFrom(agentWithData.taskManager(), agentWithData.observation(), this);
                     markComplete();
-                } else if (parentArmy.get().armyUnits.size() == 0) {
+                } else if (parentArmy.get().getAssignedUnits().size() == 0) {
                     parentArmy.get().takeAllFrom(agentWithData.taskManager(), agentWithData.observation(), this);
                     markComplete();
                 }
-                if (armyUnits.size() == 0) {
+                if (getAssignedUnits().size() == 0) {
                     markComplete();
                 }
             }
@@ -283,7 +283,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                                                                        float searchRadius, Point2d com) {
         List<Unit> far = new ArrayList<>();
         List<Unit> near = observationInterface.getUnits(unitInPool ->
-                        armyUnits.contains(unitInPool.getTag())).stream()
+                        getAssignedUnits().contains(unitInPool.getTag())).stream()
                 .map(uip -> uip.unit())
                 .filter(unit -> {
                     if (unit.getPosition().toPoint2d().distance(com) < searchRadius) {
@@ -344,7 +344,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 previousEnemyArmyObservation,
                 virtualArmy,
                 previousComposition,
-                currentComposition);
+                currentCompositionCache);
         FightPerformance predictedFightPerformance = predictFightAgainst(virtualArmy);
 
         AggressionState newAggressionState = aggressionState;
@@ -382,7 +382,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         }
 
         previousEnemyArmyObservation = Optional.of(virtualArmy);
-        previousComposition = new HashMap<>(currentComposition);
+        previousComposition = new HashMap<>(currentCompositionCache);
         return aggressionState.getUpdateInterval();
     }
 
@@ -513,7 +513,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     public String getDebugText() {
         return "Army (" + armyName + ") " + targetPosition.map(point2d -> "T").orElse("!T") + " " +
                 retreatPosition.map(point2d -> "R").orElse("!R") +
-                " (" + armyUnits.size() + ") - " + aggressionState + " - " + currentFightPerformance;
+                " (" + getAssignedUnits().size() + ") - " + aggressionState + " - " + currentFightPerformance;
     }
 
     @Override
@@ -548,7 +548,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     @Override
     public FightPerformance predictFightAgainst(Army army) {
         double currentEnemyThreat = army.threat();
-        double currentPower = threatCalculator.calculatePower(currentComposition);
+        double currentPower = threatCalculator.calculatePower(currentCompositionCache);
         if (currentPower > currentEnemyThreat * 1.5) {
             return FightPerformance.WINNING;
         } else if (currentPower > currentEnemyThreat * 1.25) {
@@ -565,8 +565,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         return Optional.empty();
     }
 
+    @Override
     public double getPower() {
-        return threatCalculator.calculatePower(currentComposition);
+        return threatCalculator.calculatePower(currentCompositionCache);
     }
 
     public void setAcceptingUnits(boolean acceptingUnits) {
@@ -588,6 +589,17 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     public void setProductionDelegateArmy(DefaultArmyTask<A, D, R, I> productionDelegateArmy) {
         this.productionDelegateArmy = Optional.of(productionDelegateArmy);
+    }
+
+    @Override
+    public Optional<? extends Task> getParentTask() {
+        return parentArmy;
+    }
+
+    @Override
+    public void accept(TaskWithUnitsVisitor visitor) {
+        visitor.visit(this);
+        this.childArmies.forEach(visitor::visit);
     }
 
     /**

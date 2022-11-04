@@ -66,11 +66,10 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
-        super.onStep(taskManager, agentWithData);
+    public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
         long gameLoop = agentWithData.observation().getGameLoop();
 
-        if (armyUnits.size() == 0) {
+        if (getAssignedUnits().size() == 0) {
             return;
         }
 
@@ -110,7 +109,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
             }
             if (targetFound != null) {
                 Point2d target2d = targetFound.toPoint2d();
-                Optional<UnitInPool> ccWithEnergy = armyUnits.stream()
+                Optional<UnitInPool> ccWithEnergy = getAssignedUnits().stream()
                         .map(tag -> agentWithData.observation().getUnit(tag))
                         .filter(unitInPool -> unitInPool != null && unitInPool.unit().getEnergy().isPresent() && unitInPool.unit().getEnergy().get() > 50f)
                         .findFirst();

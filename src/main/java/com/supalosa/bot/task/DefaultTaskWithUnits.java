@@ -4,50 +4,59 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.UnitType;
-import com.github.ocraft.s2client.protocol.unit.PassengerUnit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
+import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithUnits {
 
-    protected Map<UnitType, Integer> currentComposition = new HashMap<>();
-    protected Set<Tag> armyUnits = new HashSet<>();
+    protected Map<UnitType, Integer> currentCompositionCache = new HashMap<>();
     protected int basePriority;
+    protected Collection<Tag> assignedUnits;
+
+    private final List<UnitType> unitsOfTypeToRemove;
 
     public DefaultTaskWithUnits(int basePriority) {
+        super();
         this.basePriority = basePriority;
+        this.assignedUnits = Collections.emptyList();
+        this.unitsOfTypeToRemove = new ArrayList<>();
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
-        currentComposition.clear();
-        Set<Tag> myPassengers = armyUnits.stream().flatMap(tag -> {
-                    UnitInPool unit = agentWithData.observation().getUnit(tag);
-                    if (unit != null) {
-                        return unit.unit().getPassengers().stream().map(PassengerUnit::getTag);
-                    } else {
-                        return Stream.empty();
-                    }
-                }).collect(Collectors.toSet());
-        armyUnits = armyUnits.stream().filter(tag -> {
-                    UnitInPool unit = agentWithData.observation().getUnit(tag);
-                    if (unit != null) {
-                        currentComposition.compute(unit.unit().getType(), (k, v) -> v == null ? 1 : v + 1);
-                        unit.unit().getPassengers().forEach(passengerUnit -> {
-                            currentComposition.compute(passengerUnit.getType(), (k, v) -> v == null ? 1 : v + 1);
-                        });
-                    }
-                    if (myPassengers.contains(tag)) {
-                        return true;
-                    }
-                    return (unit != null && unit.isAlive());
-                })
-                .collect(Collectors.toSet());
+    public final void removeUnitOfType(UnitType unitType) {
+        this.unitsOfTypeToRemove.add(unitType);
+    }
+
+    protected abstract void onStepImpl(TaskManager taskManager, AgentWithData agentWithData);
+
+    @Override
+    public final void onStep(TaskManager taskManager, AgentWithData agentWithData) {
+        assignedUnits = taskManager.getAssignedUnitsForTask(this);
+        currentCompositionCache.clear();
+        Set<Tag> unitsToRemove = new HashSet<>();
+        assignedUnits.forEach(tag -> {
+            UnitInPool unit = agentWithData.observation().getUnit(tag);
+            if (unit != null) {
+                if (unitsOfTypeToRemove.size() > 0 && unitsOfTypeToRemove.contains(unit.unit().getType())) {
+                    unitsOfTypeToRemove.remove(unit.unit().getType());
+                    unitsToRemove.add(unit.getTag());
+                } else {
+                    currentCompositionCache.compute(unit.unit().getType(), (k, v) -> v == null ? 1 : v + 1);
+                    unit.unit().getPassengers().forEach(passengerUnit -> {
+                        currentCompositionCache.compute(passengerUnit.getType(), (k, v) -> v == null ? 1 : v + 1);
+                    });
+                }
+            }
+        });
+        if (unitsToRemove.size() > 0) {
+            unitsToRemove.forEach(tag -> taskManager.releaseUnit(tag, this));
+            assignedUnits = getAssignedUnits();
+        }
+        onStepImpl(taskManager, agentWithData);
     }
 
     @Override
@@ -56,7 +65,7 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
     }
 
     protected int getAmountOfUnit(UnitType type) {
-        return currentComposition.getOrDefault(type, 0);
+        return currentCompositionCache.getOrDefault(type, 0);
     }
 
     /**
@@ -69,37 +78,13 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
     }
 
     @Override
-    public boolean addUnit(Unit unit) {
-        if (armyUnits.add(unit.getTag())) {
-            currentComposition.put(
-                    unit.getType(),
-                    currentComposition.getOrDefault(unit.getType(), 0) + 1);
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    @Override
-    public boolean removeUnit(Unit unit) {
-        if (armyUnits.remove(unit.getTag())) {
-            currentComposition.put(
-                    unit.getType(),
-                    currentComposition.getOrDefault(unit.getType(), 0) - 1);
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    @Override
     public boolean hasUnit(Tag unitTag) {
-        return armyUnits.contains(unitTag);
+        return getAssignedUnits().contains(unitTag);
     }
 
     @Override
     public int getSize() {
-        return armyUnits.size();
+        return getAssignedUnits().size();
     }
 
     @Override
@@ -115,5 +100,32 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
             return;
         }
         taskManager.reassignUnits(otherArmy, this, observationInterface, _unit -> true);
+    }
+
+    @Override
+    public void accept(TaskWithUnitsVisitor visitor) {
+        visitor.visit(this);
+    }
+
+    @Override
+    public Map<UnitType, Integer> getCurrentCompositionCache() {
+        return Collections.unmodifiableMap(this.currentCompositionCache);
+    }
+
+    /**
+     * Returns the Tags of the units assigned to this task.
+     */
+    protected final Collection<Tag> getAssignedUnits() {
+        return this.assignedUnits;
+    }
+
+    @Override
+    public final void onUnitAdded(Unit unitTag) {
+        this.currentCompositionCache.compute(unitTag.getType(), (k, v) -> v == null ? 1 : v + 1);
+    }
+
+    @Override
+    public final void onUnitRemoved(Unit unitTag) {
+        this.currentCompositionCache.compute(unitTag.getType(), (k, v) -> v == null ? 0 : v - 1);
     }
 }

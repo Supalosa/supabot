@@ -9,10 +9,14 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.PassengerUnit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import com.supalosa.bot.AgentWithData;
+import com.supalosa.bot.task.army.ArmyTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
+import com.supalosa.bot.task.mission.MissionTask;
+import com.supalosa.bot.task.mission.TaskWithArmy;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,6 +29,10 @@ public class TaskManagerImpl implements TaskManager {
     private final Map<Tag, Task> unitToTaskMap;
     private final Map<String, Task> taskSet;
     private List<TaskWithUnits> orderedTasksNeedingUnits;
+    private Map<ArmyTask, Optional<MissionTask>> armyTaskToMissionMap;
+
+    // Cache of task -> units. The task manager is the authoritative source for this.
+    private Multimap<Task, Tag> taskToUnitCache;
 
     private long unitToTaskMapCleanedAt = 0L;
     private long unassignedUnitsDispatchedAt = 0L;
@@ -33,29 +41,48 @@ public class TaskManagerImpl implements TaskManager {
         this.unitToTaskMap = new HashMap<>();
         this.taskSet = new HashMap<>();
         this.orderedTasksNeedingUnits = new ArrayList<>();
+        this.armyTaskToMissionMap = new HashMap<>();
+        this.taskToUnitCache = HashMultimap.create();
     }
 
     @Override
-    public Optional<Task> getTaskForUnit(Tag unit) {
+    public Optional<Task> getTaskForUnit(Unit unit) {
         return Optional.ofNullable(unitToTaskMap.get(unit));
     }
 
     @Override
-    public void reserveUnit(Tag unit, Task task) {
-        unitToTaskMap.put(unit, task);
+    public void reserveUnit(Unit unit, Task task) {
+        unitToTaskMap.put(unit.getTag(), task);
+        taskToUnitCache.put(task, unit.getTag());
+        if (task instanceof TaskWithUnits) {
+            ((TaskWithUnits)task).onUnitAdded(unit);
+        }
     }
 
     @Override
-    public void releaseUnit(Tag unit, Task task) {
-        if (unitToTaskMap.get(unit) == task) {
-            unitToTaskMap.remove(unit);
-        }
-    }
-    @Override
-    public void reserveUnit(Optional<Tag> unit, Task task) {
+    public void reserveUnit(Optional<Unit> unit, Task task) {
         if (unit.isPresent()) {
             reserveUnit(unit.get(), task);
         }
+    }
+
+    @Override
+    public void releaseUnit(Tag unitTag, Task task) {
+        if (unitToTaskMap.get(unitTag) == task) {
+            unitToTaskMap.remove(unitTag);
+            taskToUnitCache.remove(task, unitTag);
+        }
+    }
+
+    @Override
+    public void reserveArmy(MissionTask missionTask, ArmyTask armyTask) {
+        armyTaskToMissionMap.getOrDefault(armyTask, Optional.empty()).ifPresent(task -> task.onArmyRemoved(armyTask));
+        armyTaskToMissionMap.put(armyTask, Optional.of(missionTask));
+    }
+
+    @Override
+    public Collection<Tag> getAssignedUnitsForTask(TaskWithUnits task) {
+        return taskToUnitCache.get(task);
     }
 
     @Override
@@ -74,19 +101,47 @@ public class TaskManagerImpl implements TaskManager {
 
         if (comparator == null) {
             return freeUnits.findAny().map(unit -> {
-                this.reserveUnit(unit.getTag(), task);
+                this.reserveUnit(unit.unit(), task);
                 return unit;
             });
         } else {
             return freeUnits.sorted(comparator).findFirst().map(unit -> {
-                this.reserveUnit(unit.getTag(), task);
+                this.reserveUnit(unit.unit(), task);
                 return unit;
             });
         }
     }
 
     @Override
-    public void onStep(AgentWithData agentWithData) {
+    public Optional<ArmyTask> findFreeArmyForTask(MissionTask missionTask, Predicate<ArmyTask> predicate) {
+        return findFreeArmyForTask(missionTask,
+                predicate.and(task -> task.getCentreOfMass().isPresent()),
+                Comparator.comparingDouble(task -> missionTask.getLocation().centrePoint().distance(task.getCentreOfMass().get())));
+    }
+
+    @Override
+    public Optional<ArmyTask> findFreeArmyForTask(MissionTask missionTask, Predicate<ArmyTask> predicate,
+                                                  Comparator<ArmyTask> comparator) {
+        Optional<ArmyTask> candidate = armyTaskToMissionMap.entrySet().stream()
+                .filter(entry -> entry.getValue().isEmpty())
+                .map(Map.Entry::getKey)
+                .filter(predicate)
+                .sorted((e1, e2) -> comparator.compare(e1, e2))
+                .findFirst();
+        if (candidate.isPresent()) {
+            armyTaskToMissionMap.put(candidate.get(), Optional.ofNullable(missionTask));
+        }
+        return candidate;
+    }
+
+    @Override
+    public final void onStep(AgentWithData agentWithData) {
+        // Create the task:unit cache.
+        taskToUnitCache = HashMultimap.create(taskSet.size(), unitToTaskMap.size() / Math.max(1, taskSet.size()));
+        unitToTaskMap.forEach((unit, task) -> {
+            taskToUnitCache.put(task, unit);
+        });
+        // Run task logic, and clean up completed tasks.
         List<Task> tasksFinishedThisStep = new ArrayList<>();
         Set<Tag> unitsReleasedThisStep = new HashSet<>();
         List<Task> tasksForStep = new ArrayList<>(taskSet.values());
@@ -95,17 +150,18 @@ public class TaskManagerImpl implements TaskManager {
                 task.onStep(this, agentWithData);
             } else {
                 tasksFinishedThisStep.add(task);
-                unitToTaskMap.entrySet().forEach(entry -> {
-                   if (entry.getValue() == task) {
-                       unitsReleasedThisStep.add(entry.getKey());
-                   }
-                });
-                unitsReleasedThisStep.forEach(tag -> unitToTaskMap.remove(tag));
+                Collection<Tag> unitsForTask = taskToUnitCache.get(task);
+                unitsReleasedThisStep.addAll(unitsForTask);
+                taskToUnitCache.removeAll(task);
             }
         });
+        // Unassign units from tasks that were completed.
+        unitsReleasedThisStep.forEach(unitToTaskMap::remove);
         tasksFinishedThisStep.forEach(task -> {
             taskSet.remove(task.getKey());
+            armyTaskToMissionMap.remove(task);
         });
+        // Reassign units that were assigned to tasks that don't exist anymore.
         orderedTasksNeedingUnits = taskSet.values().stream()
                 .filter(task -> task instanceof TaskWithUnits) // TODO: this smells...
                 .map(task -> (TaskWithUnits)task)
@@ -121,7 +177,7 @@ public class TaskManagerImpl implements TaskManager {
         }
         long gameLoop = agentWithData.observation().getGameLoop();
         if (gameLoop > unassignedUnitsDispatchedAt + 66L) {
-            // Periodically assign unallocated units to tasks.
+            // Every ~3 seconds, assign unallocated units to tasks.
             unassignedUnitsDispatchedAt = gameLoop;
             agentWithData.observation().getUnits(Alliance.SELF).forEach(unitInPool -> {
                 if (!unitToTaskMap.containsKey(unitInPool.getTag())) {
@@ -129,6 +185,7 @@ public class TaskManagerImpl implements TaskManager {
                 }
             });
         }
+        // Remove assignments to tasks that are complete.
         if (gameLoop > unitToTaskMapCleanedAt + 22L) {
             unitToTaskMapCleanedAt = gameLoop;
             Set<Tag> missingUnits = new HashSet<>();
@@ -151,8 +208,15 @@ public class TaskManagerImpl implements TaskManager {
                 }
             });
             missingUnits.removeAll(unitsInPassengers);
-            missingUnits.forEach(missingUnitTag -> unitToTaskMap.remove(missingUnitTag));
+            missingUnits.forEach(unitToTaskMap::remove);
         }
+        // Remove assignments to missions that are complete.
+        // This can be done every tick because we don't expect lots of missions.
+        armyTaskToMissionMap.forEach((armyTask, missionTask) -> {
+           if (missionTask.isPresent() && missionTask.get().isComplete()) {
+               armyTaskToMissionMap.put(armyTask, Optional.empty());
+           }
+        });
     }
 
     @Override
@@ -166,6 +230,9 @@ public class TaskManagerImpl implements TaskManager {
             return false;
         }
         taskSet.put(task.getKey(), task);
+        if (task instanceof ArmyTask) {
+            armyTaskToMissionMap.put((ArmyTask)task, Optional.empty());
+        }
         return true;
     }
 
@@ -202,8 +269,7 @@ public class TaskManagerImpl implements TaskManager {
     public void dispatchUnit(Unit unit) {
         for (TaskWithUnits task : orderedTasksNeedingUnits) {
             if (!task.isComplete() && task.wantsUnit(unit)) {
-                task.addUnit(unit);
-                reserveUnit(unit.getTag(), task);
+                reserveUnit(unit, task);
                 return;
             }
         }
@@ -232,10 +298,13 @@ public class TaskManagerImpl implements TaskManager {
                 }
                 Unit unit = unitInPool.unit();
                 // TODO consider whether we want `wantsUnit`
-                if (from.removeUnit(unit) && predicate.test(unit)/* && to.wantsUnit(unit)*/) {
-                    to.addUnit(unit);
+                if (predicate.test(unit)/* && to.wantsUnit(unit)*/) {
                     moved.incrementAndGet();
                     unitToTaskMap.put(tag, to);
+                    taskToUnitCache.remove(from, tag);
+                    from.onUnitRemoved(unit);
+                    taskToUnitCache.put(to, tag);
+                    to.onUnitAdded(unit);
                 }
             }
         });

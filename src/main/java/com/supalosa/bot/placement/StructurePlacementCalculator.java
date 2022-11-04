@@ -424,12 +424,12 @@ public class StructurePlacementCalculator {
                 if (staticFreePlacementGrid.get(x, y) == false) {
                     agent.debug().debugBoxOut(
                             point3d.sub(-0.05f, -0.05f, 0.1f),
-                            point3d.sub(-0.95f, -0.95f, -0.1f), Color.GRAY);
+                            point3d.sub(-0.95f, -0.95f, -0.1f), Color.of(183, 132, 132));
                 }
                 if (mutableFreePlacementGrid.get(x, y) != BUILDABLE) {
                     agent.debug().debugBoxOut(
                             point3d.sub(-0.1f, -0.1f, 0.2f),
-                            point3d.sub(-0.9f, -0.9f, -0.2f), Color.of(156, 156, 156));
+                            point3d.sub(-0.9f, -0.9f, -0.2f), Color.of(192, 156, 156));
                 }
             }
         }

@@ -1,13 +1,17 @@
 package com.supalosa.bot.task;
 
+import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * A Task that requests units from the TaskManager.
+ * Note that the TaskManager is the one who actually tracks the ownership of units.
  */
 public interface TaskWithUnits extends Task {
 
@@ -18,21 +22,19 @@ public interface TaskWithUnits extends Task {
     boolean wantsUnit(Unit unit);
 
     /**
-     * Adds a unit to this army. It is assumed to already be reserved for the army through the TaskManger.
-     * Returns false if the unit is already in the army.
-     * Note: If a unit is in multiple armies, both armies will end up controlling it.
-     */
-    boolean addUnit(Unit unitTag);
-
-    /**
      * Returns true if this army has the given unit in it.
      */
     boolean hasUnit(Tag unitTag);
 
     /**
-     * Removes the unit (if we have it) and returns true if it was removed.
+     * Called when a unit is added to the task. Allows for updating internal bookkeeping.
      */
-    boolean removeUnit(Unit unitTag);
+    void onUnitAdded(Unit unitTag);
+
+    /**
+     * Called when a unit is removed from the task. Allows for updating internal bookkeeping.
+     */
+    void onUnitRemoved(Unit unitTag);
 
     /**
      * Returns an arbitrary value of priority, with higher figures getting units first.
@@ -45,7 +47,19 @@ public interface TaskWithUnits extends Task {
     List<UnitTypeRequest> requestingUnitTypes();
 
     /**
+     * Return the current composition of this army.
+     */
+    Map<UnitType, Integer> getCurrentCompositionCache();
+
+    /**
      * Returns the number of units in this army.
      */
     int getSize();
+
+    void accept(TaskWithUnitsVisitor visitor);
+
+    /**
+     * Orders the unit to remove a unit of a certain type if possible, on the next update.
+     */
+    void removeUnitOfType(UnitType type);
 }

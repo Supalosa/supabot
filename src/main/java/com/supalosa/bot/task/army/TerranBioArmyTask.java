@@ -36,7 +36,6 @@ import java.util.stream.Stream;
  */
 public class TerranBioArmyTask extends DefaultArmyTask {
 
-    private int numMedivacs = 0;
     private int basePriority;
 
     private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
@@ -66,18 +65,9 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
-        super.onStep(taskManager, agentWithData);
+    public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
+        super.onStepImpl(taskManager, agentWithData);
         long gameLoop = agentWithData.observation().getGameLoop();
-        numMedivacs = 0;
-        armyUnits.forEach(tag -> {
-            UnitInPool unit = agentWithData.observation().getUnit(tag);
-            if (unit != null) {
-                if (unit.unit().getType() == Units.TERRAN_MEDIVAC) {
-                    numMedivacs++;
-                }
-            }
-        });
 
         if (gameLoop > desiredCompositionUpdatedAt + 22L) {
             desiredCompositionUpdatedAt = gameLoop;
@@ -106,7 +96,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 .amount(Math.max(0, maxBio - targetMarauders))
                 .build()
         );
-        if (armyUnits.size() > 5) {
+        if (getAssignedUnits().size() > 5) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_MARAUDER)
                     .productionAbility(Abilities.TRAIN_MARAUDER)
@@ -116,7 +106,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .build()
             );
         }
-        if (armyUnits.size() > 10) {
+        if (getAssignedUnits().size() > 10) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_WIDOWMINE)
                     .alternateForm(Units.TERRAN_WIDOWMINE_BURROWED)
@@ -155,7 +145,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .build()
             );
         }
-        int targetMedivacs = (int)Math.min(10, Math.ceil(armyUnits.size() * 0.5));
+        int targetMedivacs = (int)Math.min(10, Math.ceil(getAssignedUnits().size() * 0.5));
         result.add(ImmutableUnitTypeRequest.builder()
                 .unitType(Units.TERRAN_MEDIVAC)
                 .productionAbility(Abilities.TRAIN_MEDIVAC)
@@ -193,7 +183,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
     private void calculateWidowMines(Optional<Point2d> centreOfMass, Optional<Army> maybeEnemyArmy,
                                      ObservationInterface observationInterface, ActionInterface actionInterface) {
         if (centreOfMass.isPresent() && maybeEnemyArmy.isPresent() && (getAmountOfUnit(Units.TERRAN_WIDOWMINE) > 0 || getAmountOfUnit(Units.TERRAN_WIDOWMINE_BURROWED) > 0)) {
-            armyUnits.forEach(tag -> {
+            getAssignedUnits().forEach(tag -> {
                 UnitInPool unitInPool = observationInterface.getUnit(tag);
                 if (unitInPool.unit().getType() != Units.TERRAN_WIDOWMINE && unitInPool.unit().getType() != Units.TERRAN_WIDOWMINE_BURROWED) {
                     return;

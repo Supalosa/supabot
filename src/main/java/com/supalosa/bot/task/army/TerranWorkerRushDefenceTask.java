@@ -45,15 +45,15 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
     }
 
     @Override
-    public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
-        super.onStep(taskManager, agentWithData);
+    public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
+        super.onStepImpl(taskManager, agentWithData);
         long gameLoop = agentWithData.observation().getGameLoop();
 
         if (gameLoop > desiredCompositionUpdatedAt + 22L) {
             desiredCompositionUpdatedAt = gameLoop;
             updateComposition();
         }
-        armyUnits.forEach(armyUnitTag -> {
+        getAssignedUnits().forEach(armyUnitTag -> {
             if (!autocastedWorkers.contains(armyUnitTag)) {
                 agentWithData.actions().toggleAutocast(armyUnitTag, Abilities.EFFECT_REPAIR);
                 autocastedWorkers.add(armyUnitTag);
