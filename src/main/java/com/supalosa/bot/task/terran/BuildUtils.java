@@ -190,8 +190,9 @@ public class BuildUtils {
                         .map(ramp -> ramp.projection(5.0f))
                         .orElse(spc.getFirstBarracksWithAddonLocation());
                 location.ifPresent(rally -> {
-                    barracks.unit();
-                    agentWithData.actions().unitCommand(barracks.unit(), Abilities.RALLY_BUILDING, rally, false);
+                    if (barracks.unit().getBuildProgress() > 0.99f && barracks.unit().getRallyTargets().isEmpty()) {
+                        agentWithData.actions().unitCommand(barracks.unit(), Abilities.RALLY_BUILDING, rally, false);
+                    }
                 });
             });
         });

@@ -113,6 +113,18 @@ public abstract class RegionData {
      */
     public abstract Optional<Point2d> getDefenceRallyPoint();
 
+    /**
+     * An unbounded value of control for the region that accumulates based on enemy and your own forces.
+     */
+    public abstract double cumulativeControl();
+
+    /**
+     * A normalised value from 0.0 - 1.0 which indicates how well controlled this region is.
+     * The equilibrium is 0.5.
+     * @return
+     */
+    public abstract double controlFactor();
+
     @Override
     public boolean equals(Object object) {
         if (object instanceof RegionData) {

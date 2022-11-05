@@ -3,6 +3,7 @@ package com.supalosa.bot.pathfinding;
 import com.supalosa.bot.analysis.Region;
 import org.jgrapht.GraphPath;
 import org.jgrapht.alg.shortestpath.AStarShortestPath;
+import org.jgrapht.graph.AsSubgraph;
 import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.SimpleWeightedGraph;
 
@@ -15,6 +16,15 @@ public class RegionGraph extends SimpleWeightedGraph<Region, DefaultWeightedEdge
     public RegionGraph(Class<? extends DefaultWeightedEdge> edgeClass) {
         super(edgeClass);
     }
+
+    /**
+     * Returns the region which minimises the distance between the given list of regions.
+     * Useful for calculating which region we should be defending from.
+     */
+    /*public Optional<Region> getConnectedBases(List<Region> regions) {
+        SimpleWeightedGraph<Region, DefaultWeightedEdge> subgraph = new AsSubgraph(this);
+        // we'd use connected components to find bases which are connected to query point
+    }*/
 
     public Optional<RegionGraphPath> findPath(Region startRegion, Region endRegion) {
         AStarShortestPath<Region, DefaultWeightedEdge> pathfinder = new AStarShortestPath<>(

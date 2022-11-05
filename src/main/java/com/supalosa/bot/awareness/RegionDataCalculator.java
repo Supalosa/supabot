@@ -1,7 +1,6 @@
 package com.supalosa.bot.awareness;
 
 import com.github.ocraft.s2client.bot.S2Agent;
-import com.github.ocraft.s2client.bot.gateway.DebugInterface;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
@@ -13,7 +12,6 @@ import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.engagement.ThreatCalculator;
-import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.function.Function;
@@ -106,7 +104,8 @@ public class RegionDataCalculator {
 
         double finalMaxEnemyThreat = maxEnemyThreat;
         analysisResults.getRegions().forEach(region -> {
-            double currentSelfThreat = threatCalculator.calculatePower(
+            Optional<RegionData> previousData = Optional.ofNullable(previousRegionData.get(region.regionId()));
+            double currentPower = threatCalculator.calculatePower(
                     regionIdToSelfUnits.get(region.regionId()).stream()
                             .map(unitInPool -> unitInPool.unit().getType())
                             .collect(Collectors.toUnmodifiableList()));
@@ -132,6 +131,19 @@ public class RegionDataCalculator {
                         .getRamp(region.getRampId().get())
                         .calculateIsBlocked(agent.observation());
             }
+            // The cumulative control swings depending on whether the player or enemy has more control.
+            double powerDelta = currentPower - enemyThreat;
+            double previousControl = previousData.map(RegionData::cumulativeControl).orElse(1.0);
+            if (previousControl > 0 && powerDelta < 0) {
+                // Losing control.
+                powerDelta = powerDelta * Math.log(Math.abs(previousControl) + 1);
+            } else if (previousControl < 0 && powerDelta > 0) {
+                // Gaining control.
+                powerDelta = powerDelta * Math.log(Math.abs(previousControl) + 1);
+            }
+            double cumulativeControl = previousControl + powerDelta;
+            // https://www.wolframalpha.com/input?i=plot+y+%3D+ln%28abs%28x%29%2B1%29+*+sign%28x%29+from+-10+to+10
+            double controlFactor = Math.log(Math.abs(cumulativeControl) + 1) * Math.signum(cumulativeControl);
             double visibilityPercent = regionToVisibility.get(region.regionId());
             double decayingVisibilityPercent = regionToDecayingVisibility.get(region.regionId());
             double enemyArmyFactor = 1.0f + enemyThreat / Math.max(1.0, finalMaxEnemyThreat);
@@ -141,13 +153,7 @@ public class RegionDataCalculator {
                     diffuseThreat.orElse(0.0),
                     regionToPreviousDiffuseThreat.get(region.regionId()) * 0.75 - 1.0 * visibilityDecay);
             double regionCreepPercentage = regionToCreep.get(region.regionId());
-            Set<Point2d> borderTilesTowardsEnemy = calculateBorderTilesTowardsEnemy(region, previousRegionData);
-            OptionalDouble averageX = borderTilesTowardsEnemy.stream().mapToDouble(point -> point.getX()).average();
-            OptionalDouble averageY = borderTilesTowardsEnemy.stream().mapToDouble(point -> point.getY()).average();
-            Optional<Point2d> averageBorderTileTowardsEnemy = Optional.empty();
-            if (averageX.isPresent() && averageY.isPresent()) {
-                averageBorderTileTowardsEnemy = Optional.of(Point2d.of((float) averageX.getAsDouble(), (float) averageY.getAsDouble()));
-            }
+            Optional<Point2d> averageBorderTile = calculateAverageOfBorderTiles(region, previousRegionData);
             ImmutableRegionData.Builder builder = ImmutableRegionData.builder()
                     .region(region)
                     .weight(1.0) // TODO what to do with this?
@@ -156,14 +162,16 @@ public class RegionDataCalculator {
                     .killzoneFactor(killzoneFactor)
                     .nearbyEnemyThreat(neighbourThreat.orElse(0.0))
                     .enemyThreat(enemyThreat)
-                    .playerThreat(currentSelfThreat)
+                    .playerThreat(currentPower)
                     .visibilityPercent(visibilityPercent)
                     .decayingVisibilityPercent(decayingVisibilityPercent)
                     .diffuseEnemyThreat(decayingDefuseThreat)
                     .hasEnemyBase(regionIdsWithEnemyBases.contains(region.regionId()))
                     .isPlayerBase(regionIdsWithPlayerBases.contains(region.regionId()))
                     .estimatedCreepPercentage(regionCreepPercentage)
-                    .defenceRallyPoint(averageBorderTileTowardsEnemy);
+                    .defenceRallyPoint(averageBorderTile)
+                    .controlFactor(controlFactor)
+                    .cumulativeControl(cumulativeControl);
 
             result.put(region.regionId(), builder.build());
         });
@@ -190,12 +198,11 @@ public class RegionDataCalculator {
     }
 
     /**
-     * Return the border tiles which point towards the enemy.
+     * Return the average point of all the border tiles facing outwards.
+     * TODO: if this isn't dynamic anymore, it should be in the
      */
-    private Set<Point2d> calculateBorderTilesTowardsEnemy(
-            Region region,
-            Map<Integer, RegionData> previousRegionData) {
-        Set<Point2d> result = new HashSet<>();
+    private Optional<Point2d> calculateAverageOfBorderTiles(Region region, Map<Integer, RegionData> previousRegionData) {
+        Set<Point2d> relevantBorderTiles = new HashSet<>();
         if (region.getBorderTiles().isPresent()) {
             // We're using the previous region data as a shortcut here.
             // Find the neighbouring region with the highest diffuse threat [on the previous update]
@@ -217,14 +224,20 @@ public class RegionDataCalculator {
                 if (highThreatDirection.region().getBorderTiles().isPresent()) {
                     Set<Point2d> myBorderTiles = region.getBorderTiles().get();
                     Set<Point2d> theirBorderTiles = highThreatDirection.region().getBorderTiles().get();
-                    result.addAll(myBorderTiles.stream().filter(myBorderTile ->
+                    relevantBorderTiles.addAll(myBorderTiles.stream().filter(myBorderTile ->
                             theirBorderTiles.stream().anyMatch(theirBorderTile -> myBorderTile.distance(theirBorderTile) < 2f))
                             .collect(Collectors.toSet()));
                 }
             }
         }
+        OptionalDouble averageX = relevantBorderTiles.stream().mapToDouble(point -> point.getX()).average();
+        OptionalDouble averageY = relevantBorderTiles.stream().mapToDouble(point -> point.getY()).average();
+        Optional<Point2d> averageBorderTileTowardsEnemy = Optional.empty();
+        if (averageX.isPresent() && averageY.isPresent()) {
+            averageBorderTileTowardsEnemy = Optional.of(Point2d.of((float) averageX.getAsDouble(), (float) averageY.getAsDouble()));
+        }
 
-        return result;
+        return averageBorderTileTowardsEnemy;
     }
 
     Optional<Double> getDiffuseEnemyThreatForRegion(AnalysisResults analysisResults,

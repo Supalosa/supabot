@@ -8,6 +8,7 @@ import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
+import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
@@ -457,7 +458,10 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public void debug(S2Agent agent) {
         this.regionData.values().forEach(regionData -> {
-            regionData.getDefenceRallyPoint().ifPresent(bestTileTowardsEnemy -> {
+            regionData.getDefenceRallyPoint().ifPresent(defenceRallyPoint -> {
+                float height = agent.observation().terrainHeight(defenceRallyPoint);
+                Point point = Point.of(defenceRallyPoint.getX(), defenceRallyPoint.getY(), height);
+                agent.debug().debugTextOut(regionData.region().regionId() + " DefPoint", point, Color.PURPLE, 10);
             });
         });
         final long gameLoop = agent.observation().getGameLoop();

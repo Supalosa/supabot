@@ -256,6 +256,7 @@ public class StructurePlacementCalculator {
         Optional<UnitInPool> barracks;
         List<UnitInPool> barracksAtLocation = observation.getUnits(UnitFilter.builder()
                         .alliance(Alliance.SELF)
+                        .unitType(Units.TERRAN_BARRACKS)
                         .inRangeOf(barracksLocation.get())
                         .range(1.0f)
                         .build());

@@ -9,7 +9,6 @@ import com.supalosa.bot.analysis.utils.VisualisationUtils;
 import com.supalosa.bot.awareness.Army;
 
 import javax.swing.*;
-import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.WindowEvent;
 import java.awt.geom.AffineTransform;
@@ -18,6 +17,7 @@ import java.awt.image.BufferedImage;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class JFrameDebugTarget implements DebugTarget {
@@ -50,6 +50,24 @@ public class JFrameDebugTarget implements DebugTarget {
 
         frame.pack();
         frame.setVisible(true);
+    }
+
+    private QuickDrawPanel createMap(BufferedImage baseCanvas, Consumer<Graphics2D> consumer) {
+        // scale the bitmap
+        AffineTransform transform = new AffineTransform();
+        transform.scale(OUTPUT_SCALE_FACTOR, OUTPUT_SCALE_FACTOR);
+        AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
+
+        BufferedImage placementScaled = new BufferedImage((int)(baseCanvas.getWidth() * OUTPUT_SCALE_FACTOR), (int)(baseCanvas.getHeight() * OUTPUT_SCALE_FACTOR), BufferedImage.TYPE_3BYTE_BGR);
+        QuickDrawPanel placementPanel = new QuickDrawPanel(transformOp.filter(baseCanvas, placementScaled));
+
+        Graphics2D g = (Graphics2D) placementScaled.getGraphics();
+        g.setComposite(AlphaComposite.Src);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        consumer.accept(g);
+
+        return placementPanel;
     }
 
     @Override
@@ -88,6 +106,7 @@ public class JFrameDebugTarget implements DebugTarget {
         // Copy the base to new bitmaps
         BufferedImage placementBmp = new BufferedImage(baseBmp.getColorModel(), baseBmp.copyData(null), false, null);
         BufferedImage regionBmp = new BufferedImage(baseBmp.getColorModel(), baseBmp.copyData(null), false, null);
+        BufferedImage controlBmp = new BufferedImage(baseBmp.getColorModel(), baseBmp.copyData(null), false, null);
 
         data.structurePlacementCalculator().ifPresent(spc -> {
             VisualisationUtils.renderTileSet(
@@ -126,104 +145,109 @@ public class JFrameDebugTarget implements DebugTarget {
                         double blue = (255 - (int) (255 * currentThreatFactor));
                         return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
                     });
-            /*
+            VisualisationUtils.renderTileSet(
+                    controlBmp,
+                    regionData.region(),
+                    (_prevVal) -> {
+                        double playerThreatFactor = Math.min(1.0, Math.max(0.0, regionData.controlFactor() / 10f));
+                        double enemyThreatFactor = Math.min(1.0, Math.max(0.0, -regionData.controlFactor() / 10f));
+                        double red = (255 - (int) (255 * playerThreatFactor));
+                        double green = (255 - (int) (255 * enemyThreatFactor)) ;
+                        double blue = (255 - (int)(128 * playerThreatFactor) - (int)(127 * enemyThreatFactor));
+                        return VisualisationUtils.makeRgb((int)red, (int)green, (int)blue);
+                    },
+                    (_prevVal) -> Color.BLACK.getRGB());
+        });
+        QuickDrawPanel placementPanel = createMap(placementBmp, g -> {});
 
-            if (regionData.diffuseEnemyThreat() > 0) {
+        QuickDrawPanel regionPanel = createMap(regionBmp, g -> {
+            // Draw other metadata for regions.
+            data.mapAwareness().getAllRegionData().forEach(regionData -> {
                 int x = scaleX(regionData.region().centrePoint().getX());
-                int y = scaleY(regionData.region().centrePoint().getY(),  mapHeight);
-                drawCross(g, x, y + 10, (int) (regionData.diffuseEnemyThreat()));
-            }
-             */
-        });
-        // scale the bitmap
-        AffineTransform transform = new AffineTransform();
-        transform.scale(OUTPUT_SCALE_FACTOR, OUTPUT_SCALE_FACTOR);
-        AffineTransformOp transformOp = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
-
-        BufferedImage placementScaled = new BufferedImage((int)(placementBmp.getWidth() * OUTPUT_SCALE_FACTOR), (int)(baseBmp.getHeight() * OUTPUT_SCALE_FACTOR), BufferedImage.TYPE_3BYTE_BGR);
-        QuickDrawPanel placementPanel = new QuickDrawPanel(transformOp.filter(placementBmp, placementScaled));
-
-        BufferedImage pathingScaled = new BufferedImage((int)(regionBmp.getWidth() * OUTPUT_SCALE_FACTOR), (int)(baseBmp.getHeight() * OUTPUT_SCALE_FACTOR), BufferedImage.TYPE_3BYTE_BGR);
-        QuickDrawPanel placementPanel2 = new QuickDrawPanel(transformOp.filter(regionBmp, pathingScaled));
-
-
-        Graphics2D g = (Graphics2D) pathingScaled.getGraphics();
-        g.setComposite(AlphaComposite.Src);
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        // Draw other metadata for regions.
-        data.mapAwareness().getAllRegionData().forEach(regionData -> {
-            int x = scaleX(regionData.region().centrePoint().getX());
-            int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
-            g.setColor(Color.RED);
-            if (regionData.killzoneFactor() > 2.0) {
-                drawCross(g, x, y, (int) (1 * regionData.killzoneFactor()));
-            }
-            /*g.setColor(Color.GRAY);
-            regionData.region().nearbyRegions().forEach(nearbyRegionId -> {
-                data.mapAwareness().getRegionDataForId(nearbyRegionId).ifPresent(nearbyRegion -> {
-                    int x2 = scaleX(nearbyRegion.region().centrePoint().getX());
-                    int y2 = scaleY(nearbyRegion.region().centrePoint().getY(), mapHeight);
-                    g.drawLine(x, y, x2, y2);
-                });
-            });*/
-            if (regionData.region().getRampId().isEmpty()) {
-                Font lastFont = g.getFont();
-                g.setFont(lastFont.deriveFont(10.0f));
-                String regionText = String.format("%.1f [%.1f]", regionData.diffuseEnemyThreat(), regionData.enemyThreat());
-                if (regionData.hasEnemyBase()) {
-                    regionText += "B";
-                }
-                if (regionData.isPlayerBase()) {
-                    regionText += "P";
-                }
-                int width = g.getFontMetrics().stringWidth(regionText);
-                int height = g.getFontMetrics().getHeight();
-                g.setColor(Color.BLACK);
-                g.drawString(regionText, x+1 - (width / 2), y+1 - (height / 2));
-                g.setColor(Color.WHITE);
-                g.drawString(regionText, x - (width / 2), y - (height / 2));
-                g.setFont(lastFont);
-            }
-        });
-
-        // Draw army metadata.
-        data.fightManager().getAllArmies().forEach(armyTask -> {
-            armyTask.getCentreOfMass().ifPresent(centreOfMass -> {
-                int x = scaleX(centreOfMass.getX());
-                int y = scaleY(centreOfMass.getY(),  mapHeight);
-                g.setColor(Color.GREEN);
-                g.drawOval(x - 4, y - 4, 8, 8);
+                int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
                 g.setColor(Color.RED);
-                armyTask.getWaypoints().ifPresent(waypoints -> {
-                    if (waypoints.size() > 0) {
-                        Point2d lastPoint = centreOfMass;
-                        for (Region waypoint : waypoints) {
-                            Point2d newPoint = waypoint.centrePoint();
-                            drawArrowLine(g,
-                                    scaleX(lastPoint.getX()), scaleY(lastPoint.getY(), mapHeight),
-                                    scaleX(newPoint.getX()), scaleY(newPoint.getY(), mapHeight));
-                            lastPoint = newPoint;
-                        }
-                        if (armyTask.getTargetPosition().isPresent()) {
-                            Point2d targetPosition = armyTask.getTargetPosition().get();
-                            drawArrowLine(g,
-                                    scaleX(lastPoint.getX()), scaleY(lastPoint.getY(), mapHeight),
-                                    scaleX(targetPosition.getX()), scaleY(targetPosition.getY(), mapHeight));
-                        }
+                if (regionData.killzoneFactor() > 2.0) {
+                    drawCross(g, x, y, (int) (1 * regionData.killzoneFactor()));
+                }
+                if (regionData.region().getRampId().isEmpty()) {
+                    Font lastFont = g.getFont();
+                    g.setFont(lastFont.deriveFont(10.0f));
+                    String regionText = String.format("%.1f [%.1f]", regionData.diffuseEnemyThreat(), regionData.enemyThreat());
+                    if (regionData.hasEnemyBase()) {
+                        regionText += "B";
                     }
+                    if (regionData.isPlayerBase()) {
+                        regionText += "P";
+                    }
+                    int width = g.getFontMetrics().stringWidth(regionText);
+                    int height = g.getFontMetrics().getHeight();
+                    g.setColor(Color.BLACK);
+                    g.drawString(regionText, x+1 - (width / 2), y+1 - (height / 2));
+                    g.setColor(Color.WHITE);
+                    g.drawString(regionText, x - (width / 2), y - (height / 2));
+                    g.setFont(lastFont);
+                }
+            });
+
+            // Draw army metadata.
+            data.fightManager().getAllArmies().forEach(armyTask -> {
+                armyTask.getCentreOfMass().ifPresent(centreOfMass -> {
+                    int x = scaleX(centreOfMass.getX());
+                    int y = scaleY(centreOfMass.getY(),  mapHeight);
+                    g.setColor(Color.GREEN);
+                    g.drawOval(x - 4, y - 4, 8, 8);
+                    g.setColor(Color.RED);
+                    armyTask.getWaypoints().ifPresent(waypoints -> {
+                        if (waypoints.size() > 0) {
+                            Point2d lastPoint = centreOfMass;
+                            for (Region waypoint : waypoints) {
+                                Point2d newPoint = waypoint.centrePoint();
+                                drawArrowLine(g,
+                                        scaleX(lastPoint.getX()), scaleY(lastPoint.getY(), mapHeight),
+                                        scaleX(newPoint.getX()), scaleY(newPoint.getY(), mapHeight));
+                                lastPoint = newPoint;
+                            }
+                            if (armyTask.getTargetPosition().isPresent()) {
+                                Point2d targetPosition = armyTask.getTargetPosition().get();
+                                drawArrowLine(g,
+                                        scaleX(lastPoint.getX()), scaleY(lastPoint.getY(), mapHeight),
+                                        scaleX(targetPosition.getX()), scaleY(targetPosition.getY(), mapHeight));
+                            }
+                        }
+                    });
+                });
+                armyTask.getTargetPosition().ifPresent(targetPosition -> {
+                    int x = (int)(targetPosition.getX() * OUTPUT_SCALE_FACTOR);
+                    int y = (int)((mapHeight - targetPosition.getY()) * OUTPUT_SCALE_FACTOR);
+                    g.setColor(Color.RED);
+                    g.drawOval(x - 4, y - 4, 8, 8);
                 });
             });
-            armyTask.getTargetPosition().ifPresent(targetPosition -> {
-                int x = (int)(targetPosition.getX() * OUTPUT_SCALE_FACTOR);
-                int y = (int)((mapHeight - targetPosition.getY()) * OUTPUT_SCALE_FACTOR);
-                g.setColor(Color.RED);
-                g.drawOval(x - 4, y - 4, 8, 8);
+        });
+        QuickDrawPanel controlPanel = createMap(controlBmp, g -> {
+            // Draw other metadata for regions.
+            data.mapAwareness().getAllRegionData().forEach(regionData -> {
+                int x = scaleX(regionData.region().centrePoint().getX());
+                int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
+                if (regionData.region().getRampId().isEmpty()) {
+                    Font lastFont = g.getFont();
+                    g.setFont(lastFont.deriveFont(10.0f));
+                    String regionText = String.format("%.1f", regionData.controlFactor());
+                    int width = g.getFontMetrics().stringWidth(regionText);
+                    int height = g.getFontMetrics().getHeight();
+                    g.setColor(Color.BLACK);
+                    g.drawString(regionText, x + 1 - (width / 2), y + 1 - (height / 2));
+                    g.setColor(Color.WHITE);
+                    g.drawString(regionText, x - (width / 2), y - (height / 2));
+                    g.setFont(lastFont);
+                }
             });
         });
+
 
         panel.add(placementPanel);
-        panel.add(placementPanel2);
+        panel.add(regionPanel);
+        panel.add(controlPanel);
 
         JPanel armyPanel = new JPanel(new BorderLayout());
         data.enemyAwareness().getPotentialEnemyArmy().ifPresent(potentialEnemyArmy -> {
