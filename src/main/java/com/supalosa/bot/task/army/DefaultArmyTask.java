@@ -256,7 +256,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> agentWithData.mapAwareness().getRegionDataForPoint(centre));
 
         if (!currentRegionData.equals(previousCurrentRegion)) {
-            System.out.println("Region changed for " + this.armyName);
+            //System.out.println("Region changed for " + this.armyName);
             enteredCurrentRegionAt = agentWithData.observation().getGameLoop();
         }
         currentRegion = currentRegionData;
@@ -346,7 +346,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         } else if (centreOfMass.isPresent()) {
             nextRegion = Optional.empty();
         }
-        float enemyArmySearchRadius = 15f;
+        float enemyArmySearchRadius = 20f;
         List<Army> armyList = centreOfMass
                 .map(point2d -> agentWithData.enemyAwareness().getMaybeEnemyArmies(point2d, enemyArmySearchRadius))
                 .orElse(Collections.emptyList());

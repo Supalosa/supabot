@@ -135,7 +135,7 @@ public class TerranMicro {
                             args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackMovePosition, false);
                         }
                     }));
-            if (args.enemyVirtualArmy().getCount(Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES) == 0) {
+            if (nearestEnemyUnit.isPresent() && args.enemyVirtualArmy().getCount(Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES) == 0) {
                 // No AA targets, morph to land unit.
                 args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_VIKING_ASSAULT_MODE, false);
             }
@@ -187,9 +187,13 @@ public class TerranMicro {
                 .getNearestInRadius(unit.getPosition().toPoint2d(), avoidanceRange,
                         enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
                 .map(enemy -> enemy.getPosition().toPoint2d());
+        float liberatorRange = 5f;
+        if (args.agentWithData().observation().getUpgrades().contains(Upgrades.LIBERATOR_AG_RANGE_UPGRADE)) {
+            liberatorRange += 3f;
+        }
         Optional<Unit> closestGroundTarget = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(),12f, enemy -> enemy.getFlying().orElse(false) == false);
-        if (nearestEnemyUnit.isEmpty() && closestGroundTarget.isPresent()) {
+                .getNearestInRadius(unit.getPosition().toPoint2d(),liberatorRange, enemy -> enemy.getFlying().orElse(false) == false);
+        if (closestGroundTarget.isPresent()) {
             // Morph liberator to AG mode.
             Optional<Point2d> position = getNextPosition(goalPosition, args);
             closestGroundTarget.ifPresentOrElse(
@@ -203,6 +207,13 @@ public class TerranMicro {
                             args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackMovePosition, false);
                         }
                     }));
+        } else {
+            Optional<Point2d> position = getNextPosition(goalPosition, args);
+            if (position.isPresent()) {
+                if (!isAlreadyAttackMovingTo(position.get(), currentOrder)) {
+                    args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, position.get(), false);
+                }
+            }
         }
     }
 
@@ -210,8 +221,12 @@ public class TerranMicro {
                                             DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
         Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // TODO: figure out where the liberator is shooting and check for targets in that circle.
+        float liberatorRange = 5f;
+        if (args.agentWithData().observation().getUpgrades().contains(Upgrades.LIBERATOR_AG_RANGE_UPGRADE)) {
+            liberatorRange += 3f;
+        }
         Optional<Unit> closestGroundTarget = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(),15f, enemy -> enemy.getFlying().orElse(false) == false);
+                .getNearestInRadius(unit.getPosition().toPoint2d(),liberatorRange + 2f, enemy -> enemy.getFlying().orElse(false) == false);
         if (closestGroundTarget.isEmpty()) {
             // Morph liberator back to AA mode.
             args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_LIBERATOR_AA_MODE, false);

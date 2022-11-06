@@ -236,9 +236,9 @@ public class FightManager {
                 attackPosition = uncontrolledBorderRegion
                         .map(RegionData::region)
                         .map(Region::centrePoint);
-                if (attackPosition.isPresent()) {
+                /*if (attackPosition.isPresent()) {
                     System.out.println("Switched to expansion mode and found uncontrolled region: " + uncontrolledBorderRegion);
-                }
+                }*/
             }
         }
         // Harass the base with the least diffuse threat, as long as the diffuse threat is less half our attacking
