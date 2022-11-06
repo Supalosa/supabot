@@ -8,10 +8,10 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.GameData;
-import com.supalosa.bot.strategy.StrategicObservation;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class SimpleBuildOrder implements BuildOrder {
@@ -71,7 +71,7 @@ public class SimpleBuildOrder implements BuildOrder {
             });
         }
         long gameLoop = observationInterface.getGameLoop();
-        if (gameLoop > stageStartedAt + MAX_STAGE_TIME || observationInterface.getMinerals() > 1000) {
+        if (gameLoop > stageStartedAt + MAX_STAGE_TIME || observationInterface.getMinerals() > 800) {
             isTimedOut = true;
         }
     }
@@ -101,8 +101,17 @@ public class SimpleBuildOrder implements BuildOrder {
             if (currentStage.trigger().accept(this, agentWithData.observation(), agentWithData)) {
                 output.add(convertStageToOutput(currentStage));
             }
-            output.addAll(repeatingStages.stream().map(this::convertStageToOutput)
-                    .collect(Collectors.toList()));
+            // Send repeating stages, but only if we can afford it.
+            AtomicInteger remainingMoney = new AtomicInteger(Math.max(0,
+                    agentWithData.observation().getMinerals() - agentWithData.taskManager().totalReservedMinerals()));
+            repeatingStages.stream().forEach(action -> {
+                Optional<UnitType> buildUnitType = action.ability().flatMap(ability -> agentWithData.gameData().getUnitBuiltByAbility(ability));
+                int mineralCost = buildUnitType.flatMap(unitType -> agentWithData.gameData().getUnitMineralCost(unitType)).orElse(0);
+                if (remainingMoney.get() >= mineralCost) {
+                    output.add(convertStageToOutput(action));
+                    remainingMoney.set(remainingMoney.get() - mineralCost);
+                }
+            });
             return output;
         }
     }
@@ -130,7 +139,7 @@ public class SimpleBuildOrder implements BuildOrder {
             if (currentStageNumber < stages.size()) {
                 SimpleBuildOrderStage nextStage = stages.get(currentStageNumber);
                 Optional<UnitType> expectedUnitType = nextStage.ability().flatMap(ability ->
-                        data.gameData().getUnitBuiltByAbilility(ability));
+                        data.gameData().getUnitBuiltByAbility(ability));
                 if (expectedUnitType.isPresent()) {
                     expectedCountOfUnitType.compute(expectedUnitType.get(), (k, v) -> v == null ? 1 : v + 1);
                 }

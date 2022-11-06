@@ -88,4 +88,8 @@ public interface PlacementRules {
     static PlacementRules mainRampBarracksWithAddon() {
         return ImmutablePlacementRules.builder().regionType(Region.MAIN_RAMP_BARRACKS_WITH_ADDON).maxVariation(6).build();
     }
+
+    static PlacementRules exact() {
+        return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_ANY).maxVariation(0).build();
+    }
 }

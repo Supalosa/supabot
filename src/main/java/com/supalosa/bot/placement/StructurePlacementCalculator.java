@@ -11,6 +11,7 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
+import com.google.common.annotations.VisibleForTesting;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Expansion;
@@ -65,21 +66,6 @@ public class StructurePlacementCalculator {
 
     private List<DebugStructureFootprint> debugStructureFootprints = new ArrayList<>();
     private long debugStructureFootprintsResetAt = 0L;
-
-    class DebugStructureFootprint {
-        Point2d position;
-        int width;
-        int height;
-        int index;
-        boolean success;
-
-        public DebugStructureFootprint(Point2d origin, int width, int height, boolean success) {
-            this.position = origin;
-            this.width = width;
-            this.height = height;
-            this.success = success;
-        }
-    }
 
     public StructurePlacementCalculator(AnalysisResults mapAnalysisResult, GameData gameData, Point2d start) {
         this.mapAnalysisResult = mapAnalysisResult;
@@ -194,6 +180,7 @@ public class StructurePlacementCalculator {
         secondSupplyDepotTag = supplyDepot.map(unitInPool -> unitInPool.getTag());
         return supplyDepot;
     }
+
     Optional<UnitInPool> getSupplyDepotAtLocation(ObservationInterface observation, Point2d point) {
         List<UnitInPool> supplyDepotInLocation = observation.getUnits(Alliance.SELF,
                 unitInPool -> isSupplyDepot(unitInPool) &&
@@ -302,15 +289,17 @@ public class StructurePlacementCalculator {
         Point2d northTile = getNorthmostTile(ramp.getTopOfRampTiles());
         Point2d southTile = getSouthmostTile(ramp.getTopOfRampTiles());
         // West-facing ramps need to be shifted to fit the addon. Unfortunately it leaves a gap in the wall.
+        // Since the barracks is placed as a 5x3 structure we need to shift it right by one position for the placement
+        // algorithm.
         switch (ramp.getRampDirection()) {
             case SOUTH_EAST:
-                return Optional.of(northTile.add(0, -3));
+                return Optional.of(northTile.add(1, -3));
             case SOUTH_WEST:
-                return Optional.of(northTile.add(-2, -3));
+                return Optional.of(northTile.add(-1, -3));
             case NORTH_EAST:
-                return Optional.of(southTile.add(0, 3));
+                return Optional.of(southTile.add(1, 3));
             case NORTH_WEST:
-                return Optional.of(southTile.add(-2, 3));
+                return Optional.of(southTile.add(-1, 3));
         }
         return Optional.empty();
     }
@@ -645,11 +634,15 @@ public class StructurePlacementCalculator {
             } else {
                 // Initially we will search closer to the querying worker. The longer we search, the more willing we
                 // are to place something far away.
-                int testedRadius = (int) Math.max(1, actualSearchRadius * Math.min(1f, (float) i / (float) MAX_FREE_PLACEMENT_ITERATIONS));
-                candidate = origin.add(
-                        Point2d.of(
-                                getRandomInteger(-testedRadius, testedRadius),
-                                getRandomInteger(-testedRadius, testedRadius)));
+                int testedRadius = (int) Math.max(0, actualSearchRadius * Math.min(1f, (float) i / (float) MAX_FREE_PLACEMENT_ITERATIONS));
+                if (testedRadius > 0) {
+                    candidate = origin.add(
+                            Point2d.of(
+                                    getRandomInteger(-testedRadius, testedRadius),
+                                    getRandomInteger(-testedRadius, testedRadius)));
+                } else {
+                    candidate = origin;
+                }
             }
             candidate = Point2d.of(Math.max(0f, candidate.getX()), Math.max(0f, candidate.getY()));
             if (canPlaceAt(candidate, structureWidth, structureWidth)) {
@@ -708,7 +701,12 @@ public class StructurePlacementCalculator {
                 (int)newFootprint.getX(),
                 (int)newFootprint.getY(),
                 placementRules).map(outputPosition ->
-                outputPosition/*.add(outputOffset)*/);
+                outputPosition.sub(outputOffset));
+    }
+
+    @VisibleForTesting
+    void clearMutableGrid() {
+        mutableFreePlacementGrid.clear();
     }
 
     private boolean canPlaceAt(Point2d origin, int width, int height) {
@@ -730,7 +728,8 @@ public class StructurePlacementCalculator {
         }
     }
 
-    private boolean _canPlaceAt(Point2d origin, int width, int height, boolean checkStatic, Optional<Tag> forTag) {
+    @VisibleForTesting
+    boolean _canPlaceAt(Point2d origin, int width, int height, boolean checkStatic, Optional<Tag> forTag) {
         int x = (int)origin.getX();
         int y = (int)origin.getY();
         int xStart = (int)Math.ceil(x - width / 2);
@@ -814,7 +813,7 @@ public class StructurePlacementCalculator {
                     }
                     Optional<AbilityData> maybeAbilityData = data.gameData().getAbility(order.getAbility());
                     maybeAbilityData.filter(abilityData -> abilityData.isBuilding()).ifPresent(buildingAbilityData -> {
-                        Optional<UnitType> maybeUnitType = data.gameData().getUnitBuiltByAbilility(buildingAbilityData.getAbility());
+                        Optional<UnitType> maybeUnitType = data.gameData().getUnitBuiltByAbility(buildingAbilityData.getAbility());
 
                         maybeUnitType.ifPresent(unitType ->
                                 updateMutableGridForStructure(data,
@@ -872,5 +871,20 @@ public class StructurePlacementCalculator {
      */
     private boolean canPlaceAtFor(Unit unit, Point2d position, int w, int h) {
         return _canPlaceAt(position, w, h, true, Optional.of(unit.getTag()));
+    }
+
+    class DebugStructureFootprint {
+        Point2d position;
+        int width;
+        int height;
+        int index;
+        boolean success;
+
+        public DebugStructureFootprint(Point2d origin, int width, int height, boolean success) {
+            this.position = origin;
+            this.width = width;
+            this.height = height;
+            this.success = success;
+        }
     }
 }

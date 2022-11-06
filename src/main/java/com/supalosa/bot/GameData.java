@@ -133,7 +133,7 @@ public class GameData {
         }
     }
 
-    public Optional<UnitType> getUnitBuiltByAbilility(Ability ability) {
+    public Optional<UnitType> getUnitBuiltByAbility(Ability ability) {
         getOrInitUnitTypeData();
         return Optional.ofNullable(abilityToUnitType.get(ability));
     }

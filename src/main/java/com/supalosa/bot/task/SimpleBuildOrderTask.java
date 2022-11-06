@@ -240,7 +240,7 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     }
 
     private BuildStructureTask createBuildTask(GameData data, Ability abilityTypeForStructure, Unit targetUnitToBuildOn, Optional<PlacementRules> placementRules) {
-        Optional<UnitType> unitTypeForStructure = data.getUnitBuiltByAbilility(abilityTypeForStructure);
+        Optional<UnitType> unitTypeForStructure = data.getUnitBuiltByAbility(abilityTypeForStructure);
         return new BuildStructureTask(
                 abilityTypeForStructure,
                 unitTypeForStructure.orElseThrow(() -> new IllegalArgumentException("No unit type known for " + abilityTypeForStructure)),
@@ -253,7 +253,7 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
     }
 
     private Task createBuildTask(GameData data, Ability abilityTypeForStructure, Optional<PlacementRules> placementRules) {
-        Optional<UnitType> unitTypeForStructure = data.getUnitBuiltByAbilility(abilityTypeForStructure);
+        Optional<UnitType> unitTypeForStructure = data.getUnitBuiltByAbility(abilityTypeForStructure);
         return new BuildStructureTask(
                 abilityTypeForStructure,
                 unitTypeForStructure.orElseThrow(() -> new IllegalArgumentException("No unit type known for " + abilityTypeForStructure)),
