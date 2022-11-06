@@ -2,25 +2,18 @@ package com.supalosa.bot.task.mission;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.protocol.data.UnitType;
-import com.github.ocraft.s2client.protocol.debug.Color;
-import com.github.ocraft.s2client.protocol.spatial.Point;
-import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.analysis.Region;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.awareness.Army;
-import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.army.ArmyTask;
-import com.supalosa.bot.task.army.FightPerformance;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Dummy task so the attacking army doesn't get stolen.

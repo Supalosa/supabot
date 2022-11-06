@@ -187,10 +187,9 @@ public class BuildStructureTask extends BaseTask {
 
         // Check if it's safe to build.
         if (location.isPresent()) {
-            // Should build structure only if 125% of our power is greater than theirs.
+            // Should build structure only if the enemy doesn't control the region.
             Optional<RegionData> locationRegionData = agentWithData.mapAwareness().getRegionDataForPoint(location.get());
-            isSafeToBuildStructure = locationRegionData.map(RegionData::playerThreat).orElse(0.0) * 1.25f >=
-                    locationRegionData.map(RegionData::enemyThreat).orElse(0.0);
+            isSafeToBuildStructure = !locationRegionData.map(RegionData::isEnemyControlled).orElse(false);
             // Add an override for certain production buildings etc.
             if (Constants.CRITICAL_STRUCTURE_TYPES.contains(targetUnitType)) {
                 isSafeToBuildStructure = true;
@@ -266,7 +265,7 @@ public class BuildStructureTask extends BaseTask {
     }
 
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
-        // This should probably be a preidcate associated to the PlacementRules it itself.
+        // This should probably be a predicate associated to the PlacementRules it itself.
         boolean nearBaseOnly = placementRules
                 .map(rule -> rule.regionType().isPlayerBase())
                 .orElse(false);

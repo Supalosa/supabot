@@ -49,6 +49,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private Optional<RegionData> previousRegion = Optional.empty();
     private Optional<RegionData> retreatRegion = Optional.empty();
 
+    // Do not allow super-frequent region changes.
+    private long enteredCurrentRegionAt = 0L;
+
     private List<Region> regionWaypoints = new ArrayList<>();
     private Optional<Region> waypointsCalculatedFrom = Optional.empty();
     private Optional<Region> waypointsCalculatedTo = Optional.empty();
@@ -240,6 +243,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     }
 
     private void updateCurrentRegions(AgentWithData agentWithData) {
+        if (agentWithData.observation().getGameLoop() < enteredCurrentRegionAt + 5L) {
+            return;
+        }
         targetRegion = targetPosition.flatMap(position ->
                 agentWithData.mapAwareness().getRegionDataForPoint(position));
         retreatRegion = retreatPosition.flatMap(position ->
@@ -248,21 +254,28 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         // the clumps.
         Optional<RegionData> previousCurrentRegion = currentRegion;
         Optional<RegionData> currentRegionData = centreOfMass.flatMap(centre -> agentWithData.mapAwareness().getRegionDataForPoint(centre));
+
+        if (!currentRegionData.equals(previousCurrentRegion)) {
+            System.out.println("Region changed for " + this.armyName);
+            enteredCurrentRegionAt = agentWithData.observation().getGameLoop();
+        }
         currentRegion = currentRegionData;
         if (currentRegion.isEmpty() && centreOfMass.isPresent()) {
             // Never let the current region be empty unless we have no units.
             currentRegion = previousCurrentRegion;
         }
 
+        long timeSpentInRegion = agentWithData.observation().getGameLoop() - enteredCurrentRegionAt;
         this.shouldMoveFromRegion = currentRegion
                 .map(region -> getBehaviourHandlerForState().shouldMoveFromRegion(
                     agentWithData,
                     region,
-                    nextRegion, dispersion, childArmies)).orElse(false);
+                    nextRegion, dispersion, childArmies, timeSpentInRegion, this)).orElse(false);
 
         if (currentRegion.isPresent() && regionWaypoints.size() > 0 && (
                 currentRegion.get().equals(regionWaypoints.get(0)) ||
-                        (centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 7.5f))
+                        // Iff the next waypoint isn't the target, then optionally skip over it if the distance < 7.5
+                        (regionWaypoints.size() > 1 && centreOfMass.isPresent() && regionWaypoints.get(0).centrePoint().distance(centreOfMass.get()) < 7.5f))
                 && shouldMoveFromRegion) {
             // Arrived at the head waypoint.
             previousRegion = previousCurrentRegion;
@@ -348,11 +361,12 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         FightPerformance predictedFightPerformance = predictFightAgainst(virtualArmy);
 
         AggressionState newAggressionState = aggressionState;
+        Optional<RegionData> maybeNextRegion = shouldMoveFromRegion ? nextRegion : Optional.empty();
         ImmutableBaseArgs baseArgs = ImmutableBaseArgs.of(
                 this,
                 agentWithData,
                 allUnits,
-                armyList,
+                virtualArmy,
                 centreOfMass,
                 currentFightPerformance,
                 predictedFightPerformance,
@@ -360,7 +374,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 retreatPosition,
                 currentRegion,
                 previousRegion,
-                shouldMoveFromRegion ? nextRegion : Optional.empty(),
+                maybeNextRegion,
                 targetRegion,
                 retreatRegion);
         if (aggressionState == AggressionState.ATTACKING) {

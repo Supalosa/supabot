@@ -1,4 +1,4 @@
-package com.supalosa.bot.analysis.production;
+package com.supalosa.bot.production;
 
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;

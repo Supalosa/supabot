@@ -163,21 +163,19 @@ public class TerranWorkerRushDefenceTaskBehaviour extends BaseDefaultArmyTaskBeh
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies, long timeSpentInRegion, DefaultArmyTask currentArmy) {
             return true;
         }
     }
 
     private static Point2dMap<Unit> constructEnemyUnitMap(DefaultArmyTaskBehaviourStateHandler.BaseArgs args) {
         Point2dMap<Unit> enemyUnitMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
-        args.enemyArmies().forEach(enemyArmy -> {
-           enemyArmy.unitTags().forEach(tag -> {
-               UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
-               if (maybeEnemyUnit != null) {
-                   enemyUnitMap.insert(maybeEnemyUnit.unit());
-               }
-           });
-        });
+        args.enemyVirtualArmy().unitTags().forEach(tag -> {
+           UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
+           if (maybeEnemyUnit != null) {
+               enemyUnitMap.insert(maybeEnemyUnit.unit());
+           }
+       });
         return enemyUnitMap;
     }
 }

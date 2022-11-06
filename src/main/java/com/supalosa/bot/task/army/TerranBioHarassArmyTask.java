@@ -1,30 +1,15 @@
 package com.supalosa.bot.task.army;
 
-import com.github.ocraft.s2client.bot.S2Agent;
-import com.github.ocraft.s2client.bot.gateway.ActionInterface;
-import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
-import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
-import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
-import com.supalosa.bot.analysis.Region;
-import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.awareness.Army;
-import com.supalosa.bot.awareness.MapAwareness;
-import com.supalosa.bot.awareness.RegionData;
-import com.supalosa.bot.pathfinding.RegionGraphPath;
+import com.supalosa.bot.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
 
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * A subtype of TerranBioArmyTask that is smaller and disbands if the overall army is too small.

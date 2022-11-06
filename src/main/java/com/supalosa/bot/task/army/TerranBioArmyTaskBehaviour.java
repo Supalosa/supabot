@@ -16,6 +16,7 @@ import org.immutables.value.Value;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -27,16 +28,19 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         TerranBioArmyTaskBehaviour.RegroupingContext,
         TerranBioArmyTaskBehaviour.IdleContext> {
 
-    @Value.Immutable
-    interface AttackContext {
+    interface StimContext {
         long maxUnitsToStim();
         long currentUnitsStimmed();
         AtomicLong remainingUnitsToStim();
+    }
+
+    @Value.Immutable
+    interface AttackContext extends StimContext {
         Point2dMap<Unit> enemyUnitMap();
     }
 
     @Value.Immutable
-    interface DisengagingContext {
+    interface DisengagingContext extends StimContext {
         Point2dMap<Unit> enemyUnitMap();
         Optional<Point2d> nextRetreatPoint();
     }
@@ -62,11 +66,36 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         super(new AttackHandler(), new DisengagingHandler(), new RegroupingHandler(), new IdleHandler());
     }
 
+    private static void handleMicro(Unit unit,
+                                    Point2dMap<Unit> enemyUnitMap,
+                                    DefaultArmyTaskBehaviourStateHandler.BaseArgs args,
+                                    StimContext stimContext,
+                                    Optional<Point2d> goalPosition) {
+        if (unit.getType() == Units.TERRAN_MARINE || unit.getType() == Units.TERRAN_MARAUDER) {
+            TerranMicro.handleMarineMarauderMicro(unit, goalPosition, args, enemyUnitMap, stimContext.remainingUnitsToStim());
+        } else if (unit.getType() == Units.TERRAN_GHOST) {
+            TerranMicro.handleGhostMicro(unit, goalPosition, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_WIDOWMINE) {
+            TerranMicro.handleWidowmineMicro(unit, goalPosition, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_WIDOWMINE_BURROWED) {
+            TerranMicro.handleWidowmineBurrowedMicro(unit, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_MEDIVAC || unit.getType() == Units.TERRAN_RAVEN) {
+            TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
+            TerranMicro.handleVikingFighterMicro(unit, goalPosition, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_VIKING_ASSAULT) {
+            TerranMicro.handleVikingAssaultMicro(unit, goalPosition, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_LIBERATOR) {
+            TerranMicro.handleLiberatorMicro(unit, goalPosition, args, enemyUnitMap);
+        } else if (unit.getType() == Units.TERRAN_LIBERATOR_AG) {
+            TerranMicro.handleLiberatorAgMicro(unit, goalPosition, args, enemyUnitMap);
+        } else {
+            TerranMicro.handleDefaultMicro(unit, goalPosition, args, enemyUnitMap);
+        }
+    }
+
     private static class AttackHandler implements DefaultArmyTaskBehaviourStateHandler<AttackContext> {
 
-        // For tracking.
-        private Optional<Region> enteredRegion = Optional.empty();
-        private long enteredRegionAt = 0L;
         // Time to spend in a region per child army on the way.
         private static final long DELAY_TIME_IN_REGION = 22L * 2;
 
@@ -80,12 +109,12 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
             long currentsUnitsStimmed = args.unitsInArmy().stream()
                     .filter(unit -> unit.getBuffs().contains(Buffs.STIMPACK) || unit.getBuffs().contains(Buffs.STIMPACK_MARAUDER))
                     .count();
-            long maxUnitsToStim = args.enemyArmies().stream().reduce(0L, (val, army) -> val + (long)army.threat(), (v1, v2) -> v1 + v2);
+            long maxUnitsToStim = (long)args.enemyVirtualArmy().threat();
             Point2dMap<Unit> enemyUnitMap = constructEnemyUnitMap(args);
 
-            // Request scan if no enemy army units nearby.
+            // Request if creep is nearby and there's no base.
             args.centreOfMass().ifPresent(centreOfMass -> {
-                long scanRequiredBefore = args.agentWithData().observation().getGameLoop() + 22L * 5;
+                long scanRequiredBefore = args.agentWithData().observation().getGameLoop() + 22L * 2;
                 if (enemyUnitMap.getNearestInRadius(centreOfMass, 20f).isEmpty()) {
                     Optional<RegionData> maybeCurrentRegion = args.currentRegion();
                     maybeCurrentRegion.ifPresent(currentRegion -> {
@@ -109,21 +138,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         public AttackContext onArmyUnitStep(AttackContext context, Unit unit, BaseArgs args) {
             Point2dMap<Unit> enemyUnitMap = context.enemyUnitMap();
             Optional<Point2d> goalPosition = args.attackPosition();
-            if (unit.getType() == Units.TERRAN_MARINE || unit.getType() == Units.TERRAN_MARAUDER) {
-                TerranMicro.handleMarineMarauderMicro(unit, goalPosition, args, enemyUnitMap, context.remainingUnitsToStim());
-            } else if (unit.getType() == Units.TERRAN_GHOST) {
-                TerranMicro.handleGhostMicro(unit, goalPosition, args, enemyUnitMap);
-            } else if (unit.getType() == Units.TERRAN_WIDOWMINE) {
-                TerranMicro.handleWidowmineMicro(unit, goalPosition, args, enemyUnitMap);
-            } else if (unit.getType() == Units.TERRAN_WIDOWMINE_BURROWED) {
-                TerranMicro.handleWidowmineBurrowedMicro(unit, args, enemyUnitMap);
-            } else if (unit.getType() == Units.TERRAN_MEDIVAC || unit.getType() == Units.TERRAN_RAVEN) {
-                TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
-            } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
-                TerranMicro.handleVikingMicro(unit, goalPosition, args, enemyUnitMap);
-            } else {
-                TerranMicro.handleDefaultMicro(unit, goalPosition, args, enemyUnitMap);
-            }
+            handleMicro(unit, enemyUnitMap, args, context, goalPosition);
             return context;
         }
 
@@ -143,33 +158,35 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
-            long gameLoop = agentWithData.observation().getGameLoop();
-            // Delay longer in a region the more child regions we have.
-            if (gameLoop < enteredRegionAt + (childArmies.size()) * DELAY_TIME_IN_REGION) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData,
+                                            RegionData currentRegionData,
+                                            Optional<RegionData> nextRegion,
+                                            Optional<Double> dispersion,
+                                            List<DefaultArmyTask> childArmies,
+                                            long timeSpentInRegion,
+                                            DefaultArmyTask currentArmy) {
+            // Wait for child armies that are larger than us.
+            long strongerChildArmies = childArmies
+                    .stream()
+                    .filter(childArmy -> childArmy.getPower() > currentArmy.getPower())
+                    .count();
+            if (timeSpentInRegion < strongerChildArmies * DELAY_TIME_IN_REGION) {
                 return false;
             }
-            Optional<Region> currentRegion = Optional.of(currentRegionData.region());
-            if (!enteredRegion.map(Region::regionId).equals(currentRegion.map(Region::regionId))) {
-                enteredRegion = currentRegion;
-                enteredRegionAt = agentWithData.observation().getGameLoop();
-            }
             // max 30s attacking a base (prevent it from getting stuck)
-            return dispersion.orElse(0.0) <= 2.0 &&
-                    (currentRegionData.hasEnemyBase() == false || gameLoop > enteredRegionAt + 30 * 22L);
+            return dispersion.orElse(0.0) <= 3.0 &&
+                    (currentRegionData.hasEnemyBase() == false || timeSpentInRegion > 30 * 22L);
         }
     }
 
     private static Point2dMap<Unit> constructEnemyUnitMap(DefaultArmyTaskBehaviourStateHandler.BaseArgs args) {
         Point2dMap<Unit> enemyUnitMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
-        args.enemyArmies().forEach(enemyArmy -> {
-           enemyArmy.unitTags().forEach(tag -> {
-               UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
-               if (maybeEnemyUnit != null) {
-                   enemyUnitMap.insert(maybeEnemyUnit.unit());
-               }
-           });
-        });
+        args.enemyVirtualArmy().unitTags().forEach(tag -> {
+           UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
+           if (maybeEnemyUnit != null) {
+               enemyUnitMap.insert(maybeEnemyUnit.unit());
+           }
+       });
         return enemyUnitMap;
     }
 
@@ -200,6 +217,10 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
             return ImmutableDisengagingContext.builder()
                     .enemyUnitMap(constructEnemyUnitMap(args))
                     .nextRetreatPoint(goalPosition)
+                    // TODO: consider trying to stim away.
+                    .currentUnitsStimmed(0)
+                    .maxUnitsToStim(0)
+                    .remainingUnitsToStim(new AtomicLong(0L))
                     .build();
         }
 
@@ -211,22 +232,9 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
             if (args.centreOfMass().isPresent() &&
                     args.centreOfMass().get().distance(unit.getPosition().toPoint2d()) < 5f &&
                     args.dispersion().orElse(0.0) <= 2.0) {
-                if (unit.getType() == Units.TERRAN_MARINE || unit.getType() == Units.TERRAN_MARAUDER) {
-                    TerranMicro.handleMarineMarauderMicro(unit, goalPosition, args, enemyUnitMap, new AtomicLong(0));
-                } else if (unit.getType() == Units.TERRAN_GHOST) {
-                    TerranMicro.handleGhostMicro(unit, goalPosition, args, enemyUnitMap);
-                } else if (unit.getType() == Units.TERRAN_WIDOWMINE) {
-                    TerranMicro.handleWidowmineMicro(unit, goalPosition, args, enemyUnitMap);
-                } else if (unit.getType() == Units.TERRAN_WIDOWMINE_BURROWED) {
-                    TerranMicro.handleWidowmineBurrowedMicro(unit, args, enemyUnitMap);
-                } else if (unit.getType() == Units.TERRAN_MEDIVAC || unit.getType() == Units.TERRAN_RAVEN) {
-                    TerranMicro.handleMedivacMicro(unit, goalPosition, args, enemyUnitMap);
-                } else if (unit.getType() == Units.TERRAN_VIKING_FIGHTER) {
-                    TerranMicro.handleVikingMicro(unit, goalPosition, args, enemyUnitMap);
-                } else {
-                    TerranMicro.handleDefaultMicro(unit, goalPosition, args, enemyUnitMap);
-                }
+                handleMicro(unit, enemyUnitMap, args, context, goalPosition);
             } else {
+                // Everyone runs away.
                 goalPosition.ifPresent(position ->
                         args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, position, false));
             }
@@ -239,13 +247,11 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                 return AggressionState.ATTACKING;
             } else {
                 return AggressionState.RETREATING;
-            }/* else {
-                return AggressionState.IDLE;
-            }*/
+            }
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies, long timeSpentInRegion, DefaultArmyTask currentArmy) {
             return true;
         }
     }
@@ -272,7 +278,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies, long timeSpentInRegion, DefaultArmyTask currentArmy) {
             return true;
         }
     }
@@ -310,7 +316,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
 
         @Override
-        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies) {
+        public boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData, Optional<RegionData> nextRegion, Optional<Double> dispersion, List<DefaultArmyTask> childArmies, long timeSpentInRegion, DefaultArmyTask currentArmy) {
             return true;
         }
     }

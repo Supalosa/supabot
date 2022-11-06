@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 public class MapAwarenessImpl implements MapAwareness {
 
     private Optional<Point2d> startPosition;
+    private Optional<RegionData> mainBaseRegion;
     private final List<Point2d> knownEnemyBases;
     private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
     // A map of locations that should be scouted, and when they should be scouted next.
@@ -72,6 +73,7 @@ public class MapAwarenessImpl implements MapAwareness {
 
     public MapAwarenessImpl(ThreatCalculator threatCalculator) {
         this.startPosition = Optional.empty();
+        this.mainBaseRegion = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
         this.regionDataCalculator = new RegionDataCalculator(threatCalculator);
         this.threatCalculator = threatCalculator;
@@ -99,18 +101,23 @@ public class MapAwarenessImpl implements MapAwareness {
     }
 
     @Override
-    public Optional<RegionGraphPath> generatePath(Region startRegion, Region endRegion, PathRules rules) {
+    public Optional<RegionGraph> getPathingGraph(PathRules rules) {
         switch (rules) {
             case AVOID_ENEMY_ARMY:
-                return avoidArmyGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+                return avoidArmyGraph;
             case AVOID_KILL_ZONE:
-                return avoidKillzoneGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+                return avoidKillzoneGraph;
             case AIR_AVOID_ENEMY_ARMY:
-                return airAvoidArmyGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+                return airAvoidArmyGraph;
             case NORMAL:
             default:
-                return normalGraph.flatMap(graph -> graph.findPath(startRegion, endRegion));
+                return normalGraph;
         }
+    }
+
+    @Override
+    public Optional<RegionGraphPath> generatePath(Region startRegion, Region endRegion, PathRules rules) {
+        return getPathingGraph(rules).flatMap(graph -> graph.findPath(startRegion, endRegion));
     }
 
     @Override
@@ -287,6 +294,10 @@ public class MapAwarenessImpl implements MapAwareness {
         long gameLoop = observationInterface.getGameLoop();
         if (this.expansionLocations.isPresent() && gameLoop > expansionsValidatedAt + 44L) {
             expansionsValidatedAt = gameLoop;
+
+            // Calculate the region which represents our main base.
+            mainBaseRegion = startPosition.flatMap(this::getRegionDataForPoint);
+
             // ExpansionLocations is ordered by distance to start point.
             this.validExpansionLocations = new LinkedHashSet<>();
             List<UnitInPool> minerals = observationInterface.getUnits(UnitFilter.builder()
@@ -296,10 +307,9 @@ public class MapAwarenessImpl implements MapAwareness {
                 if (!observationInterface.isPlacable(expansion.position().toPoint2d())) {
                     continue;
                 }
-                // Do not expand where the enemy is.
+                // Only expand if the region is not controlled by the enemy.
                 Optional<RegionData> region = getRegionDataForPoint(expansion.position().toPoint2d());
-                // TODO: maybe we need a diffuse player threat to counteract that.
-                if (region.isPresent() && region.get().diffuseEnemyThreat() > region.get().playerThreat() + 10f) {
+                if (region.isPresent() && region.get().isEnemyControlled()) {
                     continue;
                 }
                 int remainingMinerals = expansion.resourcePositions().stream().mapToInt(point2d -> {
@@ -486,5 +496,10 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public Optional<Point2d> getDefenceLocation() {
         return defenceLocation;
+    }
+
+    @Override
+    public Optional<RegionData> getMainBaseRegion() {
+        return mainBaseRegion;
     }
 }

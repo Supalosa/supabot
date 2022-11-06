@@ -8,28 +8,22 @@ import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
-import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
-import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
-import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.message.*;
 import com.supalosa.bot.task.terran.ImmutableScanRequestTaskMessage;
-import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * A bio army with marines, marauders, medivacs and mines.
@@ -121,8 +115,11 @@ public class TerranBioArmyTask extends DefaultArmyTask {
         int targetVikings =
                 enemyArmy.composition().getOrDefault(Units.ZERG_BROODLORD, 0) * 2 +
                 enemyArmy.composition().getOrDefault(Units.TERRAN_BATTLECRUISER, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.TERRAN_LIBERATOR, 0) * 1 +
+                enemyArmy.composition().getOrDefault(Units.TERRAN_VIKING_FIGHTER, 0) * 1 +
                 enemyArmy.composition().getOrDefault(Units.PROTOSS_CARRIER, 0) * 2 +
-                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 2;
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_TEMPEST, 0) * 2;
         if (targetVikings > 0) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_VIKING_FIGHTER)
@@ -131,6 +128,24 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                     .producingUnitType(Units.TERRAN_STARPORT)
                     .needsTechLab(false)
                     .amount(targetVikings)
+                    .build()
+            );
+        }
+        int targetLiberators = (int)Math.ceil(
+                enemyArmy.composition().getOrDefault(Units.ZERG_ULTRALISK, 0) * 0.5 +
+                        enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK, 0) * 1.0 +
+                        enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK_SIEGED, 0) * 1.0 +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_IMMORTAL, 0) * 1.0 +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 2.0 +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_ARCHON, 0) * 1.0);
+        if (targetLiberators > 0) {
+            result.add(ImmutableUnitTypeRequest.builder()
+                    .unitType(Units.TERRAN_LIBERATOR)
+                    .alternateForm(Units.TERRAN_LIBERATOR_AG)
+                    .productionAbility(Abilities.TRAIN_LIBERATOR)
+                    .producingUnitType(Units.TERRAN_STARPORT)
+                    .needsTechLab(false)
+                    .amount(targetLiberators)
                     .build()
             );
         }

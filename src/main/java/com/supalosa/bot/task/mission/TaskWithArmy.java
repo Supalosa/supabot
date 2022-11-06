@@ -1,8 +1,6 @@
 package com.supalosa.bot.task.mission;
 
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
-import com.supalosa.bot.awareness.Army;
-import com.supalosa.bot.task.Task;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.task.TaskWithUnits;
 import com.supalosa.bot.task.army.ArmyTask;
 

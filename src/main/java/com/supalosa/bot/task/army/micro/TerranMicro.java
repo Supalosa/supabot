@@ -103,12 +103,20 @@ public class TerranMicro {
         }
     }
 
-    public static void handleVikingMicro(Unit unit, Optional<Point2d> goalPosition,
-                                         DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+    public static void handleVikingFighterMicro(Unit unit, Optional<Point2d> goalPosition,
+                                                DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
         Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // Move out of range of anti-air units.
+        // We are willing to get closer if we are winning the fight.
+        float avoidanceRange = 9f;
+        if (args.predictedFightPerformance() == FightPerformance.WINNING) {
+            avoidanceRange = 5f;
+        } else if (args.predictedFightPerformance() == FightPerformance.STABLE) {
+            avoidanceRange = 7.5f;
+        }
         Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(), 9f, enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
+                .getNearestInRadius(unit.getPosition().toPoint2d(), avoidanceRange,
+                        enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
                 .map(enemy -> enemy.getPosition().toPoint2d());
         Optional<Unit> bestTarget = enemyUnitMap
                 .getHighestScoreInRadius(unit.getPosition().toPoint2d(),12f,
@@ -127,6 +135,10 @@ public class TerranMicro {
                             args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackMovePosition, false);
                         }
                     }));
+            if (args.enemyVirtualArmy().getCount(Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES) == 0) {
+                // No AA targets, morph to land unit.
+                args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_VIKING_ASSAULT_MODE, false);
+            }
         } else {
             // On weapon cooldown.
             // If the nearest enemy is within stutterRadius, walk away, otherwise walk towards it.
@@ -147,6 +159,62 @@ public class TerranMicro {
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, bestTarget.get().getPosition().toPoint2d(), false);
                 }
             });
+        }
+    }
+
+    public static void handleVikingAssaultMicro(Unit unit, Optional<Point2d> goalPosition,
+                                                DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        if (args.enemyVirtualArmy().getCount(Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES) > 0) {
+            // AA target present, morph to fighter mode.
+            args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_VIKING_FIGHTER_MODE, false);
+        } else {
+            handleDefaultMicro(unit, goalPosition, args, enemyUnitMap);
+        }
+    }
+
+    public static void handleLiberatorMicro(Unit unit, Optional<Point2d> goalPosition,
+                                                DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
+        // Move out of range of anti-air units.
+        // We are willing to get closer if we are winning the fight.
+        float avoidanceRange = 9f;
+        if (args.predictedFightPerformance() == FightPerformance.WINNING) {
+            avoidanceRange = 5f;
+        } else if (args.predictedFightPerformance() == FightPerformance.STABLE) {
+            avoidanceRange = 7.5f;
+        }
+        Optional<Point2d> nearestEnemyUnit = enemyUnitMap
+                .getNearestInRadius(unit.getPosition().toPoint2d(), avoidanceRange,
+                        enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
+                .map(enemy -> enemy.getPosition().toPoint2d());
+        Optional<Unit> closestGroundTarget = enemyUnitMap
+                .getNearestInRadius(unit.getPosition().toPoint2d(),12f, enemy -> enemy.getFlying().orElse(false) == false);
+        if (nearestEnemyUnit.isEmpty() && closestGroundTarget.isPresent()) {
+            // Morph liberator to AG mode.
+            Optional<Point2d> position = getNextPosition(goalPosition, args);
+            closestGroundTarget.ifPresentOrElse(
+                    target -> args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_LIBERATOR_AG_MODE,
+                            target.getPosition().toPoint2d(), false),
+                    () -> position.ifPresent(attackMovePosition -> {
+                        if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
+                            attackMovePosition = args.nextRegion().get().region().centrePoint();
+                        }
+                        if (!isAlreadyAttackMovingTo(attackMovePosition, currentOrder)) {
+                            args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, attackMovePosition, false);
+                        }
+                    }));
+        }
+    }
+
+    public static void handleLiberatorAgMicro(Unit unit, Optional<Point2d> goalPosition,
+                                            DefaultArmyTaskBehaviourStateHandler.BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
+        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
+        // TODO: figure out where the liberator is shooting and check for targets in that circle.
+        Optional<Unit> closestGroundTarget = enemyUnitMap
+                .getNearestInRadius(unit.getPosition().toPoint2d(),15f, enemy -> enemy.getFlying().orElse(false) == false);
+        if (closestGroundTarget.isEmpty()) {
+            // Morph liberator back to AA mode.
+            args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_LIBERATOR_AA_MODE, false);
         }
     }
 

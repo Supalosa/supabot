@@ -1,10 +1,14 @@
 package com.supalosa.bot.awareness;
 
+import com.github.ocraft.s2client.protocol.data.Upgrade;
+import com.github.ocraft.s2client.protocol.data.Upgrades;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.analysis.Region;
+import org.apache.commons.lang3.NotImplementedException;
 import org.immutables.value.Value;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Represents the dynamic data of a region (calculated periodically).
@@ -115,15 +119,68 @@ public abstract class RegionData {
 
     /**
      * An unbounded value of control for the region that accumulates based on enemy and your own forces.
+     * Used as an input for {@code controlFactor}. This value can grow to a very large (or negative) number, so may not
+     * be useful.
      */
     public abstract double cumulativeControl();
 
     /**
-     * A normalised value from 0.0 - 1.0 which indicates how well controlled this region is.
-     * The equilibrium is 0.5.
-     * @return
+     * A value that represents how well controlled the region is. Although technically infinite, the value will
+     * be bounded to around -10 to 10 in practise.
      */
     public abstract double controlFactor();
+
+    /**
+     * Returns true if this region is controlled by the player (as determined by {@link RegionData#controlFactor()}).
+     */
+    public boolean isPlayerControlled() {
+        return controlFactor() > 1.0;
+    }
+    /**
+     * Returns true if this region is controlled by the enemy (as determined by {@link RegionData#controlFactor()}).
+     */
+    public boolean isEnemyControlled() {
+        return controlFactor() < -1.0;
+    }
+
+    /**
+     * Returns the RegionData of all regions that neighbour this one.
+     *
+     * @param mapAwareness Map awareness to query.
+     */
+    public List<RegionData> getNeighbouringRegions(MapAwareness mapAwareness) {
+        List<RegionData> result = region().connectedRegions()
+                .stream()
+                .map(mapAwareness::getRegionDataForId)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList());
+        return result;
+    }
+
+    @Override
+    public final String toString() {
+        StringBuilder builder = new StringBuilder("[Region " + region().regionId() + "]");
+        if (isPlayerControlled()) {
+            builder.append(" PlayerControlled");
+        } else if (isEnemyControlled()) {
+            builder.append(" EnemyControlled");
+        } else {
+            builder.append(" Neutral");
+        }
+        if (hasEnemyBase()) {
+            builder.append(" EnemyBase");
+        }
+        if (isPlayerBase()) {
+            builder.append(" PlayerBase");
+        }
+        return builder.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        return Integer.hashCode(this.region().regionId());
+    }
 
     @Override
     public boolean equals(Object object) {

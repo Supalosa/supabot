@@ -7,6 +7,7 @@ import com.supalosa.bot.AgentData;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.pathfinding.RegionGraph;
 import com.supalosa.bot.pathfinding.RegionGraphPath;
 
 import java.util.Collection;
@@ -39,6 +40,7 @@ public interface MapAwareness {
     Optional<RegionData> getRegionDataForId(int regionId);
 
     Optional<RegionGraphPath> generatePath(Region startRegion, Region endRegion, PathRules rules);
+    Optional<RegionGraph> getPathingGraph(PathRules rules);
 
     Collection<RegionData> getAllRegionData();
 
@@ -102,4 +104,6 @@ public interface MapAwareness {
      * Returns the point that we should rally our units and defend from.
      */
     Optional<Point2d> getDefenceLocation();
+
+    Optional<RegionData> getMainBaseRegion();
 }

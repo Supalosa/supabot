@@ -6,7 +6,6 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.debug.Color;
-import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
@@ -18,7 +17,7 @@ import com.google.common.cache.LoadingCache;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.*;
@@ -116,7 +115,44 @@ public class BaseTerranTask implements BehaviourTask {
                     Optional.of(PlacementRules.borderOfBase()));
         }
         if (supply > 100) {
-            tryBuildMax(agentWithData, Abilities.BUILD_ARMORY, Units.TERRAN_ARMORY, Units.TERRAN_SCV, 1, 1, Optional.of(PlacementRules.borderOfBase()));
+            boolean hasAir = countUnitType(Units.TERRAN_VIKING_FIGHTER, Units.TERRAN_LIBERATOR, Units.TERRAN_LIBERATOR_AG) > 0;
+            int numArmories = hasAir ? 2 : 1;
+            tryBuildMax(agentWithData,
+                    Abilities.BUILD_ARMORY,
+                    Units.TERRAN_ARMORY,
+                    Units.TERRAN_SCV,
+                    numArmories,
+                    numArmories,
+                    Optional.of(PlacementRules.borderOfBase()));
+
+            if (agentWithData.observation().getVespene() > 300) {
+                if (hasAir) {
+                    tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ARMORY, Map.of(
+                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL1,
+                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS_LEVEL1,
+                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL2,
+                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS_LEVEL2,
+                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL3,
+                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS_LEVEL3
+                    ));
+                    tryBuildMax(agentWithData,
+                            Abilities.BUILD_FUSION_CORE,
+                            Units.TERRAN_FUSION_CORE,
+                            Units.TERRAN_SCV,
+                            1,
+                            1,
+                            Optional.of(PlacementRules.borderOfBase()));
+                    tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_FUSION_CORE, Map.of(
+                            Upgrades.LIBERATOR_AG_RANGE_UPGRADE, Abilities.RESEARCH_LIBERATOR_BALLISTIC_RANGE
+                    ));
+                } else {
+                    tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ARMORY, Map.of(
+                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL1,
+                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL2,
+                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL3
+                    ));
+                }
+            }
         }
         if (supply > 150) {
             tryBuildMax(agentWithData,
@@ -213,7 +249,7 @@ public class BaseTerranTask implements BehaviourTask {
                     .max()
                     .orElse(50);
             //System.out.println("Waiting for " + maxMineralCost + " minerals");
-            if (agentWithData.observation().getMinerals() > maxMineralCost) {
+            if (agentWithData.observation().getMinerals() >= maxMineralCost) {
                 Collections.shuffle(requestedUnitTypes);
                 requestedUnitTypes.forEach(requestedUnitType -> {
                     //System.out.println("Making " + requestedUnitType.unitType() + " (max " + requestedUnitType.amount() + ")");
@@ -679,6 +715,7 @@ public class BaseTerranTask implements BehaviourTask {
                 for (Map.Entry<Upgrades, Abilities> upgrade: upgradesToGet.entrySet()) {
                     if (!upgrades.contains(upgrade.getKey())) {
                         agentWithData.actions().unitCommand(unit.unit(), upgrade.getValue(), false);
+                        break;
                     }
                 }
             }

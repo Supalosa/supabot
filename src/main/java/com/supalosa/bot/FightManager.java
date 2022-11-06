@@ -2,35 +2,28 @@ package com.supalosa.bot;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
-import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
-import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.*;
 import com.supalosa.bot.analysis.Region;
-import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
-import com.supalosa.bot.placement.ImmutablePlacementRules;
-import com.supalosa.bot.placement.PlacementRules;
-import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.army.*;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.mission.DefenceTask;
 import com.supalosa.bot.task.mission.DummyAttackTask;
-import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class FightManager {
@@ -230,13 +223,22 @@ public class FightManager {
                 System.err.println("No target or target area found to attack - how did we get here?");
             }
 
-            // Moderate the attack with checking if we could win a fight or not.
-            if (agentWithData.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
-                    attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getPotentialEnemyArmy().get()) == FightPerformance.BADLY_LOSING) {
+            // Moderate the attack with checking if we could win a fight or not. If not, stay home and expand our territory.
+            // Also expand our territory if there's nothing to attack.
+            if ((agentWithData.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
+                    attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getPotentialEnemyArmy().get()) != FightPerformance.WINNING) ||
+                    attackPosition.isEmpty()) {
                 if (attackPosition.isPresent()) {
                     //System.err.println("Aborted aggressive attack because we think we will badly lose.");
                 }
-                attackPosition = Optional.empty();
+                // In this case, try to find a non-controlled region next to ours.
+                Optional<RegionData> uncontrolledBorderRegion = findNeutralBorderRegion(agentWithData.mapAwareness());
+                attackPosition = uncontrolledBorderRegion
+                        .map(RegionData::region)
+                        .map(Region::centrePoint);
+                if (attackPosition.isPresent()) {
+                    System.out.println("Switched to expansion mode and found uncontrolled region: " + uncontrolledBorderRegion);
+                }
             }
         }
         // Harass the base with the least diffuse threat, as long as the diffuse threat is less half our attacking
@@ -280,6 +282,25 @@ public class FightManager {
         if (!defenceNeedsAssistance && (reserveArmy.getSize()) >= getTargetMarines() && canAttack) {
             reinforceAttackingArmy();
         }
+    }
+
+    /**
+     * Returns a region that borders ours that we don't consider controlled (i.e. where RegionData::isPlayerControlled
+     * is false but also not controlled by enemies.
+     * The closest region by distance to the main base is chosen.
+     */
+    private Optional<RegionData> findNeutralBorderRegion(MapAwareness mapAwareness) {
+        Set<Region> neutralRegions = mapAwareness.getAllRegionData().stream()
+                .filter(data -> !data.isPlayerControlled() && !data.isEnemyControlled())
+                .map(RegionData::region)
+                .collect(Collectors.toSet());
+        Optional<Region> mainBaseRegion = mapAwareness.getMainBaseRegion().map(RegionData::region);
+        if (mainBaseRegion.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Region> target = mapAwareness.getPathingGraph(MapAwareness.PathRules.NORMAL).flatMap(graph ->
+                graph.closestFirstSearch(mainBaseRegion.get(), region -> neutralRegions.contains(region)));
+        return target.flatMap(region -> mapAwareness.getRegionDataForId(region.regionId()));
     }
 
     // Called when a position (which we are trying to defend) is attacked.

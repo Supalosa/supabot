@@ -1,16 +1,11 @@
 package com.supalosa.bot.task.army;
 
-import com.github.ocraft.s2client.protocol.data.Abilities;
-import com.github.ocraft.s2client.protocol.data.Units;
-import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
-import com.supalosa.bot.analysis.production.ImmutableUnitTypeRequest;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**

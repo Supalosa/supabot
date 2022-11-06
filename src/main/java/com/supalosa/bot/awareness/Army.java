@@ -42,6 +42,12 @@ public interface Army {
         return composition().getOrDefault(type, 0);
     }
 
+    default int getCount(Collection<UnitType> types) {
+        return types.stream().reduce(0,
+                (val, type) -> val + composition().getOrDefault(type, 0),
+                (v1, v2) -> v1 + v2);
+    }
+
     /**
      * Returns this army plus another army. Note that the position will be unknown.
      */

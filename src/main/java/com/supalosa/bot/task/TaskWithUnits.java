@@ -3,7 +3,7 @@ package com.supalosa.bot.task;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
-import com.supalosa.bot.analysis.production.UnitTypeRequest;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 
 import java.util.List;

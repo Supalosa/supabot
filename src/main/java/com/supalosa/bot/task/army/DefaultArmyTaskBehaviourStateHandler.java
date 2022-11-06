@@ -38,10 +38,10 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
         List<Unit> unitsInArmy();
 
         /**
-         * A list of enemy Armies nearby.
+         * A virtual army representing all nearby armies.
          */
         @Value.Parameter
-        List<Army> enemyArmies();
+        Army enemyVirtualArmy();
 
         /**
          * The centre of mass of the army.
@@ -154,9 +154,11 @@ public interface DefaultArmyTaskBehaviourStateHandler<T> {
      * @param nextRegion The next region to travel to, or none if we're already in the target region.
      * @param dispersion The dispersion of the army, which is the root mean squared distance.
      * @param childArmies List of child armies of this one, for example to see if we have reinforcements on the way.
+     * @param timeSpentInRegion Amount of time spent in this region.
+     * @param currentArmy The army we're executing for.
      * @return If we should move to another region.
      */
     boolean shouldMoveFromRegion(AgentWithData agentWithData, RegionData currentRegionData,
                                  Optional<RegionData> nextRegion, Optional<Double> dispersion,
-                                 List<DefaultArmyTask> childArmies);
+                                 List<DefaultArmyTask> childArmies, long timeSpentInRegion, DefaultArmyTask currentArmy);
 }

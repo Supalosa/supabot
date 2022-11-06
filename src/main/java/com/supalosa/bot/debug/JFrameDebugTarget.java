@@ -229,18 +229,16 @@ public class JFrameDebugTarget implements DebugTarget {
             data.mapAwareness().getAllRegionData().forEach(regionData -> {
                 int x = scaleX(regionData.region().centrePoint().getX());
                 int y = scaleY(regionData.region().centrePoint().getY(), mapHeight);
-                if (regionData.region().getRampId().isEmpty()) {
-                    Font lastFont = g.getFont();
-                    g.setFont(lastFont.deriveFont(10.0f));
-                    String regionText = String.format("%.1f", regionData.controlFactor());
-                    int width = g.getFontMetrics().stringWidth(regionText);
-                    int height = g.getFontMetrics().getHeight();
-                    g.setColor(Color.BLACK);
-                    g.drawString(regionText, x + 1 - (width / 2), y + 1 - (height / 2));
-                    g.setColor(Color.WHITE);
-                    g.drawString(regionText, x - (width / 2), y - (height / 2));
-                    g.setFont(lastFont);
-                }
+                Font lastFont = g.getFont();
+                g.setFont(lastFont.deriveFont(10.0f));
+                String regionText = String.format("%.1f", regionData.controlFactor());
+                int width = g.getFontMetrics().stringWidth(regionText);
+                int height = g.getFontMetrics().getHeight();
+                g.setColor(Color.BLACK);
+                g.drawString(regionText, x + 1 - (width / 2), y + 1 - (height / 2));
+                g.setColor(Color.WHITE);
+                g.drawString(regionText, x - (width / 2), y - (height / 2));
+                g.setFont(lastFont);
             });
         });
 
