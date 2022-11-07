@@ -187,18 +187,20 @@ public class TerranMicro {
                 .getNearestInRadius(unit.getPosition().toPoint2d(), avoidanceRange,
                         enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
                 .map(enemy -> enemy.getPosition().toPoint2d());
-        float liberatorRange = 5f;
-        if (args.agentWithData().observation().getUpgrades().contains(Upgrades.LIBERATOR_AG_RANGE_UPGRADE)) {
-            liberatorRange += 3f;
-        }
+        boolean hasLibRange = args.agentWithData().observation().getUpgrades().contains(Upgrades.LIBERATOR_AG_RANGE_UPGRADE);
+        float liberatorRange = hasLibRange ? 8f : 5f;
         Optional<Unit> closestGroundTarget = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(),liberatorRange, enemy -> enemy.getFlying().orElse(false) == false);
+                .getNearestInRadius(unit.getPosition().toPoint2d(), liberatorRange + 4f, enemy -> enemy.getFlying().orElse(false) == false);
         if (closestGroundTarget.isPresent()) {
             // Morph liberator to AG mode.
             Optional<Point2d> position = getNextPosition(goalPosition, args);
             closestGroundTarget.ifPresentOrElse(
-                    target -> args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_LIBERATOR_AG_MODE,
-                            target.getPosition().toPoint2d(), false),
+                    target -> {
+                        Point2d liberatorPoint = Utils.getProjectedPosition(unit.getPosition().toPoint2d(),
+                                target.getPosition().toPoint2d(), liberatorRange);
+                        args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_LIBERATOR_AG_MODE,
+                                liberatorPoint, false);
+                    },
                     () -> position.ifPresent(attackMovePosition -> {
                         if (!args.currentRegion().equals(args.targetRegion()) && args.nextRegion().isPresent()) {
                             attackMovePosition = args.nextRegion().get().region().centrePoint();

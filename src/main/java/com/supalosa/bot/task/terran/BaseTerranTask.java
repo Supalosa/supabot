@@ -77,9 +77,12 @@ public class BaseTerranTask implements BehaviourTask {
         tryBuildCommandCentre(agentWithData);
         tryBuildRefinery(agentWithData);
         int supply = agentWithData.observation().getFoodUsed();
+        int workerSupply = agentWithData.observation().getFoodWorkers();
+        int armySupply = agentWithData.observation().getFoodArmy();
+        boolean floatingLots = (agentWithData.observation().getMinerals() > 1250 && agentWithData.observation().getVespene() > 500);
         Set<Upgrade> upgrades = new HashSet<>(agentWithData.observation().getUpgrades());
 
-        if (supply > 50) {
+        if (workerSupply > 28 && armySupply > 1) {
             int targetFactories = supply > 160 ? 2 : 1;
             if (supply == 200) {
                 targetFactories = 4;
@@ -107,16 +110,16 @@ public class BaseTerranTask implements BehaviourTask {
                     Upgrades.DRILL_CLAWS, Abilities.RESEARCH_DRILLING_CLAWS
             ));
         }
-        if (supply > 70) {
+        if (workerSupply > 40) {
             tryBuildMax(agentWithData,
                     Abilities.BUILD_ENGINEERING_BAY,
                     Units.TERRAN_ENGINEERING_BAY,
                     Units.TERRAN_SCV, 1, 2,
                     Optional.of(PlacementRules.borderOfBase()));
         }
-        if (supply > 100) {
+        if (armySupply > 40) {
             boolean hasAir = countUnitType(Units.TERRAN_VIKING_FIGHTER, Units.TERRAN_LIBERATOR, Units.TERRAN_LIBERATOR_AG) > 0;
-            int numArmories = hasAir ? 2 : 1;
+            int numArmories = (floatingLots || hasAir) ? 2 : 1;
             tryBuildMax(agentWithData,
                     Abilities.BUILD_ARMORY,
                     Units.TERRAN_ARMORY,
@@ -126,14 +129,14 @@ public class BaseTerranTask implements BehaviourTask {
                     Optional.of(PlacementRules.borderOfBase()));
 
             if (agentWithData.observation().getVespene() > 300) {
-                if (hasAir) {
+                if (hasAir || floatingLots) {
                     tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ARMORY, Map.of(
-                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL1,
-                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS_LEVEL1,
-                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL2,
-                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS_LEVEL2,
-                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL3,
-                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS_LEVEL3
+                            Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
+                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS,
+                            Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
+                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS,
+                            Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
+                            Upgrades.TERRAN_SHIP_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS
                     ));
                     tryBuildMax(agentWithData,
                             Abilities.BUILD_FUSION_CORE,
@@ -147,14 +150,14 @@ public class BaseTerranTask implements BehaviourTask {
                     ));
                 } else {
                     tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ARMORY, Map.of(
-                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL1,
-                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL2,
-                            Upgrades.TERRAN_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_PLATING_LEVEL3
+                            Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
+                            Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
+                            Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING
                     ));
                 }
             }
         }
-        if (supply > 150) {
+        if (supply > 150 || floatingLots) {
             tryBuildMax(agentWithData,
                     Abilities.BUILD_GHOST_ACADEMY,
                     Units.TERRAN_GHOST_ACADEMY,
@@ -166,7 +169,7 @@ public class BaseTerranTask implements BehaviourTask {
                     Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
             ));
         }
-        if (supply > 50) {
+        if (workerSupply > 28 && armySupply > 1) {
             int targetStarports = supply > 160 ? 2 : 1;
             if (supply == 200) {
                 targetStarports = 3;
@@ -189,7 +192,7 @@ public class BaseTerranTask implements BehaviourTask {
                 }
             });
         }
-        if (supply > 40) {
+        if (workerSupply > 24 && armySupply > 10) {
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
                     unitInPool.unit().getAddOnTag().isEmpty() &&
                     UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
@@ -204,20 +207,26 @@ public class BaseTerranTask implements BehaviourTask {
                 }
             });
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
-                    Upgrades.COMBAT_SHIELD, Abilities.RESEARCH_COMBAT_SHIELD,
+                    Upgrades.SHIELD_WALL, Abilities.RESEARCH_COMBAT_SHIELD,
                     Upgrades.STIMPACK, Abilities.RESEARCH_STIMPACK,
-                    Upgrades.JACKHAMMER_CONCUSSION_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
+                    Upgrades.PUNISHER_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
             ));
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
-                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
+                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
+                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
+                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR
+                    /*Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
                     Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2,
                     Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3,
                     Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL1,
                     Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL2,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL3
+                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL3*/
             ));
         }
-        if (supply > 120) {
+        if (workerSupply > 60) {
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
                     Upgrades.TERRAN_BUILDING_ARMOR, Abilities.RESEARCH_TERRAN_STRUCTURE_ARMOR_UPGRADE
             ));
@@ -713,7 +722,7 @@ public class BaseTerranTask implements BehaviourTask {
                 UnitInPool.isUnit(structure).test(unitInPool)).forEach(unit -> {
             if (unit.unit().getOrders().isEmpty()) {
                 for (Map.Entry<Upgrades, Abilities> upgrade: upgradesToGet.entrySet()) {
-                    if (!upgrades.contains(upgrade.getKey())) {
+                    if (agentWithData.gameData().unitHasAbility(unit.getTag(), upgrade.getValue()) && !upgrades.contains(upgrade.getKey())) {
                         agentWithData.actions().unitCommand(unit.unit(), upgrade.getValue(), false);
                         break;
                     }

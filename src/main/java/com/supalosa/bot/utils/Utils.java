@@ -65,6 +65,19 @@ public class Utils {
     }
 
     /**
+     * Returns the position a certain distance towards the enemy.
+     * @param myPosition The position of the current unit.
+     * @param enemyPosition The position of the enemy unit.
+     * @param distance The distance to path back to.
+     * @return
+     */
+    public static Point2d getProjectedPosition(Point2d myPosition, Point2d enemyPosition, float distance) {
+        float dx = enemyPosition.getX() - myPosition.getX();
+        float dy = enemyPosition.getY() - myPosition.getY();
+        Point2d normalised = Point2d.of(dx, dy).div((float)Math.max(1.0, myPosition.distance(enemyPosition)));
+        return myPosition.add(normalised.mul(distance));
+    }
+    /**
      * Returns the position a certain distance away from the enemy.
      * @param myPosition The position of the current unit.
      * @param enemyPosition The position of the enemy unit.
