@@ -43,7 +43,7 @@ public class JFrameDebugTarget implements DebugTarget {
 
         this.frame = new JFrame("SupaBot Debug");
 
-        this.panel = new JPanel(new FlowLayout());
+        this.panel = new JPanel(new GridLayout(0, 4));
         frame.getContentPane().add(panel);
 
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -83,7 +83,6 @@ public class JFrameDebugTarget implements DebugTarget {
             return;
         }
         lastFrameUpdate = gameLoop;
-        panel.removeAll();
 
         int mapHeight = data.mapAnalysis().get().getGrid().getHeight();
         float distanceToBorderMax = 20;
@@ -242,11 +241,6 @@ public class JFrameDebugTarget implements DebugTarget {
             });
         });
 
-
-        panel.add(placementPanel);
-        panel.add(regionPanel);
-        panel.add(controlPanel);
-
         JPanel armyPanel = new JPanel(new BorderLayout());
         data.enemyAwareness().getPotentialEnemyArmy().ifPresent(potentialEnemyArmy -> {
             Map<UnitType, Integer> composition = potentialEnemyArmy.composition();
@@ -288,7 +282,26 @@ public class JFrameDebugTarget implements DebugTarget {
             armyPanel.add(new JLabel(sb.toString()), BorderLayout.SOUTH);
         });
 
+        // Desired composition panel
+        JPanel desiredCompositionPanel = new JPanel();
+        StringBuilder requestedUnitTypesString = new StringBuilder("<html>Requested unit types:<br />");
+        data.fightManager().getRequestedUnitTypes().forEach(requestedUnitType -> {
+           requestedUnitTypesString.append("<b>" + requestedUnitType.unitType() + "</b>: " + requestedUnitType.amount() + "<br />");
+        });
+        requestedUnitTypesString.append("</html>");
+        JLabel requestedUnitTypesLabel = new JLabel(requestedUnitTypesString.toString());
+        desiredCompositionPanel.add(requestedUnitTypesLabel);
+
+
+        panel.removeAll();
+
+        panel.add(placementPanel);
+        panel.add(regionPanel);
+        panel.add(controlPanel);
         panel.add(armyPanel);
+
+        panel.add(desiredCompositionPanel);
+
 
         frame.setMaximumSize(new Dimension(800, 600));
 

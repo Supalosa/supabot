@@ -87,7 +87,7 @@ public class BaseTerranTask implements BehaviourTask {
             if (supply == 200) {
                 targetFactories = 4;
             }
-            tryBuildMax(agentWithData, Abilities.BUILD_FACTORY,
+            tryBuildMaxStructure(agentWithData, Abilities.BUILD_FACTORY,
                     Units.TERRAN_FACTORY,
                     Units.TERRAN_SCV,
                     1,
@@ -111,7 +111,7 @@ public class BaseTerranTask implements BehaviourTask {
             ));
         }
         if (workerSupply > 40) {
-            tryBuildMax(agentWithData,
+            tryBuildMaxStructure(agentWithData,
                     Abilities.BUILD_ENGINEERING_BAY,
                     Units.TERRAN_ENGINEERING_BAY,
                     Units.TERRAN_SCV, 1, 2,
@@ -120,7 +120,7 @@ public class BaseTerranTask implements BehaviourTask {
         if (armySupply > 40) {
             boolean hasAir = countUnitType(Units.TERRAN_VIKING_FIGHTER, Units.TERRAN_LIBERATOR, Units.TERRAN_LIBERATOR_AG) > 0;
             int numArmories = (floatingLots || hasAir) ? 2 : 1;
-            tryBuildMax(agentWithData,
+            tryBuildMaxStructure(agentWithData,
                     Abilities.BUILD_ARMORY,
                     Units.TERRAN_ARMORY,
                     Units.TERRAN_SCV,
@@ -138,7 +138,7 @@ public class BaseTerranTask implements BehaviourTask {
                             Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
                             Upgrades.TERRAN_SHIP_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS
                     ));
-                    tryBuildMax(agentWithData,
+                    tryBuildMaxStructure(agentWithData,
                             Abilities.BUILD_FUSION_CORE,
                             Units.TERRAN_FUSION_CORE,
                             Units.TERRAN_SCV,
@@ -158,7 +158,7 @@ public class BaseTerranTask implements BehaviourTask {
             }
         }
         if (supply > 150 || floatingLots) {
-            tryBuildMax(agentWithData,
+            tryBuildMaxStructure(agentWithData,
                     Abilities.BUILD_GHOST_ACADEMY,
                     Units.TERRAN_GHOST_ACADEMY,
                     Units.TERRAN_SCV,
@@ -174,7 +174,7 @@ public class BaseTerranTask implements BehaviourTask {
             if (supply == 200) {
                 targetStarports = 3;
             }
-            tryBuildMax(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, 2, targetStarports, Optional.of(PlacementRules.borderOfBase()));
+            tryBuildMaxStructure(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT, Units.TERRAN_SCV, targetStarports, targetStarports, Optional.of(PlacementRules.borderOfBase()));
             int numReactors = countUnitType(Units.TERRAN_STARPORT_REACTOR);
             int numTechLabs = countUnitType(Units.TERRAN_STARPORT_TECHLAB);
             agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
@@ -188,7 +188,7 @@ public class BaseTerranTask implements BehaviourTask {
                             unit.unit().getPosition().toPoint2d(),
                             false);
                 } else {
-                    agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);
+                    agentWithData.debug().debugTextOut("Addon Blocked", unit.unit().getPosition(), Color.RED, 10);
                 }
             });
         }
@@ -346,11 +346,17 @@ public class BaseTerranTask implements BehaviourTask {
         return observationInterface.getUnits(Alliance.SELF, doesBuildWith(abilityTypeForStructure)).size();
     }
 
-    private boolean tryBuildMax(AgentWithData agentWithData, Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType,
-                                int maxParallel, int max, Optional<PlacementRules> rules) {
-        if (countUnitType(unitTypeForStructure) < max) {
-            return tryBuildStructure(agentWithData, abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
-                    Optional.empty(), rules);
+    private boolean tryBuildMaxStructure(AgentWithData agentWithData, Ability abilityTypeForStructure, UnitType unitTypeForStructure, UnitType unitType,
+                                         int maxParallel, int max, Optional<PlacementRules> rules) {
+        int completeCount = agentWithData.observation().getUnits(UnitFilter.mine(unitTypeForStructure)).size();
+        if (completeCount < max) {
+            // Check in-progress tasks. We nest it this way to reduce unnecessary iteration over the task list.
+            long taskCount = agentWithData.taskManager().countTasks(task ->
+                    task instanceof BuildStructureTask && ((BuildStructureTask)task).getTargetUnitType().equals(unitTypeForStructure));
+            if (completeCount + taskCount < max) {
+                return tryBuildStructure(agentWithData, abilityTypeForStructure, unitTypeForStructure, unitType, maxParallel,
+                        Optional.empty(), rules);
+            }
         }
         return false;
     }
@@ -374,16 +380,19 @@ public class BaseTerranTask implements BehaviourTask {
                                        Ability abilityTypeForStructure, UnitType unitTypeForStructure,
                                        UnitType unitType, int maxParallel, Optional<Point2d> specificPosition,
                                        Optional<Unit> specificTarget, Optional<PlacementRules> rules) {
-        // hack
-        if (needsCommandCentre(agentWithData) && (unitTypeForStructure != Units.TERRAN_COMMAND_CENTER)) {
+        Optional<Integer> mineralCost = agentWithData.gameData().getUnitMineralCost(unitTypeForStructure);
+        // hack to prioritise TC
+        int reservedMineralsPlusCost = (agentWithData.taskManager().totalReservedMinerals() + mineralCost.orElse(0));
+        if (unitTypeForStructure != Units.TERRAN_COMMAND_CENTER && reservedMineralsPlusCost > agentWithData.observation().getMinerals()) {
             return false;
         }
+
         BuildStructureTask maybeTask = new BuildStructureTask(
                 abilityTypeForStructure,
                 unitTypeForStructure,
                 specificPosition,
                 specificTarget,
-                agentWithData.gameData().getUnitMineralCost(unitTypeForStructure),
+                mineralCost,
                 agentWithData.gameData().getUnitVespeneCost(unitTypeForStructure),
                 rules);
         if (agentWithData.taskManager().addTask(maybeTask, maxParallel)) {

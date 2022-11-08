@@ -401,7 +401,7 @@ public class FightManager {
         Map<UnitType, UnitType> producingUnitType = new HashMap<>();
         Map<UnitType, Ability> productionAbility = new HashMap<>();
         armyTasks.forEach(armyTask -> {
-            attackingArmy.requestingUnitTypes().forEach(unitTypeRequest -> {
+            armyTask.requestingUnitTypes().forEach(unitTypeRequest -> {
                 requestedAmount.put(unitTypeRequest.unitType(),
                         requestedAmount.getOrDefault(unitTypeRequest.unitType(), 0) + unitTypeRequest.amount());
                 producingUnitType.put(unitTypeRequest.unitType(), unitTypeRequest.producingUnitType());

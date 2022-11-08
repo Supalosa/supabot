@@ -150,4 +150,6 @@ public interface TaskManager {
     int totalReservedVespene();
 
     boolean hasTask(Task task);
+
+    long countTasks(Predicate<Task> filter);
 }

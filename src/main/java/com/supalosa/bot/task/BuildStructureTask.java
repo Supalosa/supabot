@@ -438,4 +438,8 @@ public class BuildStructureTask extends BaseTask {
         // If it's not safe to build this, then don't reserve the vespene.
         return (isInProgress || !isSafeToBuildStructure) ? 0 : minimumVespene.orElse(0);
     }
+
+    public UnitType getTargetUnitType() {
+        return this.targetUnitType;
+    }
 }

@@ -61,7 +61,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private MapAwareness.PathRules pathRules = MapAwareness.PathRules.AVOID_KILL_ZONE;
     // These are used for observing if we're winning or losing a fight.
     private Optional<Army> previousEnemyArmyObservation = Optional.empty();
-    private Map<UnitType, Integer> previousComposition = currentCompositionCache;
+    private Map<UnitType, Integer> previousComposition = new HashMap<>();
     private FightPerformance currentFightPerformance = FightPerformance.STABLE;
     private AggressionLevel aggressionLevel = AggressionLevel.BALANCED;
     private double cumulativeThreatDelta = 0.0;
@@ -357,7 +357,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 previousEnemyArmyObservation,
                 virtualArmy,
                 previousComposition,
-                currentCompositionCache);
+                this.getCurrentCompositionCache());
         FightPerformance predictedFightPerformance = predictFightAgainst(virtualArmy);
 
         AggressionState newAggressionState = aggressionState;
@@ -396,7 +396,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         }
 
         previousEnemyArmyObservation = Optional.of(virtualArmy);
-        previousComposition = new HashMap<>(currentCompositionCache);
+        previousComposition = new HashMap<>(this.getCurrentCompositionCache());
         return aggressionState.getUpdateInterval();
     }
 
@@ -562,7 +562,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     @Override
     public FightPerformance predictFightAgainst(Army army) {
         double currentEnemyThreat = army.threat();
-        double currentPower = threatCalculator.calculatePower(currentCompositionCache);
+        double currentPower = threatCalculator.calculatePower(this.getCurrentCompositionCache());
         if (currentPower > currentEnemyThreat * 1.5) {
             return FightPerformance.WINNING;
         } else if (currentPower > currentEnemyThreat * 1.25) {
@@ -581,7 +581,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     @Override
     public double getPower() {
-        return threatCalculator.calculatePower(currentCompositionCache);
+        return threatCalculator.calculatePower(this.getCurrentCompositionCache());
     }
 
     public void setAcceptingUnits(boolean acceptingUnits) {

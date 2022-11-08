@@ -325,4 +325,9 @@ public class TaskManagerImpl implements TaskManager {
     public boolean hasTask(Task task) {
         return taskSet.containsKey(task.getKey());
     }
+
+    @Override
+    public long countTasks(Predicate<Task> filter) {
+        return taskSet.values().stream().filter(filter).count();
+    }
 }

@@ -13,7 +13,7 @@ import java.util.*;
 
 public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithUnits {
 
-    protected Map<UnitType, Integer> currentCompositionCache = new HashMap<>();
+    private Map<UnitType, Integer> currentCompositionCache = new HashMap<>();
     protected int basePriority;
     protected Collection<Tag> assignedUnits;
 

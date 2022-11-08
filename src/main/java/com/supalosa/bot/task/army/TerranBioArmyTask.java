@@ -275,7 +275,12 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
     @Override
     public List<UnitTypeRequest> requestingUnitTypes() {
-        return desiredComposition;
+        if (getParentTask().isEmpty()) {
+            // Only the parent task should control the composition.
+            return desiredComposition;
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     @Override
