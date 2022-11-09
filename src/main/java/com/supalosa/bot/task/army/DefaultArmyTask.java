@@ -133,6 +133,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     protected abstract DefaultArmyTask<A,D,R,I> createChildArmyImpl();
 
+    @Override
     public String getArmyName() {
         return this.armyName;
     }

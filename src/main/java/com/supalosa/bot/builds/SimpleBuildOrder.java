@@ -131,6 +131,9 @@ public class SimpleBuildOrder implements BuildOrder {
 
     @Override
     public void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage) {
+        if (currentStageNumber >= stages.size()) {
+            return;
+        }
         SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
         if (stage.equals(convertStageToOutput(currentStage))) {
             System.out.println("Stage " + currentStage + " started at " + agent.observation().getGameLoop());

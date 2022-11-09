@@ -78,9 +78,10 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
         targetMarauders +=
                 enemyArmy.composition().getOrDefault(Units.ZERG_ROACH, 0) +
-                enemyArmy.composition().getOrDefault(Units.PROTOSS_STALKER, 0) +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_STALKER, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 3 +
                 enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK, 0) * 3 +
-                enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK_SIEGED, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK_SIEGED, 0) * 3 +
                 enemyArmy.composition().getOrDefault(Units.ZERG_ULTRALISK, 0) * 5;
 
         result.add(ImmutableUnitTypeRequest.builder()

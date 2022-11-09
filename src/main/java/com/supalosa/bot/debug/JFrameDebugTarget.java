@@ -7,6 +7,7 @@ import com.supalosa.bot.SupaBot;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.utils.VisualisationUtils;
 import com.supalosa.bot.awareness.Army;
+import com.supalosa.bot.debug.chart.DebugChart;
 
 import javax.swing.*;
 import java.awt.*;
@@ -36,6 +37,7 @@ public class JFrameDebugTarget implements DebugTarget {
     private long lastFrameUpdate = 0L;
 
     private double baselineThreat = 0L;
+    private DebugChart armyStrengthChart;
 
     @Override
     public void initialise(SupaBot agent) {
@@ -43,7 +45,9 @@ public class JFrameDebugTarget implements DebugTarget {
 
         this.frame = new JFrame("SupaBot Debug");
 
-        this.panel = new JPanel(new GridLayout(0, 4));
+        this.panel = new JPanel(new GridBagLayout());
+        this.armyStrengthChart = new DebugChart("Army Strength", "Time", "Strength", 100);
+
         frame.getContentPane().add(panel);
 
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -292,15 +296,39 @@ public class JFrameDebugTarget implements DebugTarget {
         JLabel requestedUnitTypesLabel = new JLabel(requestedUnitTypesString.toString());
         desiredCompositionPanel.add(requestedUnitTypesLabel);
 
+        // Army Strength vs Enemy Strength Graph
+        String gameLoopString = String.valueOf(agent.observation().getGameLoop());
+        // Roll same-name armies into a single entry.
+        Map<String, Double> armyToPowerValue = agent.fightManager().getAllArmies().stream().collect(Collectors.toMap(
+                army -> army.getArmyName(),
+                army -> army.getPower(),
+                (v1, v2) -> v1 + v2));
+
+        armyToPowerValue.put("Overall Enemy Army", agent.enemyAwareness().getOverallEnemyArmy().threat());
+        armyToPowerValue.put("Missing Enemy Army", agent.enemyAwareness().getMissingEnemyArmy().map(Army::threat).orElse(0.0));
+        armyStrengthChart.addValues(armyToPowerValue, gameLoopString);
+
+
 
         panel.removeAll();
 
-        panel.add(placementPanel);
-        panel.add(regionPanel);
-        panel.add(controlPanel);
-        panel.add(armyPanel);
+        GridBagConstraints c = new GridBagConstraints();
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weighty = 0.5;
 
-        panel.add(desiredCompositionPanel);
+        c.gridy = 0;
+        panel.add(placementPanel, c);
+        panel.add(regionPanel, c);
+        panel.add(controlPanel, c);
+        panel.add(armyPanel, c);
+
+        c.gridy = 1;
+
+        panel.add(desiredCompositionPanel, c);
+        c.gridwidth = 2;
+        panel.add(armyStrengthChart, c);
+        c.gridwidth = 1;
+
 
 
         frame.setMaximumSize(new Dimension(800, 600));

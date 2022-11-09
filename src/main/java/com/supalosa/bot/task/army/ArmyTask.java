@@ -64,4 +64,9 @@ public interface ArmyTask extends TaskWithUnits {
      * Estimated power of this army.
      */
     double getPower();
+
+    /**
+     * Return the name of the army (which is a proxy for its function)
+     */
+    String getArmyName();
 }

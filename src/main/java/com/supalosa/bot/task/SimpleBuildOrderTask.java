@@ -148,10 +148,12 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                     buildTask
                             .onStarted(result -> {
                                 // Signal to the build order that the construction was started (dispatched).
-                                simpleBuildOrder.onStageStarted(agentWithData, agentWithData, thisStage);
+                                if (!isComplete()) {
+                                    simpleBuildOrder.onStageStarted(agentWithData, agentWithData, thisStage);
+                                }
                             })
                             .onFailure(result -> {
-                                if (!output.repeat()) {
+                                if (!isComplete() && !output.repeat()) {
                                     this.isComplete = true;
                                     this.onFailure();
                                     System.out.println("Build task " + output.abilityToUse().get() + " failed, aborting build order.");
@@ -160,7 +162,7 @@ public class SimpleBuildOrderTask extends BaseTask implements BehaviourTask {
                                 }
                             })
                             .onComplete(result -> {
-                                if (!output.repeat()) {
+                                if (!isComplete() && !output.repeat()) {
                                     // If not repeating, reduce parallel building of this structure.
                                     expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
                                 }
