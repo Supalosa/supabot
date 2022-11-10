@@ -35,6 +35,9 @@ public class GraphUtils {
                         g.addEdge(region, otherRegion);
                         distance *= factor;
                         g.setEdgeWeight(region, otherRegion, distance);
+                    } else {
+                        g.addEdge(region, otherRegion);
+                        g.setEdgeWeight(region, otherRegion, Double.MAX_VALUE);
                     }
                 }
                 //System.out.println("Weight = " + g.getEdgeWeight(g.getEdge(region, otherRegion)));

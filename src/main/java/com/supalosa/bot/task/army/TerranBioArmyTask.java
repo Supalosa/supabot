@@ -119,7 +119,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 enemyArmy.composition().getOrDefault(Units.TERRAN_LIBERATOR, 0) * 1 +
                 enemyArmy.composition().getOrDefault(Units.TERRAN_VIKING_FIGHTER, 0) * 1 +
                 enemyArmy.composition().getOrDefault(Units.PROTOSS_CARRIER, 0) * 2 +
-                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 2 +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 3 +
                 enemyArmy.composition().getOrDefault(Units.PROTOSS_TEMPEST, 0) * 2;
         if (targetVikings > 0) {
             result.add(ImmutableUnitTypeRequest.builder()
@@ -135,10 +135,10 @@ public class TerranBioArmyTask extends DefaultArmyTask {
         int targetLiberators = (int)Math.ceil(
                 enemyArmy.composition().getOrDefault(Units.ZERG_ULTRALISK, 0) * 0.5 +
                         enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK, 0) * 1.0 +
-                        enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK_SIEGED, 0) * 1.0 +
-                        enemyArmy.composition().getOrDefault(Units.PROTOSS_IMMORTAL, 0) * 1.0 +
-                        enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 2.0 +
-                        enemyArmy.composition().getOrDefault(Units.PROTOSS_ARCHON, 0) * 1.0);
+                        enemyArmy.composition().getOrDefault(Units.TERRAN_SIEGE_TANK_SIEGED, 0) * 0.5 +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_IMMORTAL, 0) * 0.5 +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 1.0 +
+                        enemyArmy.composition().getOrDefault(Units.PROTOSS_ARCHON, 0) * 0.75);
         if (targetLiberators > 0) {
             result.add(ImmutableUnitTypeRequest.builder()
                     .unitType(Units.TERRAN_LIBERATOR)

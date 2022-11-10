@@ -29,6 +29,8 @@ import com.supalosa.bot.utils.UnitComparator;
 import com.supalosa.bot.utils.UnitFilter;
 import com.supalosa.bot.utils.Utils;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.*;
 
 public class SupaBot extends AgentWithData {
@@ -75,6 +77,13 @@ public class SupaBot extends AgentWithData {
     @Override
     public void onGameEnd() {
         this.debugTarget.stop();
+        if (this.isDebug) {
+            try {
+                control().saveReplay(Path.of("LatestReplay.SC2Replay"));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
@@ -98,6 +107,7 @@ public class SupaBot extends AgentWithData {
                 () -> new BaseTerranTask());
         dispatchTaskOnce(1, behaviourTask);
         dispatchTaskOnce(1, strategyTask);
+        //debug().debugShowMap();
     }
 
     @Override

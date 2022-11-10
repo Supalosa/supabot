@@ -3,6 +3,7 @@ package com.supalosa.bot.task.army;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.DisplayType;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
@@ -63,7 +64,8 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
     }
 
     public TerranBioArmyTaskBehaviour() {
-        super(new AttackHandler(), new DisengagingHandler(), new RegroupingHandler(), new IdleHandler());
+        //this(new AttackHandler(), new DisengagingHandler(), new RegroupingHandler(), new IdleHandler());
+        this(new AttackHandler(), new DisengagingHandler(), new AttackHandler(), new AttackHandler());
     }
 
     private static void handleMicro(Unit unit,
@@ -183,7 +185,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         Point2dMap<Unit> enemyUnitMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
         args.enemyVirtualArmy().unitTags().forEach(tag -> {
            UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
-           if (maybeEnemyUnit != null) {
+           if (maybeEnemyUnit != null && maybeEnemyUnit.unit().getDisplayType() == DisplayType.VISIBLE) {
                enemyUnitMap.insert(maybeEnemyUnit.unit());
            }
        });
@@ -257,6 +259,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
     }
 
     private static class RegroupingHandler implements DefaultArmyTaskBehaviourStateHandler<RegroupingContext> {
+
         @Override
         public void onEnterState(BaseArgs args) {
 

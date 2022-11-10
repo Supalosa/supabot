@@ -73,11 +73,11 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
                         return amount * 3.5;
                     case TERRAN_MARAUDER:
                     case ZERG_ROACH:
-                    case PROTOSS_ZEALOT:
-                    case PROTOSS_STALKER:
                     case TERRAN_SIEGE_TANK:
                     case TERRAN_VIKING_ASSAULT:
                         return amount * 3.0;
+                    case PROTOSS_ZEALOT:
+                    case PROTOSS_STALKER:
                     case TERRAN_MARINE:
                     case PROTOSS_PHOENIX:
                         return amount * 2.0;

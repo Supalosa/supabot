@@ -76,10 +76,7 @@ public class GameData {
      * @return A point2d representing the width and height of the unit.
      */
     public Optional<Point2d> getUnitFootprint(UnitType unitType) {
-        UnitTypeData unitTypeData = getOrInitUnitTypeData().get(unitType);
-        if (unitTypeData == null) {
-            return Optional.empty();
-        } else if (unitType.equals(Units.TERRAN_SUPPLY_DEPOT_LOWERED)) {
+        if (unitType.equals(Units.TERRAN_SUPPLY_DEPOT_LOWERED)) {
             return Optional.of(Point2d.of(2f, 2f));
         } if (Constants.MINERAL_TYPES.contains(unitType)) {
             return Optional.of(Point2d.of(2f, 1f));
@@ -87,7 +84,23 @@ public class GameData {
             return Optional.of(Point2d.of(3f, 3f));
         } else if (Constants.ALL_TOWN_HALL_TYPES.contains(unitType)) {
             return Optional.of(Point2d.of(5f, 5f));
+        } else if (unitType.equals(Units.NEUTRAL_UNBUILDABLE_ROCKS_DESTRUCTIBLE)) {
+            return Optional.of(Point2d.of(2f, 2f));
+        } else if (unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_ROCK_EX1_DIAGONAL_HUGE_UL_BR)) {
+            return Optional.of(Point2d.of(6f, 6f));
+        } else if (unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_DEBRIS4X4) ||
+                unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_ICE_4X4) ||
+                unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_ROCK_EX1_4X4)) {
+            return Optional.of(Point2d.of(4f, 4f));
+        } else if (unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_DEBRIS6X6) ||
+                unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_ICE_6X6) ||
+                unitType.equals(Units.NEUTRAL_DESTRUCTIBLE_ROCK_EX1_6X6)) {
+            return Optional.of(Point2d.of(6f, 6f));
         } else {
+            UnitTypeData unitTypeData = getOrInitUnitTypeData().get(unitType);
+            if (unitTypeData == null) {
+                return Optional.empty();
+            }
             Optional<Ability> maybeAbility = unitTypeData.getAbility();
             if (maybeAbility.isEmpty()) {
                 return Optional.empty();

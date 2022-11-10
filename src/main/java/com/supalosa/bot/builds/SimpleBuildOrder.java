@@ -7,6 +7,7 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
+import com.supalosa.bot.Constants;
 import com.supalosa.bot.GameData;
 import org.apache.commons.lang3.Validate;
 
@@ -107,7 +108,9 @@ public class SimpleBuildOrder implements BuildOrder {
             repeatingStages.stream().forEach(action -> {
                 Optional<UnitType> buildUnitType = action.ability().flatMap(ability -> agentWithData.gameData().getUnitBuiltByAbility(ability));
                 int mineralCost = buildUnitType.flatMap(unitType -> agentWithData.gameData().getUnitMineralCost(unitType)).orElse(0);
-                if (remainingMoney.get() >= mineralCost) {
+                // Hack for scvs
+                boolean force = buildUnitType.filter(type -> Constants.WORKER_TYPES.contains(type)).isPresent();
+                if (force || remainingMoney.get() >= mineralCost) {
                     output.add(convertStageToOutput(action));
                     remainingMoney.set(remainingMoney.get() - mineralCost);
                 }

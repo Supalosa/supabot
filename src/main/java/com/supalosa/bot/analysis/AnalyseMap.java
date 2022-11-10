@@ -6,6 +6,7 @@ import com.github.ocraft.s2client.protocol.game.raw.StartRaw;
 import com.github.ocraft.s2client.protocol.observation.spatial.ImageData;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.GameData;
 import com.supalosa.bot.analysis.utils.BitmapGrid;
 import com.supalosa.bot.analysis.utils.Grid;
@@ -62,7 +63,7 @@ public class AnalyseMap {
      */
     private static void processObservations(List<UnitInPool> observations, GameData data, Grid<Integer> pathing, Grid<Integer> placement) {
         observations.forEach(unitInPool -> {
-            data.getUnitFootprint(unitInPool.unit().getType()).ifPresent(footprint -> {
+            data.getUnitFootprint(unitInPool.unit().getType()).ifPresentOrElse(footprint -> {
                 float x = unitInPool.unit().getPosition().getX();
                 float y = unitInPool.unit().getPosition().getY();
                 float w = footprint.getX();
@@ -74,6 +75,10 @@ public class AnalyseMap {
                     for (int yy = yStart; yy < yStart + h; ++yy) {
                         pathing.set(xx, yy, Integer.MAX_VALUE);
                     }
+                }
+            }, () -> {
+                if (unitInPool.unit().getAlliance().equals(Alliance.NEUTRAL)) {
+                    System.out.println("Unknown footprint for neutral unit: " + unitInPool.unit().getType());
                 }
             });
         });
