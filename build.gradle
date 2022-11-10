@@ -42,8 +42,8 @@ dependencies {
     testImplementation 'org.mockito:mockito-core:4.8.1'
 
     implementation("com.google.guava:guava:31.1-jre")
-    implementation 'com.github.ocraft:ocraft-s2client-bot:0.4.11-SNAPSHOT'
-    compileOnly 'com.github.ocraft:ocraft-s2client-api:0.4.11-SNAPSHOT'
+    implementation 'com.github.ocraft:ocraft-s2client-bot:0.4.11'
+    compileOnly 'com.github.ocraft:ocraft-s2client-api:0.4.11'
     implementation 'org.apache.commons:commons-lang3:3.12.0'
 
     implementation 'org.jgrapht:jgrapht-core:1.5.1'
