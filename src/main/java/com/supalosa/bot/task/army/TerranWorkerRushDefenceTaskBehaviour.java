@@ -113,8 +113,8 @@ public class TerranWorkerRushDefenceTaskBehaviour extends BaseDefaultArmyTaskBeh
                             .findFirst();
                     if (args.agentWithData().observation().getMinerals() > 5 && nearbyScvOnLowHp.isPresent()) {
                         args.agentWithData().actions().unitCommand(unit, Abilities.EFFECT_REPAIR, nearbyScvOnLowHp.get(), false);
-                    } else if (args.attackPosition().isPresent()) {
-                        args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.attackPosition().get(), false);
+                    } else if (args.targetPosition().isPresent()) {
+                        args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, args.targetPosition().get(), false);
                     } else {
                         // No enemy in range
                         Optional<UnitInPool> nearbyEnemy = enemyUnitsNearStartPosition.stream()
@@ -149,7 +149,7 @@ public class TerranWorkerRushDefenceTaskBehaviour extends BaseDefaultArmyTaskBeh
 
         @Override
         public AggressionState getNextState(Context context, BaseArgs args) {
-            if (args.attackPosition().isPresent()) {
+            if (args.targetPosition().isPresent()) {
                 if (args.predictedFightPerformance() == FightPerformance.BADLY_LOSING ||
                         args.fightPerformance() == FightPerformance.BADLY_LOSING ||
                         args.fightPerformance() == FightPerformance.SLIGHTLY_LOSING) {
@@ -168,7 +168,7 @@ public class TerranWorkerRushDefenceTaskBehaviour extends BaseDefaultArmyTaskBeh
         }
     }
 
-    private static Point2dMap<Unit> constructEnemyUnitMap(DefaultArmyTaskBehaviourStateHandler.BaseArgs args) {
+    private static Point2dMap<Unit> constructEnemyUnitMap(BaseArgs args) {
         Point2dMap<Unit> enemyUnitMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
         args.enemyVirtualArmy().unitTags().forEach(tag -> {
            UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
