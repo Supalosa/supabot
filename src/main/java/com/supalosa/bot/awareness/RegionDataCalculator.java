@@ -3,6 +3,7 @@ package com.supalosa.bot.awareness;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
+import com.github.ocraft.s2client.protocol.data.Upgrade;
 import com.github.ocraft.s2client.protocol.observation.raw.Visibility;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
@@ -36,6 +37,8 @@ public class RegionDataCalculator {
             AnalysisResults analysisResults,
             Map<Integer, RegionData> previousRegionData,
             List<Point2d> knownEnemyBases) {
+        // Used for region power calculation.
+        Set<Upgrade> upgrades = agent.observation().getUpgrades().stream().collect(Collectors.toSet());
         Map<Integer, RegionData> result = new HashMap<>();
 
         List<UnitInPool> allUnits = agent.observation().getUnits();
@@ -108,7 +111,7 @@ public class RegionDataCalculator {
             double currentPower = threatCalculator.calculatePower(
                     regionIdToSelfUnits.get(region.regionId()).stream()
                             .map(unitInPool -> unitInPool.unit().getType())
-                            .collect(Collectors.toUnmodifiableList()));
+                            .collect(Collectors.toUnmodifiableList()), upgrades);
             double enemyThreat = regionToEnemyThreat.get(region.regionId());
             // Killzone threat is the sum of threat on regions on high ground of this one.
             Optional<Double> killzoneThreat = region.onLowGroundOfRegions().stream().map(highGroundRegionId ->

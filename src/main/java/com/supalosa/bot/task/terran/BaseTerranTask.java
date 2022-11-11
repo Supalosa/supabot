@@ -157,7 +157,7 @@ public class BaseTerranTask implements BehaviourTask {
                 }
             }
         }
-        if (supply > 150 || floatingLots) {
+        if (supply > 180 || floatingLots) {
             tryBuildMaxStructure(agentWithData,
                     Abilities.BUILD_GHOST_ACADEMY,
                     Units.TERRAN_GHOST_ACADEMY,
@@ -165,7 +165,7 @@ public class BaseTerranTask implements BehaviourTask {
                     1, 1,
                     Optional.of(PlacementRules.borderOfBase()));
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_GHOST_ACADEMY, Map.of(
-                    Upgrades.PERSONAL_CLOAKING, Abilities.RESEARCH_PERSONAL_CLOAKING,
+                    //Upgrades.PERSONAL_CLOAKING, Abilities.RESEARCH_PERSONAL_CLOAKING,
                     Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
             ));
         }

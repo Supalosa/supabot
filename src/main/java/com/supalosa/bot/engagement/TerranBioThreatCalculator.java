@@ -2,34 +2,50 @@ package com.supalosa.bot.engagement;
 
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.data.Upgrade;
+import com.github.ocraft.s2client.protocol.data.Upgrades;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class TerranBioThreatCalculator implements ThreatCalculator {
 
     @Override
-    public double calculatePower(Collection<UnitType> myComposition) {
-        return calculatePower(listToMap(myComposition));
+    public double calculatePower(Collection<UnitType> myComposition, Set<Upgrade> upgrades) {
+        return calculatePower(listToMap(myComposition), upgrades);
     }
 
     @Override
-    public double calculatePower(Map<UnitType, Integer> myComposition) {
+    public double calculatePower(Map<UnitType, Integer> myComposition, Set<Upgrade> upgrades) {
+        boolean hasStim = upgrades.contains(Upgrades.STIMPACK);
         return myComposition.entrySet().stream().mapToDouble(entry -> {
             UnitType unitType = entry.getKey();
             int amount = entry.getValue();
             if (unitType instanceof Units) {
                 switch ((Units)unitType) {
+                    case TERRAN_GHOST:
+                        return amount * 4.0;
                     case TERRAN_MEDIVAC:
+                    case TERRAN_LIBERATOR_AG:
+                    case TERRAN_WIDOWMINE_BURROWED:
+                        return amount * 3.0;
+                    case TERRAN_VIKING_FIGHTER:
+                        return amount * 2.5;
                     case TERRAN_MARAUDER:
-                        return amount * 1.25;
-                    case TERRAN_SCV:
-                        return 0.0;
+                        return amount * (hasStim ? 2.5 : 1.5);
+                    case TERRAN_VIKING_ASSAULT:
+                        return amount * 2.0;
+                    case TERRAN_LIBERATOR:
+                    case TERRAN_WIDOWMINE:
+                        return amount * 1.5;
                     case TERRAN_MARINE:
                     default:
-                        return amount * 1.0;
+                        return amount * (hasStim ? 1.5 : 1.0);
+                    case TERRAN_SCV:
+                        return 0.1;
                 }
             } else {
                 return amount * 1.5;

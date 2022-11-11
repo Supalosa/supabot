@@ -2,20 +2,22 @@ package com.supalosa.bot.engagement;
 
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.data.Units;
+import com.github.ocraft.s2client.protocol.data.Upgrade;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class WorkerDefenceThreatCalculator implements ThreatCalculator {
 
     @Override
-    public double calculatePower(Collection<UnitType> myComposition) {
-        return calculatePower(listToMap(myComposition));
+    public double calculatePower(Collection<UnitType> myComposition, Set<Upgrade> upgrades) {
+        return calculatePower(listToMap(myComposition), upgrades);
     }
 
     @Override
-    public double calculatePower(Map<UnitType, Integer> myComposition) {
+    public double calculatePower(Map<UnitType, Integer> myComposition, Set<Upgrade> upgrades) {
         return myComposition.entrySet().stream().mapToDouble(entry -> {
             UnitType unitType = entry.getKey();
             int amount = entry.getValue();

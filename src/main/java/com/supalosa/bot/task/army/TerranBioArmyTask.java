@@ -71,7 +71,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
 
     private void updateBioArmyComposition(AgentData data) {
         List<UnitTypeRequest> result = new ArrayList<>();
-        int maxBio = 80;
+        int maxBio = 120;
         int targetMarines = 40;
         int targetMarauders = 40;
         Army enemyArmy = data.enemyAwareness().getOverallEnemyArmy();
@@ -88,7 +88,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 .unitType(Units.TERRAN_MARINE)
                 .productionAbility(Abilities.TRAIN_MARINE)
                 .producingUnitType(Units.TERRAN_BARRACKS)
-                .amount(Math.max(0, maxBio - targetMarauders))
+                .amount(Math.max(0, maxBio - targetMarauders * 2))
                 .build()
         );
         if (getAssignedUnits().size() > 5) {

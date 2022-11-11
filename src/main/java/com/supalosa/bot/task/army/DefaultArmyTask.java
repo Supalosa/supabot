@@ -4,6 +4,7 @@ import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.UnitType;
+import com.github.ocraft.s2client.protocol.data.Upgrade;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
@@ -95,6 +96,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     private boolean shouldMoveFromRegion = true;
 
+    private Set<Upgrade> upgrades = new HashSet<>();
+
     public DefaultArmyTask(String armyName,
                            int basePriority,
                            ThreatCalculator threatCalculator,
@@ -163,6 +166,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     @Override
     public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
+        this.upgrades = agentWithData.observation().getUpgrades().stream().collect(Collectors.toUnmodifiableSet());
         List<Unit> allUnits = new ArrayList<>();
         for (Tag tag : getAssignedUnits()) {
             UnitInPool unit = agentWithData.observation().getUnit(tag);
@@ -389,7 +393,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 virtualArmy,
                 previousComposition,
                 this.getCurrentCompositionCache());
-        FightPerformance predictedFightPerformance = predictFightAgainst(virtualArmy);
+        FightPerformance predictedFightPerformance = this.predictFightAgainst(virtualArmy);
 
         AggressionState newAggressionState = aggressionState;
         Optional<RegionData> maybeNextRegion = shouldMoveFromRegion ? nextRegion : Optional.empty();
@@ -459,9 +463,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         double currentEnemyThreat = currentEnemyObservation.threat();
         double threatDelta = currentEnemyThreat -
                 previousEnemyObservation.map(Army::threat).orElse(0.0);
-        double currentPower = threatCalculator.calculatePower(currentComposition);
+        double currentPower = threatCalculator.calculatePower(currentComposition, this.upgrades);
         double powerDelta = currentPower -
-                threatCalculator.calculatePower(previousComposition);
+                threatCalculator.calculatePower(previousComposition, this.upgrades);
         if (Math.abs(cumulativeThreatDelta) < 0.5) {
             cumulativeThreatDelta = 0.0;
         }
@@ -593,7 +597,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     @Override
     public FightPerformance predictFightAgainst(Army army) {
         double currentEnemyThreat = army.threat();
-        double currentPower = threatCalculator.calculatePower(this.getCurrentCompositionCache());
+        double currentPower = threatCalculator.calculatePower(this.getCurrentCompositionCache(), this.upgrades);
         if (currentPower > currentEnemyThreat * 1.5) {
             return FightPerformance.WINNING;
         } else if (currentPower > currentEnemyThreat * 1.25) {
@@ -612,7 +616,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     @Override
     public double getPower() {
-        return threatCalculator.calculatePower(this.getCurrentCompositionCache());
+        return threatCalculator.calculatePower(this.getCurrentCompositionCache(), this.upgrades);
     }
 
     public void setAcceptingUnits(boolean acceptingUnits) {

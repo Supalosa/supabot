@@ -168,10 +168,10 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                                             List<DefaultArmyTask> childArmies,
                                             long timeSpentInRegion,
                                             DefaultArmyTask currentArmy) {
-            // Wait for child armies that are larger than us.
-            long strongerChildArmies = childArmies
-                    .stream()
+            // Wait for child armies.
+            long strongerChildArmies = childArmies.stream()
                     .filter(childArmy -> childArmy.getPower() > currentArmy.getPower())
+                    .filter(childArmy -> childArmy.getWaypoints().isPresent())
                     .count();
             if (timeSpentInRegion < strongerChildArmies * DELAY_TIME_IN_REGION) {
                 return false;

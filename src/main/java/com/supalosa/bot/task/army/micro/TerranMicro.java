@@ -9,7 +9,6 @@ import com.github.ocraft.s2client.protocol.unit.UnitOrder;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
-import com.supalosa.bot.task.army.AggressionState;
 import com.supalosa.bot.task.army.BaseArgs;
 import com.supalosa.bot.task.army.FightPerformance;
 import com.supalosa.bot.utils.Point2dMap;
@@ -65,7 +64,12 @@ public class TerranMicro {
         });
     }
 
-    private static final Set<UnitType> MAJOR_AOE_THREATS = Set.of(Units.TERRAN_SIEGE_TANK, Units.PROTOSS_COLOSSUS, Units.PROTOSS_DISRUPTOR_PHASED);
+    private static final Set<UnitType> MAJOR_AOE_THREATS = Set.of(
+            Units.TERRAN_SIEGE_TANK_SIEGED,
+            Units.PROTOSS_COLOSSUS,
+            Units.PROTOSS_DISRUPTOR_PHASED,
+            Units.PROTOSS_ARCHON
+            );
 
     public static void handleMarineMarauderMicro(Unit unit,
                                                  Optional<Point2d> goalPosition,
@@ -92,7 +96,7 @@ public class TerranMicro {
             Optional<Unit> bestTarget = enemyUnitMap
                     .getHighestScoreInRadius(unit.getPosition().toPoint2d(),range,
                             enemy -> canShootAir || enemy.getFlying().orElse(false),
-                            (enemy, distance) -> distance * (1f / Math.max(1f, enemy.getHealth().orElse(1f))));
+                            (enemy, distance) -> distance * valueWeight(enemy));
             bestTarget.ifPresentOrElse(bestTargetUnit -> {
                 if (!isAlreadyAttacking(bestTargetUnit.getTag(), currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, bestTargetUnit, false);
@@ -109,12 +113,16 @@ public class TerranMicro {
             // On weapon cooldown.
             Optional<Unit> aoeThreat = enemyUnitMap
                     .getNearestInRadius(unit.getPosition().toPoint2d(), 15f, enemy -> MAJOR_AOE_THREATS.contains(enemy.getType()));
-            Optional<Unit> nearestEnemyUnit = enemyUnitMap
-                    .getNearestInRadius(unit.getPosition().toPoint2d(), 10f);
-            Optional<Point2d> nearestEnemyUnitPosition = aoeThreat.or(() -> nearestEnemyUnit)
+            // Get the maximum range of the thing that could hit this unit.
+            Optional<Unit> longestRangeUnit = enemyUnitMap
+                    .getHighestScoreInRadius(unit.getPosition().toPoint2d(),
+                            10f,
+                            v -> true,
+                            (enemy, distance) -> Math.max(distance, args.agentWithData().gameData().getMaxUnitRange(enemy.getType()).orElse(1.5f)));
+            Optional<Point2d> nearestEnemyUnitPosition = aoeThreat.or(() -> longestRangeUnit)
                     .map(enemy -> enemy.getPosition().toPoint2d());
             // Clamp the stutter radius by the enemy's range.
-            Float nearestEnemyUnitRange = nearestEnemyUnit.flatMap(enemy -> args.agentWithData().gameData().getMaxUnitRange(enemy.getType())).orElse(1.5f);
+            Float nearestEnemyUnitRange = longestRangeUnit.flatMap(enemy -> args.agentWithData().gameData().getMaxUnitRange(enemy.getType())).orElse(1.5f);
             float finalStutterRadius = Math.min(Math.max(1.0f, nearestEnemyUnitRange), stutterRadius);
             // If the nearest enemy is within stutterRadius, walk away, otherwise walk towards it.
             // Bias towards the region we came from.
@@ -143,6 +151,22 @@ public class TerranMicro {
         }
     }
 
+
+    /**
+     * Scoring function for enemy value.
+     */
+    private static Double valueWeight(Unit enemy) {
+        double weight = 1f / Math.max(1f, enemy.getHealth().orElse(1f));
+        if (MAJOR_AOE_THREATS.contains(enemy.getType())) {
+            weight *= 2.0;
+            if (enemy.getHealth().orElse(0f) < enemy.getHealthMax().orElse(100f) * 0.2) {
+                // 20%, dive on it.
+                weight *= 2.0;
+            }
+        }
+        return weight;
+    }
+
     public static void handleVikingFighterMicro(Unit unit,
                                                 Optional<Point2d> goalPosition,
                                                 Optional<RegionData> goalRegion,
@@ -163,7 +187,7 @@ public class TerranMicro {
                         enemy -> Constants.ANTI_AIR_UNIT_TYPES.contains(enemy.getType()))
                 .map(enemy -> enemy.getPosition().toPoint2d());
         Optional<Unit> bestTarget = enemyUnitMap
-                .getHighestScoreInRadius(unit.getPosition().toPoint2d(),12f,
+                .getHighestScoreInRadius(unit.getPosition().toPoint2d(),16f,
                         enemy -> Constants.ANTIAIR_ATTACKABLE_UNIT_TYPES.contains(enemy.getType()),
                         (enemy, distance) -> distance);
         if (nearestEnemyUnit.isEmpty() && (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.01f)) {
@@ -271,14 +295,15 @@ public class TerranMicro {
 
     public static void handleLiberatorAgMicro(Unit unit,
                                               BaseArgs args, Point2dMap<Unit> enemyUnitMap) {
-        Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
         // TODO: figure out where the liberator is shooting and check for targets in that circle.
-        float liberatorRange = 5f;
+        float liberatorRange = 10f; // 5 cast + 5 radius
         if (args.agentWithData().observation().getUpgrades().contains(Upgrades.LIBERATOR_AG_RANGE_UPGRADE)) {
             liberatorRange += 3f;
         }
         Optional<Unit> closestGroundTarget = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(),liberatorRange + 2f, enemy -> enemy.getFlying().orElse(false) == false);
+                .getNearestInRadius(unit.getPosition().toPoint2d(),
+                        liberatorRange + 5f,
+                        enemy -> enemy.getFlying().orElse(false) == false);
         if (closestGroundTarget.isEmpty()) {
             // Morph liberator back to AA mode.
             args.agentWithData().actions().unitCommand(unit, Abilities.MORPH_LIBERATOR_AA_MODE, false);
@@ -347,9 +372,10 @@ public class TerranMicro {
                                           BaseArgs args,
                                           Point2dMap<Unit> enemyUnitMap) {
         Optional<UnitOrder> currentOrder = unit.getOrders().stream().findFirst();
-        // Medivacs move halfway between the centre of mass and the target location
+
+        // Medivacs boost to avoid units in range.
         Optional<Point2d> nearestEnemyUnit = enemyUnitMap
-                .getNearestInRadius(unit.getPosition().toPoint2d(), 10f)
+                .getNearestInRadius(unit.getPosition().toPoint2d(), 5f)
                 .map(enemy -> enemy.getPosition().toPoint2d());
         Optional<Point2d> retreatPosition = nearestEnemyUnit
                 .map(enemyPosition -> Utils.getBiasedRetreatPosition(
@@ -357,26 +383,28 @@ public class TerranMicro {
                         enemyPosition, args.nextRetreatRegion().map(RegionData::region).map(Region::centrePoint),
                         1.5f));
         Optional<Point2d> nextPositionSafe = getNextPositionSafe(goalPosition, goalRegion, nextRegion, unit, args);
-        nextPositionSafe.ifPresent(nextPosition -> {
-            double distance = nextPosition.distance(unit.getPosition().toPoint2d());
-            // if the medivac is far from the next position, move instead of attack-move.
-            if (distance < 8f && (unit.getWeaponCooldown().isEmpty() || unit.getWeaponCooldown().get() < 0.1f)) {
+
+        retreatPosition.ifPresentOrElse(position -> {
+            // Retreat and boost away.
+            if (!isAlreadyMovingTo(position, currentOrder)) {
+                args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, position, false);
+            }
+            if (args.agentWithData().gameData().unitHasAbility(unit.getTag(), Abilities.EFFECT_MEDIVAC_IGNITE_AFTERBURNERS)) {
+                args.agentWithData().actions().unitCommand(unit, Abilities.EFFECT_MEDIVAC_IGNITE_AFTERBURNERS, false);
+            }
+        }, () -> {
+            nextPositionSafe.ifPresent(nextPosition -> {
                 if (!isAlreadyAttackMovingTo(nextPosition, currentOrder)) {
                     args.agentWithData().actions().unitCommand(unit, Abilities.ATTACK, nextPosition, false);
                 }
-            } else {
-                final Point2d movePosition = retreatPosition.orElse(nextPosition);
-                if (!isAlreadyMovingTo(movePosition, currentOrder)) {
-                    args.agentWithData().actions().unitCommand(unit, Abilities.MOVE, movePosition, false);
-                }
-            }
+            });
         });
         double distanceToCentreOfMass = args.centreOfMass()
                 .map(centreOfMass -> centreOfMass.distance(unit.getPosition().toPoint2d()))
                 .orElse(0.0);
         // Boost if far away.
         if (args.agentWithData().gameData().unitHasAbility(unit.getTag(), Abilities.EFFECT_MEDIVAC_IGNITE_AFTERBURNERS) &&
-                distanceToCentreOfMass > 20f) {
+                distanceToCentreOfMass > 5f) {
             args.agentWithData().actions().unitCommand(unit, Abilities.EFFECT_MEDIVAC_IGNITE_AFTERBURNERS, false);
         }
 

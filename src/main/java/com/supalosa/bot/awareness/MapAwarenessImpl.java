@@ -473,6 +473,17 @@ public class MapAwarenessImpl implements MapAwareness {
                 Point point = Point.of(defenceRallyPoint.getX(), defenceRallyPoint.getY(), height);
                 agent.debug().debugTextOut(regionData.region().regionId() + " DefPoint", point, Color.PURPLE, 10);
             });
+            if (regionData.region().getBorderTiles().isPresent()) {
+                Set<Point2d> borderTiles = regionData.region().getBorderTiles().get();
+                for (Point2d borderTile : borderTiles) {
+                    float height = agent.observation().terrainHeight(borderTile);
+                    Point point = borderTile.toPoint2d(height);
+                    agent.debug().debugBoxOut(
+                            point.sub(-0.05f, -0.05f, 0.1f),
+                            point.sub(-0.95f, -0.95f, -0.1f),
+                            Color.of(192, 192, 192));
+                }
+            }
         });
         final long gameLoop = agent.observation().getGameLoop();
         this.expansionNextValidAt.forEach((expansion, time) -> {
