@@ -275,7 +275,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     }
 
     private void updateCurrentRegions(AgentWithData agentWithData) {
-        if (agentWithData.observation().getGameLoop() < enteredCurrentRegionAt + 5L) {
+        if (agentWithData.observation().getGameLoop() < enteredCurrentRegionAt + 22L) {
             return;
         }
         targetRegion = targetPosition.flatMap(position ->
@@ -292,7 +292,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         currentRegion = currentRegionData;
         if (currentRegion.isEmpty() && centreOfMass.isPresent()) {
             // Never let the current region be empty unless we have no units.
-            currentRegion = previousCurrentRegion;
+            //currentRegion = previousCurrentRegion;
+            currentRegion = Optional.of(agentWithData.mapAwareness().getNearestNormalRegion(centreOfMass.get()));
         }
 
         long timeSpentInRegion = agentWithData.observation().getGameLoop() - enteredCurrentRegionAt;
@@ -364,10 +365,26 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             double rmsSum = 0;
             rmsSum = allUnits.stream().mapToDouble(unit -> unit.getPosition().toPoint2d().distance(calculatedCentreOfMass)).sum();
             dispersion = Optional.of(Math.sqrt(rmsSum / allUnits.size()));
+            // Remove units outside the centre of mass.
+            Set<Unit> toRemove = new HashSet<>();
+            allUnits = allUnits.stream()
+                    .filter(unit -> {
+                        boolean inRange = unit.getPosition().toPoint2d().distance(calculatedCentreOfMass) < 30f;
+                        if (!inRange) {
+                            toRemove.add(unit);
+                            return false;
+                        }
+                        return true;
+                    })
+                    .collect(Collectors.toList());
+            if (!toRemove.isEmpty()) {
+                toRemove.forEach(unitToRemove -> agentWithData.taskManager().releaseUnit(unitToRemove.getTag(), this));
+            }
         } else {
             centreOfMass = Optional.empty();
             dispersion = Optional.empty();
         }
+
         // Determine which region to move to and retreat to next.
         if (targetRegionWaypoints.size() > 0) {
             nextRegion = targetRegionWaypoints.stream().findFirst().flatMap(region ->
@@ -598,9 +615,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     public FightPerformance predictFightAgainst(Army army) {
         double currentEnemyThreat = army.threat();
         double currentPower = threatCalculator.calculatePower(this.getCurrentCompositionCache(), this.upgrades);
-        if (currentPower > currentEnemyThreat * 1.5) {
+        if (currentPower > currentEnemyThreat * 1.25) {
             return FightPerformance.WINNING;
-        } else if (currentPower > currentEnemyThreat * 1.25) {
+        } else if (currentPower > currentEnemyThreat * 1.10) {
             return FightPerformance.STABLE;
         } else if (currentPower > currentEnemyThreat * 0.75) {
             return FightPerformance.SLIGHTLY_LOSING;

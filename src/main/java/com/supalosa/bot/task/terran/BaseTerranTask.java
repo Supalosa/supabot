@@ -707,6 +707,11 @@ public class BaseTerranTask implements BehaviourTask {
         }
         lastGasCheck = gameLoop;
         int minMineralWorkersPerCc = MINIMUM_MINERAL_WORKERS_PER_CC;
+        if (agentWithData.observation().getMinerals() > 750) {
+            minMineralWorkersPerCc *= 0.75;
+        } if (agentWithData.observation().getMinerals() > 1500) {
+            minMineralWorkersPerCc = 0;
+        }
         BuildUtils.reassignGasWorkers(agentWithData, minMineralWorkersPerCc, Integer.MAX_VALUE);
     }
 

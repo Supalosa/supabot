@@ -459,8 +459,10 @@ public class Analysis {
             Tile destinationTile = tiles.getRight();
             if (destinationTile.regionId != -1 && destinationTile.regionId != regionId) {
                 // Found a connection.
-                connectedRegions.put(destinationTile.regionId, regionId);
-                connectedRegions.put(regionId, destinationTile.regionId);
+                if (destinationTile.distanceToBorder != 0) {
+                    connectedRegions.put(destinationTile.regionId, regionId);
+                    connectedRegions.put(regionId, destinationTile.regionId);
+                }
                 allBorderTiles.put(originTile.regionId, originTile);
                 allBorderTiles.put(destinationTile.regionId, destinationTile);
             }
@@ -468,6 +470,7 @@ public class Analysis {
                 return;
             }
             if (destinationTile.distanceToBorder == 0) {
+                destinationTile.regionId = regionId;
                 return;
             }
             if (destinationTile.regionId == -1) {

@@ -225,8 +225,7 @@ public class FightManager {
 
             // Moderate the attack with checking if we could win a fight or not. If not, stay home and expand our territory.
             // Also expand our territory if there's nothing to attack.
-            if ((agentWithData.enemyAwareness().getPotentialEnemyArmy().isPresent() &&
-                    attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getPotentialEnemyArmy().get()) != FightPerformance.WINNING) ||
+            if (attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getOverallEnemyArmy()) != FightPerformance.WINNING ||
                     attackPosition.isEmpty()) {
                 if (attackPosition.isPresent()) {
                     //System.err.println("Aborted aggressive attack because we think we will badly lose.");

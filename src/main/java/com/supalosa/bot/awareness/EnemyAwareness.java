@@ -21,11 +21,6 @@ public interface EnemyAwareness {
     List<Army> getMaybeEnemyArmies(Point2d point2d, float inRange);
 
     /**
-     * Returns the entire potential of the enemy army, including units we've seen previously in the last 60 seconds.
-     */
-    Optional<Army> getPotentialEnemyArmy();
-
-    /**
      * Returns an army representing the units we can't see anymore.
      */
     Optional<Army> getMissingEnemyArmy();

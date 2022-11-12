@@ -106,4 +106,9 @@ public interface MapAwareness {
     Optional<Point2d> getDefenceLocation();
 
     Optional<RegionData> getMainBaseRegion();
+
+    /**
+     * Return the nearest normal region (one with connections) to the given point.
+     */
+    RegionData getNearestNormalRegion(Point2d point2d);
 }

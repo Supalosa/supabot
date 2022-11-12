@@ -513,4 +513,12 @@ public class MapAwarenessImpl implements MapAwareness {
     public Optional<RegionData> getMainBaseRegion() {
         return mainBaseRegion;
     }
+
+    @Override
+    public RegionData getNearestNormalRegion(Point2d point2d) {
+        return regionData.values().stream()
+                .filter(region -> region.region().connectedRegions().size() > 0)
+                .min(Comparator.comparing(region -> point2d.distance(region.region().centrePoint())))
+                .orElseThrow(() -> new IllegalStateException("No regions found near " + point2d));
+    }
 }

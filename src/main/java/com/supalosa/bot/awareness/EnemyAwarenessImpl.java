@@ -34,8 +34,6 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
 
     private long maybeEnemyArmyCalculatedAt = 0L;
     private Optional<ImmutableArmy> maybeLargestEnemyArmy = Optional.empty();
-    // The potential full size of the enemy army.
-    private Optional<Army> potentialEnemyArmy = Optional.empty();
     private Optional<Army> missingEnemyArmy = Optional.empty();
     private Army fullEnemyArmy = ImmutableArmy.builder().build();
 
@@ -175,11 +173,8 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                         .size(missingEnemyUnits.size())
                         .threat(threatCalculator.calculateThreat(unknownArmyComposition))
                         .build());
-                potentialEnemyArmy = Optional.of(this.maybeLargestEnemyArmy
-                        .map(army -> army.plus(missingEnemyArmy.get()))
-                        .orElse(missingEnemyArmy.get()));
             } else {
-                potentialEnemyArmy = this.maybeLargestEnemyArmy.map(Function.identity());
+                missingEnemyArmy = Optional.of(Army.empty());
             }
         }
     }
@@ -190,11 +185,6 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                 .filter(immutableArmy -> immutableArmy.position().isPresent())
                 .filter(immutableArmy -> point2d.distance(immutableArmy.position().get()) <= searchRadius)
                 .collect(Collectors.toList());
-    }
-
-    @Override
-    public Optional<Army> getPotentialEnemyArmy() {
-        return potentialEnemyArmy;
     }
 
     @Override

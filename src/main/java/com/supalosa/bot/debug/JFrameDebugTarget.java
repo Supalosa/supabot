@@ -119,11 +119,7 @@ public class JFrameDebugTarget implements DebugTarget {
                     reserved -> reserved.getValue() == 0 ? WHITE : RED,
                     (existingValue, newValue) -> newValue == RED ? newValue : existingValue);
         });
-        if (data.enemyAwareness().getPotentialEnemyArmy().isPresent()) {
-            baselineThreat = Math.max(100f, data.enemyAwareness().getPotentialEnemyArmy().get().threat());
-        } else {
-            baselineThreat = Math.max(100f, baselineThreat * 0.95);
-        }
+        baselineThreat = Math.max(100f, data.enemyAwareness().getOverallEnemyArmy().threat());
 
         data.mapAwareness().getAllRegionData().forEach(regionData -> {
             VisualisationUtils.renderTileSet(
@@ -246,23 +242,10 @@ public class JFrameDebugTarget implements DebugTarget {
         });
 
         JPanel armyPanel = new JPanel(new BorderLayout());
-        data.enemyAwareness().getPotentialEnemyArmy().ifPresent(potentialEnemyArmy -> {
-            Map<UnitType, Integer> composition = potentialEnemyArmy.composition();
-            StringBuilder stringBuilder = new StringBuilder("<html>BiggestArmyPotential: --------------<br />");
-            List<UnitType> keys = composition.keySet().stream()
-                    .sorted(Comparator.comparing(UnitType::toString))
-                    .collect(Collectors.toList());
-            keys.forEach(unitType -> {
-                stringBuilder.append(unitType + ": " + composition.get(unitType) + "<br />");
-            });
-            stringBuilder.append("</html>");
-            JLabel text = new JLabel(stringBuilder.toString());
-            armyPanel.add(text, BorderLayout.NORTH);
-        });
 
         Army enemyArmy = data.enemyAwareness().getOverallEnemyArmy();
         Map<UnitType, Integer> composition = enemyArmy.composition();
-        StringBuilder stringBuilder = new StringBuilder("<html>All Army Potential -----------<br />");
+        StringBuilder stringBuilder = new StringBuilder("<html>Known Army Units-----------<br />");
         List<UnitType> keys = composition.keySet().stream()
                 .sorted(Comparator.comparing(UnitType::toString))
                 .collect(Collectors.toList());

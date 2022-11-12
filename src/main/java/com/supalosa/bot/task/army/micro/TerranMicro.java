@@ -118,7 +118,8 @@ public class TerranMicro {
                     .getHighestScoreInRadius(unit.getPosition().toPoint2d(),
                             10f,
                             v -> true,
-                            (enemy, distance) -> Math.max(distance, args.agentWithData().gameData().getMaxUnitRange(enemy.getType()).orElse(1.5f)));
+                            (enemy, distance) ->
+                                    Math.max(distance, args.agentWithData().gameData().getMaxUnitRange(enemy.getType()).orElse(2.5f)));
             Optional<Point2d> nearestEnemyUnitPosition = aoeThreat.or(() -> longestRangeUnit)
                     .map(enemy -> enemy.getPosition().toPoint2d());
             // Clamp the stutter radius by the enemy's range.

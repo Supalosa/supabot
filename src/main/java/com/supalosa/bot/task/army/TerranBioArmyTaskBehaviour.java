@@ -169,15 +169,16 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                                             long timeSpentInRegion,
                                             DefaultArmyTask currentArmy) {
             // Wait for child armies.
-            long strongerChildArmies = childArmies.stream()
-                    .filter(childArmy -> childArmy.getPower() > currentArmy.getPower())
+            double childArmyPower = childArmies.stream()
                     .filter(childArmy -> childArmy.getWaypoints().isPresent())
-                    .count();
-            if (timeSpentInRegion < strongerChildArmies * DELAY_TIME_IN_REGION) {
+                    .reduce(0.0, (prevVal, army) -> prevVal + army.getPower(), (v1, v2) -> v1 + v2);
+            double currentPower = currentArmy.getPower();
+            long waitTime = (long) (DELAY_TIME_IN_REGION * childArmyPower / Math.max(1.0, currentPower));
+            if (timeSpentInRegion < waitTime) {
                 return false;
             }
             // max 30s attacking a base (prevent it from getting stuck)
-            return dispersion.orElse(0.0) <= 3.0 &&
+            return dispersion.orElse(0.0) <= 3.5 &&
                     (currentRegionData.hasEnemyBase() == false || timeSpentInRegion > 30 * 22L);
         }
     }
