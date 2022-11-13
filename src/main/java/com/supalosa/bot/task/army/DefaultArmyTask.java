@@ -8,6 +8,7 @@ import com.github.ocraft.s2client.protocol.data.Upgrade;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
@@ -97,6 +98,14 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private boolean shouldMoveFromRegion = true;
 
     private Set<Upgrade> upgrades = new HashSet<>();
+
+    private List<ArmyTaskListener> listeners = new ArrayList<>();
+
+    // Tracking of engagement events.
+    private boolean isEngaging = false;
+    private List<UnitInPool> engagementStartUnits = new ArrayList<>();
+    private double engagementStartPower = 0.0;
+    private long engagementEndingAt = 0L;
 
     public DefaultArmyTask(String armyName,
                            int basePriority,
@@ -383,11 +392,13 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         } else if (centreOfMass.isPresent()) {
             nextRetreatRegion = Optional.empty();
         }
+
         float enemyArmySearchRadius = 20f;
         List<Army> armyList = centreOfMass
                 .map(point2d -> agentWithData.enemyAwareness().getMaybeEnemyArmies(point2d, enemyArmySearchRadius))
                 .orElse(Collections.emptyList());
         Army virtualArmy = Army.toVirtualArmy(armyList);
+
         // Analyse our performance in the fight.
         currentFightPerformance = calculateFightPerformance(
                 agentWithData.observation().getGameLoop(),
@@ -396,6 +407,9 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 previousComposition,
                 this.getCurrentCompositionCache());
         FightPerformance predictedFightPerformance = this.predictFightAgainst(virtualArmy);
+
+        // Handle dispatching of events.
+        handleEngagementDispatch(agentWithData, virtualArmy, predictedFightPerformance);
 
         AggressionState newAggressionState = aggressionState;
         Optional<RegionData> maybeNextRegion = shouldMoveFromRegion ? nextRegion : Optional.empty();
@@ -436,6 +450,36 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         previousEnemyArmyObservation = Optional.of(virtualArmy);
         previousComposition = new HashMap<>(this.getCurrentCompositionCache());
         return aggressionState.getUpdateInterval();
+    }
+
+    private void handleEngagementDispatch(AgentWithData agentWithData, Army virtualArmy, FightPerformance predictedFightPerformance) {
+        if (isEngaging == false) {
+            if (virtualArmy.threat() > 0) {
+                isEngaging = true;
+                engagementStartUnits = this.getAssignedUnits().stream()
+                        .map(tag -> agentWithData.observation().getUnit(tag))
+                        .filter(tag -> tag != null)
+                        .collect(Collectors.toList());
+                engagementStartPower = this.getPower();
+                this.listeners.forEach(listener -> listener.onEngagementStarted(this, virtualArmy, predictedFightPerformance));
+            }
+        } else {
+            long gameLoop = agentWithData.observation().getGameLoop();
+            if (virtualArmy.threat() > 0) {
+                // If no threat in 10 seconds, the engagement is over.
+                engagementEndingAt = gameLoop + 224L;
+            } else if (gameLoop > engagementEndingAt) {
+                isEngaging = false;
+                double powerLost = this.getPower() - engagementStartPower;
+                Set<Tag> remainingUnits = new HashSet<>(this.getAssignedUnits());
+                List<UnitType> engagementUnitsLost = engagementStartUnits.stream()
+                        .filter(unit -> !remainingUnits.contains(unit.getTag()))
+                        .map(UnitInPool::unit)
+                        .map(Unit::getType)
+                        .collect(Collectors.toList());
+                this.listeners.forEach(listener -> listener.onEngagementEnded(this, powerLost, engagementUnitsLost));
+            }
+        }
     }
 
     private <T> AggressionState handleState(DefaultArmyTaskBehaviourStateHandler<T> handler,
@@ -638,6 +682,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     public void accept(TaskWithUnitsVisitor visitor) {
         visitor.visit(this);
         this.childArmies.forEach(visitor::visit);
+    }
+
+    public void addArmyListener(ArmyTaskListener listener) {
+        this.listeners.add(listener);
     }
 
     /**

@@ -69,4 +69,6 @@ public interface ArmyTask extends TaskWithUnits {
      * Return the name of the army (which is a proxy for its function)
      */
     String getArmyName();
+
+    void addArmyListener(ArmyTaskListener listener);
 }

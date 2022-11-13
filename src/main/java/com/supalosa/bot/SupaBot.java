@@ -61,7 +61,7 @@ public class SupaBot extends AgentWithData {
         this.isDebug = isDebug;
         ThreatCalculator threatCalculator = new TerranBioThreatCalculator();
         this.taskManager = new TaskManagerImpl();
-        this.fightManager = new FightManager(this);
+        this.fightManager = new TerranFightManagerImpl(this);
         this.mapAwareness = new MapAwarenessImpl(threatCalculator);
         this.enemyAwareness = new EnemyAwarenessImpl(threatCalculator);
         this.gameData = new GameData(observation());
