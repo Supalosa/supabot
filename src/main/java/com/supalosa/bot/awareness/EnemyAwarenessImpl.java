@@ -13,7 +13,6 @@ import com.github.ocraft.s2client.protocol.unit.DisplayType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansions;
@@ -28,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class EnemyAwarenessImpl implements EnemyAwareness {
@@ -52,11 +50,11 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
 
     private final ThreatCalculator threatCalculator;
 
-    private EnemyEconomyAwareness enemyEconomyAwareness;
+    private EnemyEconomyAwarenessImpl enemyEconomyAwareness;
 
     public EnemyAwarenessImpl(ThreatCalculator threatCalculator) {
         this.threatCalculator = threatCalculator;
-        this.enemyEconomyAwareness = new EnemyEconomyAwareness();
+        this.enemyEconomyAwareness = new EnemyEconomyAwarenessImpl();
     }
 
     @Override
@@ -239,5 +237,10 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
     @Override
     public Estimation estimatedEnemyBases() {
         return enemyEconomyAwareness.estimatedEnemyBases();
+    }
+
+    @Override
+    public Optional<RegionData> getLeastConfidentEnemyExpansion() {
+        return enemyEconomyAwareness.getLeastConfidentEnemyExpansion();
     }
 }

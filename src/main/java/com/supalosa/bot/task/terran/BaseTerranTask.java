@@ -545,7 +545,7 @@ public class BaseTerranTask implements BehaviourTask {
                     Units.TERRAN_COMMAND_CENTER,
                     Units.TERRAN_SCV,
                     1,
-                    Optional.of(validExpansionLocation.position().toPoint2d()), Optional.of(PlacementRules.expansion()))) {
+                    Optional.of(validExpansionLocation.position()), Optional.of(PlacementRules.expansion()))) {
                 agentWithData.mapAwareness().onExpansionAttempted(validExpansionLocation, gameLoop);
                 lastExpansionTime = gameLoop;
                 System.out.println("Attempting to build command centre at " + validExpansionLocation);

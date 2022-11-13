@@ -657,7 +657,7 @@ public class StructurePlacementCalculator {
             return Optional.empty();
         }
         for (Expansion validExpansionLocation : data.mapAwareness().getValidExpansionLocations().get()) {
-            Point2d candidate = validExpansionLocation.position().toPoint2d();
+            Point2d candidate = validExpansionLocation.position();
             if (canPlaceAtIgnoringStaticGrid(candidate, structureWidth, structureHeight)) {
                 return Optional.of(candidate);
             }

@@ -100,11 +100,6 @@ public interface MapAwareness {
 
     void setMapAnalysisResults(AnalysisResults mapAnalysis);
 
-    /**
-     * Returns the point that we should rally our units and defend from.
-     */
-    Optional<Point2d> getDefenceLocation();
-
     Optional<RegionData> getMainBaseRegion();
 
     /**

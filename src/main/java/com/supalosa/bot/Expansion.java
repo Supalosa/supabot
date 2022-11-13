@@ -9,7 +9,7 @@ import java.util.List;
 @Value.Immutable
 public interface Expansion {
 
-    Point position();
+    Point2d position();
     List<Point2d> resourcePositions();
 
     Float distanceToStart();

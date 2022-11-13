@@ -36,7 +36,7 @@ public class Expansions {
                         }
                     });
                     return ImmutableExpansion.builder()
-                            .position(point)
+                            .position(point.toPoint2d())
                             .distanceToStart(queryInterface.pathingDistance(startLocation, point.toPoint2d()))
                             .distanceToOpponent(queryInterface.pathingDistance(opponentLocation, point.toPoint2d()))
                             .resourcePositions(nearbyResourceLocations)

@@ -36,7 +36,9 @@ public class RegionDataCalculator {
             S2Agent agent,
             AnalysisResults analysisResults,
             Map<Integer, RegionData> previousRegionData,
-            List<Point2d> knownEnemyBases) {
+            List<Point2d> knownEnemyBases,
+            Map<Point2d, Long> scoutableLocationsToLastSeenTime,
+            Map<Integer, Long> regionCentrepointToLastSeenTime) {
         // Used for region power calculation.
         Set<Upgrade> upgrades = agent.observation().getUpgrades().stream().collect(Collectors.toSet());
         Map<Integer, RegionData> result = new HashMap<>();
@@ -75,6 +77,9 @@ public class RegionDataCalculator {
         Map<Integer, Double> regionToCreep = new HashMap<>();
         Map<Integer, Double> regionToDecayingVisibility = new HashMap<>();
         Map<Integer, Double> regionToPreviousDiffuseThreat = new HashMap<>();
+        Map<Integer, Long> regionToLastScoutedTime = getLastScoutedTimeForRegions(analysisResults,
+                scoutableLocationsToLastSeenTime,
+                regionCentrepointToLastSeenTime);
 
         for (Region region : analysisResults.getRegions()) {
             Optional<RegionData> previousData = Optional.ofNullable(previousRegionData.get(region.regionId()));
@@ -174,7 +179,8 @@ public class RegionDataCalculator {
                     .estimatedCreepPercentage(regionCreepPercentage)
                     .defenceRallyPoint(averageBorderTile)
                     .controlFactor(controlFactor)
-                    .cumulativeControl(cumulativeControl);
+                    .cumulativeControl(cumulativeControl)
+                    .lastScoutedAtGameLoop(regionToLastScoutedTime.getOrDefault(region.regionId(), 0L));
 
             result.put(region.regionId(), builder.build());
         });
@@ -202,7 +208,7 @@ public class RegionDataCalculator {
 
     /**
      * Return the average point of all the border tiles facing outwards.
-     * TODO: if this isn't dynamic anymore, it should be in the
+     * TODO: if this isn't dynamic anymore, it should be in the map analysis.
      */
     private Optional<Point2d> calculateAverageOfBorderTiles(Region region, Map<Integer, RegionData> previousRegionData) {
         Set<Point2d> relevantBorderTiles = new HashSet<>();
@@ -325,5 +331,26 @@ public class RegionDataCalculator {
             }
         }
         return visibleTiles / Math.max(1.0, sampledTiles);
+    }
+
+    /**
+     * Return the time that a region was last scouted.
+     * For a region with an expansion, it's the time that the expansion position was last seen.
+     * Otherwise, it's the time that the centre point was last seen.
+     */
+    private Map<Integer, Long> getLastScoutedTimeForRegions(AnalysisResults analysisResults,
+                                             Map<Point2d, Long> scoutableLocationsToLastSeenTime,
+                                             Map<Integer, Long> regionCentrepointToLastSeenTime) {
+        // Default to the region centrepoint.
+        Map<Integer, Long> result = new HashMap<>(regionCentrepointToLastSeenTime);
+        // For expansions, check which tile the expansion sits on, then reassign the region's 'last seen' value to
+        // the time the expansion was last seen.
+        for (Map.Entry<Point2d, Long> entry : scoutableLocationsToLastSeenTime.entrySet()) {
+            analysisResults.getTile(entry.getKey()).ifPresent(tile -> {
+                int regionId = tile.regionId;
+                result.put(regionId, entry.getValue());
+            });
+        }
+        return result;
     }
 }

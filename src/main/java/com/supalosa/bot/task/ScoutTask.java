@@ -12,6 +12,8 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
+import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.utils.UnitFilter;
@@ -55,7 +57,8 @@ public class ScoutTask implements Task {
             if (sleepCount > MAX_SLEEP_COUNT) {
                 isComplete = true;
             } else {
-                scoutTarget = agentWithData.mapAwareness().getNextScoutTarget();
+                // Scout for potential expansions.
+                scoutTarget = findNewScoutTarget(agentWithData);
             }
             return;
         }
@@ -64,7 +67,7 @@ public class ScoutTask implements Task {
             return;
         }
         if (agentWithData.observation().getVisibility(scoutTarget.get()) == Visibility.VISIBLE) {
-            scoutTarget = agentWithData.mapAwareness().getNextScoutTarget();
+            scoutTarget = findNewScoutTarget(agentWithData);
             sleepCount = 0;
             return;
         }
@@ -91,6 +94,13 @@ public class ScoutTask implements Task {
         if (scouters.size() > 0) {
             agentWithData.actions().unitCommand(scouters, Abilities.MOVE, scoutTarget.get(), false);
         }
+    }
+
+    private Optional<Point2d> findNewScoutTarget(AgentWithData agentWithData) {
+        return agentWithData.enemyAwareness().getLeastConfidentEnemyExpansion()
+                .map(RegionData::region)
+                .map(Region::centrePoint)
+                .or(() -> agentWithData.mapAwareness().getNextScoutTarget());
     }
 
     @Override

@@ -144,6 +144,13 @@ public abstract class RegionData {
     }
 
     /**
+     * Returns the game loop that this region was last scouted.
+     * For regions that support an expansion, this means we've seen its Expansion Point.
+     * For other regions, this means we've seen its Centre Point.
+     */
+    public abstract long lastScoutedAtGameLoop();
+
+    /**
      * Returns the RegionData of all regions that neighbour this one.
      *
      * @param mapAwareness Map awareness to query.

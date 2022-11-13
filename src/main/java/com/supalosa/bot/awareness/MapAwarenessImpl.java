@@ -34,15 +34,21 @@ public class MapAwarenessImpl implements MapAwareness {
     private Optional<RegionData> mainBaseRegion;
     private final List<Point2d> knownEnemyBases;
     private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
-    // A map of locations that should be scouted, and when they should be scouted next.
-    private final Map<Point2d, Long> scoutableLocationsToNextScoutTime = new HashMap<>();
+
+    // A map of locations that should be scouted, and when they were last seen.
+    private final Map<Point2d, Long> scoutableLocationsToLastSeenTime = new HashMap<>();
+
+    // A map of region IDs to when their centre-point was last seen.
+    private final Map<Integer, Long> regionCentrepointToLastSeenTime = new HashMap<>();
+
+    // A set of points that need to be scouted.
     private final Set<Point2d> scoutableLocations = new HashSet<>();
+
     private static final long RESCOUT_TIME = 180L * 22L;
     private final Map<Expansion, Long> expansionNextValidAt = new HashMap<>();
     private static final long EXPANSION_BACKOFF_TIME = (15 * 22L);
     LinkedHashSet<Expansion> validExpansionLocations = new LinkedHashSet<>();
     private Optional<List<Expansion>> expansionLocations = Optional.empty();
-    private Optional<Point2d> defenceLocation = Optional.empty();
 
     private long expansionsValidatedAt = 0L;
 
@@ -198,7 +204,12 @@ public class MapAwarenessImpl implements MapAwareness {
         if (data.mapAnalysis().isPresent() && gameLoop > regionDataCalculatedAt + 33L) {
             regionDataCalculatedAt = gameLoop;
             AnalysisResults analysisResults = data.mapAnalysis().get();
-            regionData = regionDataCalculator.calculateRegionData(agent, analysisResults, regionData, knownEnemyBases);
+            regionData = regionDataCalculator.calculateRegionData(agent,
+                    analysisResults,
+                    regionData,
+                    knownEnemyBases,
+                    scoutableLocationsToLastSeenTime,
+                    regionCentrepointToLastSeenTime);
 
             normalGraph = Optional.of(GraphUtils.createGraph(analysisResults, Region::connectedRegions, regionData,
                     (sourceRegion, destinationRegion) -> destinationRegion.weight()));
@@ -259,13 +270,6 @@ public class MapAwarenessImpl implements MapAwareness {
                                     data.gameData().getUnitMineralCost(structure.getType()).orElse(100));
                 });
             });
-            defenceLocation = regionToStructureValue.entrySet().stream()
-                    .sorted(
-                            Comparator.comparing((Map.Entry<Integer, Integer> entry) -> entry.getValue())
-                                    .reversed())
-                    .findFirst()
-                    .flatMap(mostValuableRegionId -> getRegionDataForId(mostValuableRegionId.getKey()))
-                    .flatMap(RegionData::getDefenceRallyPoint);
         }
     }
 
@@ -304,11 +308,11 @@ public class MapAwarenessImpl implements MapAwareness {
                     .alliance(Alliance.NEUTRAL)
                     .unitTypes(Constants.MINERAL_TYPES).build());
             for (Expansion expansion : this.expansionLocations.get()) {
-                if (!observationInterface.isPlacable(expansion.position().toPoint2d())) {
+                if (!observationInterface.isPlacable(expansion.position())) {
                     continue;
                 }
                 // Only expand if the region is not controlled by the enemy.
-                Optional<RegionData> region = getRegionDataForPoint(expansion.position().toPoint2d());
+                Optional<RegionData> region = getRegionDataForPoint(expansion.position());
                 if (region.isPresent() && region.get().isEnemyControlled()) {
                     continue;
                 }
@@ -321,7 +325,7 @@ public class MapAwarenessImpl implements MapAwareness {
                 }).sum();
                 //System.out.println("Expansion at " + expansion.position() + " has " + remainingMinerals + " remaining");
                 if (remainingMinerals > 0 &&
-                        queryInterface.placement(Abilities.BUILD_COMMAND_CENTER, expansion.position().toPoint2d())) {
+                        queryInterface.placement(Abilities.BUILD_COMMAND_CENTER, expansion.position())) {
                     if (gameLoop > expansionNextValidAt.getOrDefault(expansion, 0L)) {
                         this.validExpansionLocations.add(expansion);
                     }
@@ -334,12 +338,12 @@ public class MapAwarenessImpl implements MapAwareness {
                             UnitFilter.builder()
                                     .unitTypes(Constants.ALL_TOWN_HALL_TYPES)
                                     .alliance(Alliance.ENEMY)
-                                    .inRangeOf(expansion.position().toPoint2d())
+                                    .inRangeOf(expansion.position())
                                     .range(2.5f)
                                     .includeIncomplete(true)
                                     .build());
                     if (units.size() > 0) {
-                        knownEnemyBases.add(expansion.position().toPoint2d());
+                        knownEnemyBases.add(expansion.position());
                     }
                 });
             });
@@ -393,13 +397,12 @@ public class MapAwarenessImpl implements MapAwareness {
                 // Note: startRaw.getStartLocations() is actually potential `enemy` locations.
                 // If there's only one enemy location, the opponent is there.
                 Set<Point2d> enemyStartLocations = startRaw.getStartLocations();
-                if (scoutableLocationsToNextScoutTime.isEmpty()) {
+                if (scoutableLocationsToLastSeenTime.isEmpty()) {
                     enemyStartLocations.forEach(location ->
-                            scoutableLocationsToNextScoutTime.put(location, Long.MIN_VALUE));
+                            scoutableLocationsToLastSeenTime.put(location, Long.MIN_VALUE));
                 }
                 if (enemyStartLocations.size() == 1) {
                     knownEnemyStartLocation = enemyStartLocations.stream().findFirst();
-                    System.out.println("Pre-determined enemy location at " + knownEnemyStartLocation.get());
                 } else {
                     // Collect a list of all enemy structures and check if they are near a potential start location.
                     // If we find it, that's a valid start location.
@@ -418,7 +421,6 @@ public class MapAwarenessImpl implements MapAwareness {
                         Point2d position = enemyStructure.getPosition().toPoint2d();
                         for (Point2d enemyStartLocation : enemyStartLocations) {
                             if (position.distance(enemyStartLocation) < 10) {
-                                System.out.println("Scouted enemy location at " + enemyStartLocation);
                                 knownEnemyStartLocation = Optional.of(enemyStartLocation);
                                 return;
                             }
@@ -445,22 +447,30 @@ public class MapAwarenessImpl implements MapAwareness {
                     Expansions.calculateExpansionLocations(observationInterface, queryInterface, parameters)));
             if (expansionLocations.isPresent()) {
                 data.structurePlacementCalculator().ifPresent(spc -> spc.onExpansionsCalculated(expansionLocations.get()));
-                expansionLocations.get().stream().map(Expansion::position).forEach(point ->
-                        scoutableLocationsToNextScoutTime.put(point.toPoint2d(), 0L));
+                expansionLocations.get().stream().map(Expansion::position).forEach(position ->
+                        scoutableLocationsToLastSeenTime.put(position, 0L));
             }
         }
         long gameLoop = observationInterface.getGameLoop();
         scoutableLocations.clear();
-        scoutableLocationsToNextScoutTime.entrySet().forEach(entry -> {
+        scoutableLocationsToLastSeenTime.entrySet().forEach(entry -> {
             Point2d location = entry.getKey();
             long lastSeenTime = entry.getValue();
             Visibility visibility = observationInterface.getVisibility(location);
             if (visibility == Visibility.VISIBLE) {
                 lastSeenTime = gameLoop;
-                scoutableLocationsToNextScoutTime.put(location, gameLoop);
+                scoutableLocationsToLastSeenTime.put(location, gameLoop);
             }
             if (gameLoop > lastSeenTime + RESCOUT_TIME) {
                 scoutableLocations.add(location);
+            }
+        });
+
+        regionData.forEach((regionId, regionData) -> {
+            Point2d centrePoint = regionData.region().centrePoint();
+            Visibility visibility = observationInterface.getVisibility(centrePoint);
+            if (visibility == Visibility.VISIBLE) {
+                regionCentrepointToLastSeenTime.put(regionData.region().regionId(), gameLoop);
             }
         });
     }
@@ -489,7 +499,8 @@ public class MapAwarenessImpl implements MapAwareness {
         this.expansionNextValidAt.forEach((expansion, time) -> {
             long loopsLeft = (time - gameLoop);
             if (loopsLeft > 0) {
-                agent.debug().debugTextOut("Ignoring: " + loopsLeft, expansion.position(), Color.RED, 10);
+                float height = agent.observation().terrainHeight(expansion.position());
+                agent.debug().debugTextOut("Blocked: " + loopsLeft, expansion.position().toPoint2d(height), Color.RED, 10);
             }
         });
     }
@@ -502,11 +513,6 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public void setMapAnalysisResults(AnalysisResults analysis) {
         this.mapAnalysisResults = Optional.of(analysis);
-    }
-
-    @Override
-    public Optional<Point2d> getDefenceLocation() {
-        return defenceLocation;
     }
 
     @Override

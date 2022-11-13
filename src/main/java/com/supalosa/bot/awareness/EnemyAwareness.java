@@ -10,7 +10,7 @@ import com.supalosa.bot.AgentWithData;
 import java.util.List;
 import java.util.Optional;
 
-public interface EnemyAwareness {
+public interface EnemyAwareness extends EnemyEconomyAwareness {
 
     void onStep(AgentWithData agentWithData);
 
@@ -34,14 +34,4 @@ public interface EnemyAwareness {
     void debug(S2Agent agent);
 
     void onUnitDestroyed(UnitInPool unit);
-
-    /**
-     * Returns the estimated enemy mineral income per minute.
-     */
-    Estimation estimatedEnemyMineralIncome();
-
-    /**
-     * Returns the estimated number of enemy bases.
-     */
-    Estimation estimatedEnemyBases();
 }
