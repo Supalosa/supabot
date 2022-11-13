@@ -5,6 +5,7 @@ import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.utils.Point2dMap;
 import org.immutables.value.Value;
 
 import java.util.List;
@@ -101,4 +102,7 @@ public interface BaseArgs {
      */
     @Value.Parameter
     Optional<RegionData> retreatRegion();
+
+    @Value.Parameter
+    Point2dMap<Unit> enemyUnitMap();
 }

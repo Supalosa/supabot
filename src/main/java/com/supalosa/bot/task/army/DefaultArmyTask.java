@@ -365,21 +365,6 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
             double rmsSum = 0;
             rmsSum = allUnits.stream().mapToDouble(unit -> unit.getPosition().toPoint2d().distance(calculatedCentreOfMass)).sum();
             dispersion = Optional.of(Math.sqrt(rmsSum / allUnits.size()));
-            // Remove units outside the centre of mass.
-            Set<Unit> toRemove = new HashSet<>();
-            allUnits = allUnits.stream()
-                    .filter(unit -> {
-                        boolean inRange = unit.getPosition().toPoint2d().distance(calculatedCentreOfMass) < 30f;
-                        if (!inRange) {
-                            toRemove.add(unit);
-                            return false;
-                        }
-                        return true;
-                    })
-                    .collect(Collectors.toList());
-            if (!toRemove.isEmpty()) {
-                toRemove.forEach(unitToRemove -> agentWithData.taskManager().releaseUnit(unitToRemove.getTag(), this));
-            }
         } else {
             centreOfMass = Optional.empty();
             dispersion = Optional.empty();
@@ -428,7 +413,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 nextRetreatRegion,
                 maybeNextRegion,
                 targetRegion,
-                retreatRegion);
+                retreatRegion,
+                agentWithData.gameData().enemyArmyUnitMap());
         if (aggressionState == AggressionState.ATTACKING) {
             newAggressionState = handleState(behaviour.getAttackHandler(), allUnits, baseArgs);
         } else if (aggressionState == AggressionState.RETREATING) {
@@ -496,26 +482,12 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         cumulativeThreatAndPowerCalculatedAt = gameLoop;
         double relativeDelta = cumulativePowerDelta - cumulativeThreatDelta;
         if (currentPower > currentEnemyThreat && relativeDelta > 0) {
-            if (currentFightPerformance != FightPerformance.WINNING) {
-                // System.out.println(armyName + " is Winning [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
-            }
             return FightPerformance.WINNING;
         } else if (currentEnemyThreat > currentPower && relativeDelta < -(currentPower)) {
-            if (currentFightPerformance != FightPerformance.BADLY_LOSING) {
-                // System.out.println(armyName + " is Badly Losing [ourDelta: " + cumulativePowerDelta + ", theirDelta: "
-                //        + cumulativeThreatDelta + "]");
-            }
             return FightPerformance.BADLY_LOSING;
         } else if (currentEnemyThreat > currentPower && relativeDelta < 0) {
-            if (currentFightPerformance != FightPerformance.BADLY_LOSING) {
-                // System.out.println(armyName + " is Slightly Losing [ourDelta: " + cumulativePowerDelta + ", " +
-                //        "theirDelta: " + cumulativeThreatDelta + "]");
-            }
             return FightPerformance.SLIGHTLY_LOSING;
         } else {
-            if (currentFightPerformance != FightPerformance.STABLE) {
-                // System.out.println(armyName + " is Stable [ourDelta: " + cumulativePowerDelta + ", theirDelta: " + cumulativeThreatDelta + "]");
-            }
             return FightPerformance.STABLE;
         }
     }

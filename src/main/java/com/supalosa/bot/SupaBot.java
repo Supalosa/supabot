@@ -115,7 +115,7 @@ public class SupaBot extends AgentWithData {
         mapAwareness.onStep(this, this);
         enemyAwareness.onStep(this);
         structurePlacementCalculator.ifPresent(spc -> spc.onStep(this, this));
-        gameData.onStep(observation(), query());
+        gameData.onStep(this);
         taskManager.onStep(this);
         fightManager.onStep(taskManager, this);
 

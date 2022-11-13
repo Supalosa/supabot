@@ -3,11 +3,11 @@ package com.supalosa.bot.awareness;
 import org.immutables.value.Value;
 
 @Value.Immutable
-public interface Estimation {
+public abstract class Estimation {
 
-    int estimation();
+    public abstract int estimation();
 
-    EstimationConfidence confidence();
+    public abstract EstimationConfidence confidence();
 
     static Estimation none() {
         return ImmutableEstimation.builder()
@@ -28,5 +28,10 @@ public interface Estimation {
                 .estimation(value)
                 .confidence(EstimationConfidence.HIGH)
                 .build();
+    }
+
+    @Override
+    public String toString() {
+        return estimation() + " (" + confidence() + ")";
     }
 }

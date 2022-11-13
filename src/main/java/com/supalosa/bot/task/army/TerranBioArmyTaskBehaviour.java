@@ -35,12 +35,10 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
 
     @Value.Immutable
     interface AttackContext extends StimContext {
-        Point2dMap<Unit> enemyUnitMap();
     }
 
     @Value.Immutable
     interface DisengagingContext extends StimContext {
-        Point2dMap<Unit> enemyUnitMap();
     }
 
     @Value.Immutable
@@ -111,7 +109,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                     .filter(unit -> unit.getBuffs().contains(Buffs.STIMPACK) || unit.getBuffs().contains(Buffs.STIMPACK_MARAUDER))
                     .count();
             long maxUnitsToStim = (long)args.enemyVirtualArmy().threat();
-            Point2dMap<Unit> enemyUnitMap = constructEnemyUnitMap(args);
+            Point2dMap<Unit> enemyUnitMap = args.enemyUnitMap();
 
             // Request if creep is nearby and there's no base.
             args.centreOfMass().ifPresent(centreOfMass -> {
@@ -131,13 +129,12 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
                     .currentUnitsStimmed(currentsUnitsStimmed)
                     .maxUnitsToStim(maxUnitsToStim)
                     .remainingUnitsToStim(new AtomicLong(Math.max(0L, maxUnitsToStim - currentsUnitsStimmed)))
-                    .enemyUnitMap(enemyUnitMap)
                     .build();
         }
 
         @Override
         public AttackContext onArmyUnitStep(AttackContext context, Unit unit, BaseArgs args) {
-            Point2dMap<Unit> enemyUnitMap = context.enemyUnitMap();
+            Point2dMap<Unit> enemyUnitMap = args.enemyUnitMap();
             Optional<Point2d> goalPosition = args.targetPosition();
             Optional<RegionData> goalRegion = args.targetRegion();
             Optional<RegionData> nextRegion = args.nextRegion();
@@ -183,17 +180,6 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         }
     }
 
-    private static Point2dMap<Unit> constructEnemyUnitMap(BaseArgs args) {
-        Point2dMap<Unit> enemyUnitMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
-        args.enemyVirtualArmy().unitTags().forEach(tag -> {
-           UnitInPool maybeEnemyUnit = args.agentWithData().observation().getUnit(tag);
-           if (maybeEnemyUnit != null && maybeEnemyUnit.unit().getDisplayType() == DisplayType.VISIBLE) {
-               enemyUnitMap.insert(maybeEnemyUnit.unit());
-           }
-       });
-        return enemyUnitMap;
-    }
-
     private static List<TaskPromise> requestScannerSweep(DefaultArmyTask task, AgentData data, Point2d scanPosition, long scanRequiredBefore) {
         return data.taskManager().dispatchMessage(task,
                 ImmutableScanRequestTaskMessage.builder()
@@ -211,7 +197,6 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
         @Override
         public DisengagingContext onArmyStep(BaseArgs args) {
             return ImmutableDisengagingContext.builder()
-                    .enemyUnitMap(constructEnemyUnitMap(args))
                     .currentUnitsStimmed(0)
                     .maxUnitsToStim(0)
                     .remainingUnitsToStim(new AtomicLong(0L))
@@ -220,7 +205,7 @@ public class TerranBioArmyTaskBehaviour extends BaseDefaultArmyTaskBehaviour<
 
         @Override
         public DisengagingContext onArmyUnitStep(DisengagingContext context, Unit unit, BaseArgs args) {
-            Point2dMap<Unit> enemyUnitMap = context.enemyUnitMap();
+            Point2dMap<Unit> enemyUnitMap = args.enemyUnitMap();
             Optional<Point2d> goalPosition = args.retreatPosition();
             Optional<RegionData> goalRegion = args.retreatRegion();
             Optional<RegionData> nextRegion = args.nextRetreatRegion();

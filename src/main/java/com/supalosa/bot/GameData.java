@@ -2,15 +2,17 @@ package com.supalosa.bot;
 
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.QueryInterface;
+import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.data.*;
 import com.github.ocraft.s2client.protocol.observation.AvailableAbility;
 import com.github.ocraft.s2client.protocol.query.AvailableAbilities;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
+import com.github.ocraft.s2client.protocol.unit.DisplayType;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.Tag;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
+import com.supalosa.bot.utils.Point2dMap;
+import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.*;
 import java.util.function.Function;
@@ -23,12 +25,18 @@ import java.util.stream.Collectors;
 public class GameData {
 
     private final ObservationInterface observationInterface;
+
+    // Data Caches
     private Map<UnitType, UnitTypeData> typeData = null;
     private Map<Ability, AbilityData> abilityData = null;
     private final Map<Ability, UnitType> abilityToUnitType = new HashMap<>();
     private Map<UnitType, Boolean> structureTypes = new HashMap<>();
-    private Map<Tag, Set<Ability>> availableAbilities;
     private Map<UnitType, Optional<Float>> unitMaxRange = new HashMap<>();
+
+    // Frame caches
+    private Map<Tag, Set<Ability>> availableAbilities = new HashMap<>();
+    private Point2dMap<Unit> enemyArmyUnitMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
+    private Point2dMap<Unit> enemyStructureMap = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
 
     public GameData(ObservationInterface observationInterface) {
         this.observationInterface = observationInterface;
@@ -176,18 +184,6 @@ public class GameData {
         return Optional.ofNullable(getOrInitUnitTypeData().get(type)).flatMap(unitTypeData -> unitTypeData.getCargoSize());
     }
 
-    public void onStep(ObservationInterface observationInterface, QueryInterface queryInterface) {
-        List<Unit> myUnits = observationInterface.getUnits(Alliance.SELF).stream().map(unitInPool -> unitInPool.unit()).collect(Collectors.toList());
-        List<AvailableAbilities> available = queryInterface.getAbilitiesForUnits(myUnits, false);
-
-        availableAbilities = available.stream().collect(
-                Collectors.toMap(
-                        AvailableAbilities::getUnitTag,
-                        abilities ->
-                                abilities.getAbilities().stream().map(AvailableAbility::getAbility).collect(Collectors.toSet()))
-        );
-    }
-
     /**
      * Return all abilities available to this unit.
      */
@@ -218,5 +214,57 @@ public class GameData {
             unitMaxRange.put(unitType, range);
             return range;
         }
+    }
+
+    /**
+     * Returns a spatial index of all enemy army units (non-snapshot only).
+     */
+    public Point2dMap<Unit> enemyArmyUnitMap() {
+        return enemyArmyUnitMap;
+    }
+
+    /**
+     * Returns a spatial index of all enemy structures (non-snapshot only).
+     */
+    public Point2dMap<Unit> getEnemyStructureMap() {
+        return enemyStructureMap;
+    }
+
+    public void onStep(AgentWithData agentWithData) {
+        ObservationInterface observationInterface = agentWithData.observation();
+        QueryInterface queryInterface = agentWithData.query();
+        List<Unit> myUnits = observationInterface.getUnits(Alliance.SELF).stream().map(unitInPool ->
+                unitInPool.unit()).collect(Collectors.toList());
+        List<AvailableAbilities> available = queryInterface.getAbilitiesForUnits(myUnits, false);
+
+        availableAbilities = available.stream().collect(
+                Collectors.toMap(
+                        AvailableAbilities::getUnitTag,
+                        abilities ->
+                                abilities.getAbilities().stream().map(AvailableAbility::getAbility).collect(Collectors.toSet()))
+        );
+
+        List<UnitInPool> enemyUnits = observationInterface.getUnits(
+                UnitFilter.builder().alliance(Alliance.ENEMY).build());
+
+        enemyArmyUnitMap = constructSpatialIndex(enemyUnits.stream()
+                .filter(unitInPool -> Constants.ARMY_UNIT_TYPES.contains(unitInPool.unit().getType()))
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList()));
+        enemyStructureMap = constructSpatialIndex(enemyUnits.stream()
+                .filter(unitInPool -> this.isStructure(unitInPool.unit().getType()))
+                .map(UnitInPool::unit)
+                .collect(Collectors.toList()));
+    }
+
+
+    private static Point2dMap<Unit> constructSpatialIndex(List<Unit> enemyArmyUnits) {
+        Point2dMap<Unit> result = new Point2dMap<>(unit -> unit.getPosition().toPoint2d());
+        enemyArmyUnits.forEach(unit -> {
+            if (unit.getDisplayType() == DisplayType.VISIBLE) {
+                result.insert(unit);
+            }
+        });
+        return result;
     }
 }
