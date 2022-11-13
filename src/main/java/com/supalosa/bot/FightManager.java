@@ -20,6 +20,7 @@ import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.mission.DefenceTask;
 import com.supalosa.bot.task.mission.DummyAttackTask;
+import org.jfree.chart.date.SpreadsheetDate;
 
 import java.util.*;
 import java.util.List;
@@ -225,7 +226,15 @@ public class FightManager {
 
             // Moderate the attack with checking if we could win a fight or not. If not, stay home and expand our territory.
             // Also expand our territory if there's nothing to attack.
-            if (attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getOverallEnemyArmy()) != FightPerformance.WINNING ||
+            FightPerformance predictedFightPerformance = attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getOverallEnemyArmy());
+            boolean shouldCancelAttack = false;
+            if (agentWithData.enemyAwareness().isMyEconomyStronger()) {
+                // If we have a stronger economy, we're more willing to take stable fights.
+                shouldCancelAttack = predictedFightPerformance != FightPerformance.WINNING && predictedFightPerformance != FightPerformance.STABLE;
+            } else {
+                shouldCancelAttack = predictedFightPerformance != FightPerformance.WINNING;
+            }
+            if (shouldCancelAttack ||
                     attackPosition.isEmpty()) {
                 if (attackPosition.isPresent()) {
                     //System.err.println("Aborted aggressive attack because we think we will badly lose.");
@@ -235,9 +244,6 @@ public class FightManager {
                 attackPosition = uncontrolledBorderRegion
                         .map(RegionData::region)
                         .map(Region::centrePoint);
-                /*if (attackPosition.isPresent()) {
-                    System.out.println("Switched to expansion mode and found uncontrolled region: " + uncontrolledBorderRegion);
-                }*/
             }
         }
         // Harass the base with the least diffuse threat, as long as the diffuse threat is less half our attacking

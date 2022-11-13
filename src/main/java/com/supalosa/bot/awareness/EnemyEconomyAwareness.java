@@ -18,4 +18,9 @@ public interface EnemyEconomyAwareness {
      * Returns the potential expansion that we have the least confidence on.
      */
     Optional<RegionData> getLeastConfidentEnemyExpansion();
+
+    /**
+     * Returns true if we think our economy is stronger than the enemies'.
+     */
+    boolean isMyEconomyStronger();
 }

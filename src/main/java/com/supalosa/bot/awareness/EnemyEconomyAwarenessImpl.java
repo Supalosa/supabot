@@ -51,11 +51,14 @@ public class EnemyEconomyAwarenessImpl implements EnemyEconomyAwareness {
     private Set<Expansion> enemyExpansions = new HashSet<>();
     private Optional<RegionData> leastConfidentEnemyExpansion = Optional.empty();
 
+    private int playerMineralIncome = 0;
+
     public void onStep(AgentWithData agentWithData) {
         final long gameLoop = agentWithData.observation().getGameLoop();
 
         if (gameLoop > estimationsUpdatedAt + ESTIMATION_UPDATE_INTERVAL) {
             estimationsUpdatedAt = gameLoop;
+            playerMineralIncome = (int)agentWithData.observation().getScore().getDetails().getCollectionRateMinerals();
             numObservedEnemyBasesComplete = agentWithData.observation()
                     .getUnits(UnitFilter.builder().unitTypes(Constants.ALL_TOWN_HALL_TYPES).alliance(Alliance.ENEMY).build())
                     .size();
@@ -148,6 +151,19 @@ public class EnemyEconomyAwarenessImpl implements EnemyEconomyAwareness {
         return this.leastConfidentEnemyExpansion;
     }
 
+    @Override
+    public boolean isMyEconomyStronger() {
+        switch (this.estimatedEnemyMineralIncome.confidence()) {
+            case HIGH:
+                return playerMineralIncome > this.estimatedEnemyMineralIncome.estimation() * 1.1;
+            case LOW:
+                return playerMineralIncome > this.estimatedEnemyMineralIncome.estimation() * 1.5;
+            case NONE:
+            default:
+                return false;
+        }
+    }
+
     /**
      * Calculate the confidence that we've actually seen the enemy's expansions.
      * Also update some metadata around the enemy's expansions.
@@ -219,6 +235,6 @@ public class EnemyEconomyAwarenessImpl implements EnemyEconomyAwareness {
         yPosition += (spacing);
         agent.debug().debugTextOut("Their Income: " + this.estimatedEnemyMineralIncome, Point2d.of(xPosition, yPosition), Color.WHITE, 8);
         yPosition += (spacing);
-        agent.debug().debugTextOut("Our Income: " + agent.observation().getScore().getDetails().getCollectionRateMinerals(), Point2d.of(xPosition, yPosition), Color.WHITE, 8);
+        agent.debug().debugTextOut("Our Income: " + this.playerMineralIncome, Point2d.of(xPosition, yPosition), Color.WHITE, 8);
     }
 }

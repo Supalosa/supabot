@@ -236,4 +236,9 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
     public Optional<RegionData> getLeastConfidentEnemyExpansion() {
         return enemyEconomyAwareness.getLeastConfidentEnemyExpansion();
     }
+
+    @Override
+    public boolean isMyEconomyStronger() {
+        return enemyEconomyAwareness.isMyEconomyStronger();
+    }
 }
