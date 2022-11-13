@@ -11,11 +11,13 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
+import com.supalosa.bot.task.terran.ImmutableScanRequestTaskMessage;
 import com.supalosa.bot.utils.UnitFilter;
 
 import java.util.List;
@@ -63,6 +65,10 @@ public class ScoutTask implements Task {
             return;
         }
         if (usedScouters > maxScouters) {
+            // Too many scouters used, request a scan within 30 seconds and abort.
+            scoutTarget.ifPresent(target -> {
+                this.requestScannerSweep(agentWithData, target, gameLoop + 22L * 30);
+            });
             isComplete = true;
             return;
         }
@@ -148,5 +154,13 @@ public class ScoutTask implements Task {
     @Override
     public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
         return Optional.empty();
+    }
+
+    private List<TaskPromise> requestScannerSweep(AgentData data, Point2d scanPosition, long scanRequiredBefore) {
+        return data.taskManager().dispatchMessage(this,
+                ImmutableScanRequestTaskMessage.builder()
+                        .point2d(scanPosition)
+                        .requiredBefore(scanRequiredBefore)
+                        .build());
     }
 }

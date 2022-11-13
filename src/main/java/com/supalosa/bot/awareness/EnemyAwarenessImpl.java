@@ -140,13 +140,6 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
             previousKnownEnemyUnits.forEach(previousKnownEnemyUnit -> {
                 if (!seenTags.contains(previousKnownEnemyUnit.getTag())) {
                     missingEnemyUnits.add(previousKnownEnemyUnit);
-                    /*if (missingEnemyUnits.add(previousKnownEnemyUnit)) {
-                        System.out.println("A " + previousKnownEnemyUnit.unit().getType() + " is missing.");
-                    }*/
-                } else {
-                    /*if (missingEnemyUnits.contains(previousKnownEnemyUnit)) {
-                        System.out.println("We found a " + previousKnownEnemyUnit.unit().getType() + " that went missing.");
-                    }*/
                 }
             });
             destroyedUnits.forEach(unitInPool -> {
