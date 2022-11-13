@@ -220,7 +220,6 @@ public class Analysis {
         // Construct ramp data objects.
         Map<Integer, Ramp> mapOfRamps = new HashMap<>();
         rampMaxHeights.forEach((rampId, rampMaxHeight) -> {
-            // TODO optimise this
             Set<Point2d> rampPoints = rampLocations
                     .stream()
                     .filter(ramp -> rampToRampId.get(ramp) == rampId)
@@ -237,7 +236,6 @@ public class Analysis {
                     topOfRampPoints,
                     Ramp.calculateDirection(rampPoints, topOfRampPoints),
                     (int)((rampMaxHeight + rampMinHeight) / 2.0));
-            //System.out.println("Ramp " + rampId + " is facing " + ramp.getRampDirection().name() + " and midheight " + ramp.getRampMidHeight());
             mapOfRamps.put(rampId, ramp);
         });
 

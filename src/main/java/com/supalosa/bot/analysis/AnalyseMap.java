@@ -39,8 +39,6 @@ public class AnalyseMap {
         Grid terrain = new BitmapGrid(terrainBmp);
         Grid pathing = new BitmapGrid(pathingBmp);
         Grid placement = new BitmapGrid(placementBmp);
-        // TODO make this a dynamic point on the map (just has to be somewhere that is pathable)
-
         Point2d start = findAnyPathable(pathing);
 
         long startTime = System.currentTimeMillis();

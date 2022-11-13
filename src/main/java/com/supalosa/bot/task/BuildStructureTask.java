@@ -119,6 +119,8 @@ public class BuildStructureTask extends BaseTask {
                 if (assignedWorker.isPresent() && actionError.getUnitTag().equals(assignedWorker)) {
                     System.out.println("Assigned builder had an action error: " + actionError.getActionResult());
                     if (actionError.getActionResult() == ActionResult.COULDNT_REACH_TARGET) {
+                        ++buildAttempts;
+                        bannedWorkers.add(assignedWorker.get());
                         assignedWorker = Optional.empty();
                         return;
                     }
@@ -197,14 +199,16 @@ public class BuildStructureTask extends BaseTask {
         }
 
         if (buildAttempts > MAX_BUILD_ATTEMPTS) {
-            agentWithData.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
-            System.out.println("Build task of " + targetUnitType + " failed");
+            System.out.println("Build task of " + targetUnitType + " failed, attempting cancellation.");
             // Cancel the construction if applicable.
             matchingUnitAtLocation.ifPresent(tag -> {
                 agentWithData.actions().unitCommand(tag, Abilities.CANCEL, false);
             });
-            isComplete = true;
-            onFailure();
+            if (matchingUnitAtLocation.isEmpty()) {
+                agentWithData.actions().sendChat("Failed: " + getDebugText(), ActionChat.Channel.TEAM);
+                isComplete = true;
+                onFailure();
+            }
             return;
         }
         if (worker.isPresent() &&

@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TerranMicro {
 
     // Used to filter out duplicate move commands.
-    // TODO change this to 'tokens' or something
+    // TODO rather than having units submit actions, perhaps we should implement 'commands' (attack position,
+    //  attack-move unit, move position, use ability on unit, use ability on position). This will allow grouping of
+    // commands.
     private static boolean isAlreadyMovingTo(Point2d position, Optional<UnitOrder> order) {
         return isAlreadyUsingAbilityAt(Abilities.MOVE, position, order);
     }

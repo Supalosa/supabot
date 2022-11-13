@@ -5,13 +5,14 @@ import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface EnemyAwareness {
 
-    void onStep(ObservationInterface observationInterface, AgentData data);
+    void onStep(AgentWithData agentWithData);
 
     /**
      * Returns the potential location and composition of the enemy army nearest to a given position.
@@ -33,4 +34,14 @@ public interface EnemyAwareness {
     void debug(S2Agent agent);
 
     void onUnitDestroyed(UnitInPool unit);
+
+    /**
+     * Returns the estimated enemy mineral income per minute.
+     */
+    Estimation estimatedEnemyMineralIncome();
+
+    /**
+     * Returns the estimated number of enemy bases.
+     */
+    Estimation estimatedEnemyBases();
 }

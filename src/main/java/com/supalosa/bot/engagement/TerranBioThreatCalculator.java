@@ -66,7 +66,6 @@ public class TerranBioThreatCalculator implements ThreatCalculator {
             if (unitType instanceof Units) {
                 switch ((Units)unitType) {
                     case TERRAN_SIEGE_TANK_SIEGED:
-                        return amount * 33.0;
                     case ZERG_LURKER_MP_BURROWED:
                         return amount * 25.0;
                     case ZERG_ULTRALISK:

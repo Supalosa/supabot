@@ -14,6 +14,7 @@ import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.supalosa.bot.AgentData;
+import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansions;
 import com.supalosa.bot.engagement.ThreatCalculator;
@@ -51,12 +52,16 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
 
     private final ThreatCalculator threatCalculator;
 
+    private EnemyEconomyAwareness enemyEconomyAwareness;
+
     public EnemyAwarenessImpl(ThreatCalculator threatCalculator) {
         this.threatCalculator = threatCalculator;
+        this.enemyEconomyAwareness = new EnemyEconomyAwareness();
     }
 
     @Override
-    public void onStep(ObservationInterface observationInterface, AgentData data) {
+    public void onStep(AgentWithData agentWithData) {
+        ObservationInterface observationInterface = agentWithData.observation();
         final long gameLoop = observationInterface.getGameLoop();
         if (gameLoop > maybeEnemyArmyCalculatedAt + 22L) {
             maybeEnemyArmyCalculatedAt = observationInterface.getGameLoop();
@@ -177,6 +182,7 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                 missingEnemyArmy = Optional.of(Army.empty());
             }
         }
+        enemyEconomyAwareness.onStep(agentWithData);
     }
 
     @Override
@@ -217,10 +223,21 @@ public class EnemyAwarenessImpl implements EnemyAwareness {
                 }
             });
         });
+        enemyEconomyAwareness.debug(agent);
     }
 
     @Override
     public void onUnitDestroyed(UnitInPool unit) {
         this.destroyedUnits.add(unit);
+    }
+
+    @Override
+    public Estimation estimatedEnemyMineralIncome() {
+        return enemyEconomyAwareness.estimatedEnemyMineralIncome();
+    }
+
+    @Override
+    public Estimation estimatedEnemyBases() {
+        return enemyEconomyAwareness.estimatedEnemyBases();
     }
 }
