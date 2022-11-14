@@ -32,6 +32,7 @@ import com.supalosa.bot.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.function.Supplier;
 
 public class SupaBot extends AgentWithData {
 
@@ -51,7 +52,7 @@ public class SupaBot extends AgentWithData {
     private long resetActionsTime = 0L;
     private long lastScoutTask = 0L;
 
-    private Multimap<Integer, Task> singletonTasksToDispatch = ArrayListMultimap.create();
+    private Multimap<Integer, Supplier<Task>> singletonTasksToDispatch = ArrayListMultimap.create();
 
     private final DebugTarget debugTarget;
     private BehaviourTask behaviourTask;
@@ -100,13 +101,13 @@ public class SupaBot extends AgentWithData {
         this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
         mapAnalysis.ifPresent(analysis -> this.mapAwareness.setMapAnalysisResults(analysis));
 
-        dispatchTaskOnce(18, new ScoutTask(mapAwareness.getMaybeEnemyPositionNearEnemyBase(), 1));
-        dispatchTaskOnce(15, new OrbitalCommandManagerTask(100));
+        dispatchTaskOnce(18, () -> new ScoutTask(mapAwareness.getNextScoutTarget(), 1));
+        dispatchTaskOnce(15, () -> new OrbitalCommandManagerTask(100));
         this.behaviourTask = new SimpleBuildOrderTask(
                 new ThreeRaxStimCombatConcussivePush(),
                 () -> new BaseTerranTask());
-        dispatchTaskOnce(1, behaviourTask);
-        dispatchTaskOnce(1, strategyTask);
+        dispatchTaskOnce(1, () -> behaviourTask);
+        dispatchTaskOnce(1, () -> strategyTask);
         //debug().debugShowMap();
     }
 
@@ -122,17 +123,18 @@ public class SupaBot extends AgentWithData {
         // Dispatch one-off tasks.
         if (singletonTasksToDispatch.size() > 0) {
             Set<Integer> suppliesReached = new HashSet<>();
-            Map<Task, Integer> notDispatched = new HashMap<>();
-            singletonTasksToDispatch.forEach((supplyTrigger, task) -> {
+            Map<Supplier<Task>, Integer> notDispatched = new HashMap<>();
+            singletonTasksToDispatch.forEach((supplyTrigger, taskSupplier) -> {
                 if (observation().getFoodUsed() >= supplyTrigger) {
                     suppliesReached.add(supplyTrigger);
-                    if (!taskManager.addTask(task, 1)) {
-                        notDispatched.put(task, supplyTrigger);
+                    Task newTask = taskSupplier.get();
+                    if (!taskManager.addTask(newTask, 1)) {
+                        notDispatched.put(taskSupplier, supplyTrigger);
                     }
                 }
             });
             suppliesReached.forEach(supplyTrigger -> singletonTasksToDispatch.removeAll(supplyTrigger));
-            notDispatched.forEach((task, supplyTrigger) -> singletonTasksToDispatch.put(supplyTrigger, task));
+            notDispatched.forEach((taskSupplier, supplyTrigger) -> singletonTasksToDispatch.put(supplyTrigger, taskSupplier));
         }
 
         // Every 2 minutes ensure there's a scout sent out.
@@ -198,7 +200,7 @@ public class SupaBot extends AgentWithData {
         }
     }
 
-    private void dispatchTaskOnce(int atSupply, Task task) {
+    private void dispatchTaskOnce(int atSupply, Supplier<Task> task) {
         singletonTasksToDispatch.put(atSupply, task);
     }
 

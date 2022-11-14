@@ -479,5 +479,8 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
     @Override
     public void onEngagementEnded(ArmyTask task, double powerLost, List<UnitType> unitsLost) {
         System.out.println(task.getArmyName() + " ended an engagement (Result: " + powerLost + " power lost)");
+        if (macroAggressionState == MacroAggressionState.DEFENSIVE && defensiveSemaphore > 0) {
+            --defensiveSemaphore;
+        }
     }
 }
