@@ -108,7 +108,7 @@ public class SimpleBuildOrder implements BuildOrder {
             repeatingStages.stream().forEach(action -> {
                 Optional<UnitType> buildUnitType = action.ability().flatMap(ability -> agentWithData.gameData().getUnitBuiltByAbility(ability));
                 int mineralCost = buildUnitType.flatMap(unitType -> agentWithData.gameData().getUnitMineralCost(unitType)).orElse(0);
-                // Hack for scvs
+                // Hack for scvs to be queued even if there's not enough money for it.
                 boolean force = buildUnitType.filter(type -> Constants.WORKER_TYPES.contains(type)).isPresent();
                 if (force || remainingMoney.get() >= mineralCost) {
                     output.add(convertStageToOutput(action));

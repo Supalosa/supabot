@@ -13,7 +13,7 @@ public class Main {
 
     public static void main(String[] args) {
         SupaBot supaBot = new SupaBot(true, new JFrameDebugTarget());
-        PlayerSettings opponent = S2Coordinator.createComputer(Race.ZERG, Difficulty.VERY_HARD, AiBuild.RUSH);
+        PlayerSettings opponent = S2Coordinator.createComputer(Race.PROTOSS, Difficulty.EASY, AiBuild.MACRO);
         LauncherUtils.startSC2(
                 args,
                 supaBot,

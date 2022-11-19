@@ -101,7 +101,7 @@ public class SupaBot extends AgentWithData {
         this.mapAwareness.setStartPosition(observation().getStartLocation().toPoint2d());
         mapAnalysis.ifPresent(analysis -> this.mapAwareness.setMapAnalysisResults(analysis));
 
-        dispatchTaskOnce(18, () -> new ScoutTask(mapAwareness.getNextScoutTarget(), 1));
+        dispatchTaskOnce(18, () -> new ScoutTask(mapAwareness.getNextScoutTarget(), true, 1));
         dispatchTaskOnce(15, () -> new OrbitalCommandManagerTask(100));
         this.behaviourTask = new SimpleBuildOrderTask(
                 new ThreeRaxStimCombatConcussivePush(),
@@ -139,8 +139,10 @@ public class SupaBot extends AgentWithData {
 
         // Every 2 minutes ensure there's a scout sent out.
         if (observation().getGameLoop() > lastScoutTask + 120 * 22L && mapAwareness.getNextScoutTarget().isPresent()) {
-            taskManager.addTask(new ScoutTask(mapAwareness.getNextScoutTarget(), 1), 1);
-            lastScoutTask = observation().getGameLoop();
+            if (taskManager.countTasks(task -> task instanceof ScoutTask) == 0) {
+                taskManager.addTask(new ScoutTask(mapAwareness.getNextScoutTarget(), false, 1), 1);
+                lastScoutTask = observation().getGameLoop();
+            }
         }
 
         if (behaviourTask.isComplete()) {

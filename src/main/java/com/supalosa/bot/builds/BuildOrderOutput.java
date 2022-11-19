@@ -35,11 +35,6 @@ public interface BuildOrderOutput {
 
     boolean repeat();
 
-    /*
-    Optional<Unit> unitToUse();
-
-    Optional<Unit> unitToTarget();
-    */
     default String asHumanReadableString() {
         if (abilityToUse().isPresent()) {
             return (repeat() ? "*" : "") + StringUtils.capitalize(abilityToUse().get().toString()

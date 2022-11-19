@@ -1,5 +1,6 @@
 package com.supalosa.bot.task;
 
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.strategy.StrategicObservation;
 
 public interface StrategyTask extends Task {

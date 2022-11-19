@@ -2,10 +2,12 @@ package com.supalosa.bot.task.terran;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
+import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.analysis.Ramp;
+import com.supalosa.bot.strategy.Protoss2BaseGatewayRush;
 import com.supalosa.bot.strategy.StrategicObservation;
 import com.supalosa.bot.strategy.Zerg12PoolStrategicObservation;
 import com.supalosa.bot.task.*;
@@ -31,7 +33,7 @@ public class TerranStrategyTask extends BaseTask implements StrategyTask {
     @Override
     public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         long gameLoop = agentWithData.observation().getGameLoop();
-        if (gameLoop > OBSERVATION_CHECK_INTERVAL) {
+        if (gameLoop > observationsLastCheckedAt + OBSERVATION_CHECK_INTERVAL) {
             observationsLastCheckedAt = gameLoop;
             observationList.forEach(strategicObservation -> {
                if (strategicObservation.apply(agentWithData)) {
@@ -50,6 +52,7 @@ public class TerranStrategyTask extends BaseTask implements StrategyTask {
     }
 
     private void handleObservations(TaskManager taskManager, AgentWithData agentWithData) {
+        long gameLoop = agentWithData.observation().getGameLoop();
         if (hasSeenObservation(Zerg12PoolStrategicObservation.class)) {
             agentWithData.structurePlacementCalculator().ifPresent(spc -> {
                 // For west facing ramps, which leave a gap in the wall.
@@ -66,6 +69,18 @@ public class TerranStrategyTask extends BaseTask implements StrategyTask {
             });
         }
 
+        if (hasSeenObservation(Protoss2BaseGatewayRush.class)) {
+            // Stay home until 6:00 and build a bunker at the natural.
+            long cyclesUntilDefenceEnds = Math.max(0, (long)(360 * 22.4) - gameLoop);
+            if (cyclesUntilDefenceEnds > 0) {
+                agentWithData.fightManager().setCanAttack(false);
+                agentWithData.mapAwareness().getNaturalBaseRegion().ifPresent(naturalBaseRegion -> {
+                    agentWithData.fightManager().defendRegionFor(naturalBaseRegion.region(), 2, cyclesUntilDefenceEnds);
+                });
+            } else {
+                agentWithData.fightManager().setCanAttack(true);
+            }
+        }
     }
 
     @Override

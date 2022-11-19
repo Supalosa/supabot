@@ -165,7 +165,6 @@ public class BaseTerranTask implements BehaviourTask {
                     1, 1,
                     Optional.of(PlacementRules.borderOfBase()));
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_GHOST_ACADEMY, Map.of(
-                    //Upgrades.PERSONAL_CLOAKING, Abilities.RESEARCH_PERSONAL_CLOAKING,
                     Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
             ));
         }
@@ -218,12 +217,6 @@ public class BaseTerranTask implements BehaviourTask {
                     Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
                     Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
                     Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR
-                    /*Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL1,
-                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL2,
-                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS_LEVEL3,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL1,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL2,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR_LEVEL3*/
             ));
         }
         if (workerSupply > 60) {
@@ -323,22 +316,6 @@ public class BaseTerranTask implements BehaviourTask {
     @Override
     public Optional<TaskPromise> onTaskMessage(Task taskOrigin, TaskMessage message) {
         return Optional.empty();
-    }
-
-    /**
-     * Checks if a certain unit has other units within a certain radius.
-     *
-     * @param unit   The unit to check
-     * @param units  The list of other units to check are near the {@code unit}.
-     * @param radius The radius to check
-     * @return
-     */
-    private boolean hasUnitNearby(Unit unit, List<Unit> units, float radius) {
-        return units.stream().anyMatch(otherUnit -> unit.getPosition().distance(otherUnit.getPosition()) < radius);
-    }
-
-    private Set<Point2d> unitsToPointSet(List<Unit> units) {
-        return units.stream().map(unit -> unit.getPosition().toPoint2d()).collect(Collectors.toSet());
     }
 
     private int getNumAbilitiesInUse(ObservationInterface observationInterface, Ability abilityTypeForStructure) {

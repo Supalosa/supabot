@@ -4,6 +4,7 @@ import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.task.message.TaskMessage;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -25,7 +26,12 @@ public interface StrategicObservation extends TaskMessage {
     static List<StrategicObservation> allObservations() {
         return List.of(
                 new Zerg12PoolStrategicObservation(),
-                new WorkerRushStrategicObservation()
+                new WorkerRushStrategicObservation(),
+                new Protoss2BaseGatewayRush()
         );
+    }
+
+    static long asGameLoop(Duration duration) {
+        return (long)(duration.getSeconds() * 22.4);
     }
 }

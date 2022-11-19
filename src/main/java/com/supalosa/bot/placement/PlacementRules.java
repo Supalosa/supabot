@@ -7,6 +7,7 @@ import java.util.Optional;
 
 @Value.Immutable
 public interface PlacementRules {
+
     enum Region {
         /**
          * Place it in any player owned region.
@@ -35,7 +36,11 @@ public interface PlacementRules {
         /**
          * Place it on the terran ramp with space for the addon.
          */
-        MAIN_RAMP_BARRACKS_WITH_ADDON(true);
+        MAIN_RAMP_BARRACKS_WITH_ADDON(true),
+        /**
+         * Place it at the natural choke point, or else the main base choke point.
+         */
+        NATURAL_CHOKE_POINT(false);
 
         private boolean playerBase;
 
@@ -91,5 +96,9 @@ public interface PlacementRules {
 
     static PlacementRules exact() {
         return ImmutablePlacementRules.builder().regionType(Region.PLAYER_BASE_ANY).maxVariation(0).build();
+    }
+
+    static PlacementRules naturalChokePoint() {
+        return ImmutablePlacementRules.builder().regionType(Region.NATURAL_CHOKE_POINT).maxVariation(5).build();
     }
 }

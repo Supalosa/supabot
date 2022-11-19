@@ -22,9 +22,11 @@ import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.analysis.Tile;
 import com.supalosa.bot.analysis.utils.Grid;
 import com.supalosa.bot.analysis.utils.InMemoryGrid;
+import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
 import com.supalosa.bot.utils.UnitFilter;
+import io.netty.util.AsyncMapping;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -400,6 +402,11 @@ public class StructurePlacementCalculator {
         return maxPoint;
     }
 
+    private Optional<Point2d> getNaturalChokePointLocation(MapAwareness mapAwareness) {
+        Optional<RegionData> targetRegion = mapAwareness.getNaturalBaseRegion().or(() -> mapAwareness.getMainBaseRegion());
+        return targetRegion.flatMap(RegionData::getDefenceRallyPoint);
+    }
+
     public void debug(S2Agent agent) {
         Point2d cameraCenter = agent.observation().getCameraPos().toPoint2d();
         int minX = Math.max(1, (int)cameraCenter.getX() - 20);
@@ -507,6 +514,11 @@ public class StructurePlacementCalculator {
                 break;
             case MAIN_RAMP_BARRACKS_WITH_ADDON:
                 suggestedLocation = getFirstBarracksWithAddonLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
+                break;
+            case NATURAL_CHOKE_POINT:
+                suggestedLocation = getNaturalChokePointLocation(data.mapAwareness())
                         .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
                         .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
                 break;

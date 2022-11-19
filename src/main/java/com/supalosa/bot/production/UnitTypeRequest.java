@@ -2,6 +2,7 @@ package com.supalosa.bot.production;
 
 import com.github.ocraft.s2client.protocol.data.Ability;
 import com.github.ocraft.s2client.protocol.data.UnitType;
+import com.supalosa.bot.placement.PlacementRules;
 import org.immutables.value.Value;
 
 import java.util.Optional;
@@ -36,6 +37,11 @@ public interface UnitTypeRequest {
      * The amount that is requested.
      */
     int amount();
+
+    /**
+     * Placement rules, if this is a structure.
+     */
+    Optional<PlacementRules> placementRules();
 
     @Value.Default
     default boolean needsTechLab() {

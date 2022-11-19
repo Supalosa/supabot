@@ -15,14 +15,24 @@ import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.task.TaskWithUnits;
 import com.supalosa.bot.task.army.*;
 import com.supalosa.bot.task.RepairTask;
 import com.supalosa.bot.task.TaskManager;
 import com.supalosa.bot.task.mission.DefenceTask;
 import com.supalosa.bot.task.mission.DummyAttackTask;
+import org.immutables.value.Value;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -56,13 +66,16 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
     private Map<Region, DefenceTask> defenceTasks = new HashMap<>();
     private Function<DefenceTask, ArmyTask> defenceArmySupplier = defenceTask ->
             new TerranBioDefenceArmyTask("Defence." + UUID.randomUUID(), defenceTask);
+    private Map<Region, PendingDefenceTask> pendingDefenceTasks = new HashMap<>();
+
+    @Value.Immutable
+    interface PendingDefenceTask {
+        Region region();
+        long extension();
+        int defenceLevel();
+    }
 
     private boolean addedTasks = false;
-
-    private MacroAggressionState macroAggressionState = MacroAggressionState.AGGRESSIVE;
-
-    // Number of fights to win until we can switch back to aggressive mode.
-    private int defensiveSemaphore = 0;
 
     public TerranFightManagerImpl(S2Agent agent) {
         this.agent = agent;
@@ -132,15 +145,23 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         armyTasks.clear();
         armyTasks.addAll(validArmyTasks);
 
-        // Manage macro aggression state.
-        manageMacroAggressionState();
-
         final long gameLoop = agent.observation().getGameLoop();
 
         // Remove defence tasks that are complete.
         Set<Region> regionDefenceTasksComplete = defenceTasks.entrySet().stream()
                 .filter(entry -> entry.getValue().isComplete()).map(Map.Entry::getKey).collect(Collectors.toSet());
         regionDefenceTasksComplete.forEach(defenceTasks::remove);
+
+        // Add queued defence tasks.
+        if (pendingDefenceTasks.size() > 0) {
+            pendingDefenceTasks.forEach((region, pendingDefenceTask) -> {
+                createOrGetDefenceTask(taskManager, pendingDefenceTask.region()).ifPresent(task -> {
+                    task.setMinimumLevel(pendingDefenceTask.defenceLevel());
+                    task.setMinimumDuration(pendingDefenceTask.extension());
+                });
+            });
+            pendingDefenceTasks.clear();
+        }
 
         if (gameLoop > positionalLogicUpdatedAt + 22L) {
             positionalLogicUpdatedAt = gameLoop;
@@ -176,12 +197,6 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
                 reinforcingArmy.takeAllFrom(taskManager, agent.observation(), reserveArmy);
                 armyTasks.add(reinforcingArmy);
             }
-        }
-    }
-
-    private void manageMacroAggressionState() {
-        if (defensiveSemaphore <= 0) {
-            macroAggressionState = MacroAggressionState.AGGRESSIVE;
         }
     }
 
@@ -255,9 +270,6 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
             }
             if (shouldCancelAttack ||
                     attackPosition.isEmpty()) {
-                if (attackPosition.isPresent()) {
-                    //System.err.println("Aborted aggressive attack because we think we will badly lose.");
-                }
                 // In this case, try to find a non-controlled region next to ours.
                 Optional<RegionData> uncontrolledBorderRegion = findNeutralBorderRegion(agentWithData.mapAwareness());
                 attackPosition = uncontrolledBorderRegion
@@ -331,15 +343,24 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
     private void onLocationAttacked(Point2d position, AgentWithData agentWithData) {
         Optional<RegionData> maybeRegionData = agentWithData.mapAwareness().getRegionDataForPoint(position);
         maybeRegionData.ifPresent(regionData -> {
-            if (!defenceTasks.containsKey(regionData.region())) {
-                DefenceTask newTask = new DefenceTask(regionData.region(), 1, defenceArmySupplier);
-                if (agentWithData.taskManager().addTask(newTask, 1)) {
-                    defenceTasks.put(regionData.region(), newTask);
-                }
-            } else {
-                defenceTasks.get(regionData.region()).onRegionAttacked();
-            }
+            createOrGetDefenceTask(agentWithData.taskManager(), regionData.region()).ifPresent(task -> {
+                task.onRegionAttacked();
+            });
         });
+    }
+
+    private Optional<DefenceTask> createOrGetDefenceTask(TaskManager taskManager, Region region) {
+        if (!defenceTasks.containsKey(region)) {
+            DefenceTask newTask = new DefenceTask(region, 1, defenceArmySupplier);
+            if (taskManager.addTask(newTask, 1)) {
+                defenceTasks.put(region, newTask);
+                return Optional.of(newTask);
+            } else {
+                return Optional.empty();
+            }
+        } else {
+            return Optional.ofNullable(defenceTasks.get(region));
+        }
     }
 
     private void updateCloakOrBurrowed() {
@@ -429,7 +450,9 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         Map<UnitType, Optional<UnitType>> alternateForm = new HashMap<>();
         Map<UnitType, UnitType> producingUnitType = new HashMap<>();
         Map<UnitType, Ability> productionAbility = new HashMap<>();
-        armyTasks.forEach(armyTask -> {
+        List<TaskWithUnits> tasksWithUnits = new ArrayList<>(armyTasks);
+        tasksWithUnits.addAll(defenceTasks.values());
+        tasksWithUnits.forEach(armyTask -> {
             armyTask.requestingUnitTypes().forEach(unitTypeRequest -> {
                 requestedAmount.put(unitTypeRequest.unitType(),
                         requestedAmount.getOrDefault(unitTypeRequest.unitType(), 0) + unitTypeRequest.amount());
@@ -465,22 +488,19 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
     }
 
     @Override
-    public void setDefensiveStance() {
-        // Defend one attack.
-        defensiveSemaphore = Math.max(0, defensiveSemaphore + 1);
-        macroAggressionState = MacroAggressionState.DEFENSIVE;
+    public void defendRegionFor(Region region, int defenceLevel, long gameCycles) {
+        pendingDefenceTasks.put(region, ImmutablePendingDefenceTask.builder()
+                .region(region)
+                .defenceLevel(defenceLevel)
+                .extension(gameCycles)
+                .build());
     }
 
     @Override
     public void onEngagementStarted(ArmyTask task, Army enemyArmy, FightPerformance predictedResult) {
-        System.out.println(task.getArmyName() + " started an engagement (Prediction: " + predictedResult + ")");
     }
 
     @Override
     public void onEngagementEnded(ArmyTask task, double powerLost, List<UnitType> unitsLost) {
-        System.out.println(task.getArmyName() + " ended an engagement (Result: " + powerLost + " power lost)");
-        if (macroAggressionState == MacroAggressionState.DEFENSIVE && defensiveSemaphore > 0) {
-            --defensiveSemaphore;
-        }
     }
 }

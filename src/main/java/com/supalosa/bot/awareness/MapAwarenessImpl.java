@@ -31,7 +31,11 @@ import java.util.stream.Collectors;
 public class MapAwarenessImpl implements MapAwareness {
 
     private Optional<Point2d> startPosition;
+
     private Optional<RegionData> mainBaseRegion;
+    private Optional<RegionData> naturalBaseRegion;
+    private Optional<RegionData> thirdBaseRegion;
+
     private final List<Point2d> knownEnemyBases;
     private Optional<Point2d> knownEnemyStartLocation = Optional.empty();
 
@@ -80,6 +84,8 @@ public class MapAwarenessImpl implements MapAwareness {
     public MapAwarenessImpl(ThreatCalculator threatCalculator) {
         this.startPosition = Optional.empty();
         this.mainBaseRegion = Optional.empty();
+        this.naturalBaseRegion = Optional.empty();
+        this.thirdBaseRegion = Optional.empty();
         this.knownEnemyBases = new ArrayList<>();
         this.regionDataCalculator = new RegionDataCalculator(threatCalculator);
         this.threatCalculator = threatCalculator;
@@ -299,8 +305,32 @@ public class MapAwarenessImpl implements MapAwareness {
         if (this.expansionLocations.isPresent() && gameLoop > expansionsValidatedAt + 44L) {
             expansionsValidatedAt = gameLoop;
 
-            // Calculate the region which represents our main base.
+            // Calculate the region which represents our main, natural and third bases.
             mainBaseRegion = startPosition.flatMap(this::getRegionDataForPoint);
+            if (naturalBaseRegion.isEmpty() || thirdBaseRegion.isEmpty()) {
+                List<UnitInPool> myTownHalls = observationInterface.getUnits(
+                        UnitFilter.builder()
+                                .unitTypes(Constants.ALL_TOWN_HALL_TYPES)
+                                .includeIncomplete(true)
+                                .alliance(Alliance.SELF)
+                                .build());
+                Set<Integer> accountedRegions = new HashSet<>();
+                mainBaseRegion.ifPresent(region -> accountedRegions.add(region.region().regionId()));
+                naturalBaseRegion.ifPresent(region -> accountedRegions.add(region.region().regionId()));
+                thirdBaseRegion.ifPresent(region -> accountedRegions.add(region.region().regionId()));
+                myTownHalls = myTownHalls.stream().filter(unitInPool ->
+                        getRegionDataForPoint(unitInPool.unit().getPosition().toPoint2d())
+                                .filter(region -> !accountedRegions.contains(region.region().regionId()))
+                                .isPresent())
+                        .collect(Collectors.toList());
+                if (myTownHalls.size() > 0) {
+                    if (naturalBaseRegion.isEmpty()) {
+                        naturalBaseRegion = getRegionDataForPoint(myTownHalls.get(0).unit().getPosition().toPoint2d());
+                    } else if (thirdBaseRegion.isEmpty()) {
+                        thirdBaseRegion = getRegionDataForPoint(myTownHalls.get(0).unit().getPosition().toPoint2d());
+                    }
+                }
+            }
 
             // ExpansionLocations is ordered by distance to start point.
             this.validExpansionLocations = new LinkedHashSet<>();
@@ -518,6 +548,16 @@ public class MapAwarenessImpl implements MapAwareness {
     @Override
     public Optional<RegionData> getMainBaseRegion() {
         return mainBaseRegion;
+    }
+
+    @Override
+    public Optional<RegionData> getNaturalBaseRegion() {
+        return naturalBaseRegion;
+    }
+
+    @Override
+    public Optional<RegionData> getThirdBaseRegion() {
+        return thirdBaseRegion;
     }
 
     @Override

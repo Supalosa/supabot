@@ -102,6 +102,10 @@ public interface MapAwareness {
 
     Optional<RegionData> getMainBaseRegion();
 
+    Optional<RegionData> getNaturalBaseRegion();
+
+    Optional<RegionData> getThirdBaseRegion();
+
     /**
      * Return the nearest normal region (one with connections) to the given point.
      */

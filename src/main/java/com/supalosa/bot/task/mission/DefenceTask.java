@@ -11,6 +11,7 @@ import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.analysis.Region;
+import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.production.ImmutableUnitTypeRequest;
 import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
@@ -31,8 +32,6 @@ import java.util.stream.Collectors;
  */
 public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
 
-    // Minimum distance from another DefenceTask. It is the responsibility of the caller to cluster it better.
-    private static final double DISTANCE_THRESHOLD = 5f;
     // Unique number of attacks until we start building static defence.
     private static final int L1_DEFENCE_THRESHOLD = 2;
     private static final int L2_DEFENCE_THRESHOLD = 5;
@@ -64,6 +63,7 @@ public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
             ImmutableUnitTypeRequest.builder().unitType(Units.TERRAN_BUNKER)
                     .producingUnitType(Units.TERRAN_SCV)
                     .productionAbility(Abilities.BUILD_BUNKER)
+                    .placementRules(PlacementRules.naturalChokePoint())
                     .amount(1)
                     .build());
     private static final List<UnitTypeRequest> L3_TERRAN_DEFENCE = List.of(
@@ -115,6 +115,7 @@ public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
     private final Function<DefenceTask, ArmyTask> armyTaskSupplier;
     // The composition of all armies taking part in this defence.
     private Map<UnitType, Integer> overallComposition;
+    private long minimumDurationRemaining = 0;
 
     /**
      *
@@ -133,9 +134,10 @@ public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
 
     @Override
     public void onStepImpl(TaskManager taskManager, AgentWithData agentWithData) {
-        if (this.priority <= 0.0) {
+        if (this.priority <= 0.0 && minimumDurationRemaining <= 0) {
             this.isComplete = true;
         }
+        minimumDurationRemaining --;
         // Calculate what the defence should look like.
         if (playerRace.isEmpty()) {
             playerRace = agentWithData.observation().getGameInfo().getPlayersInfo().stream()
@@ -363,5 +365,15 @@ public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
     }
 
     public void onRegionAttacked() {
+    }
+
+    public void setMinimumLevel(int defenceLevel) {
+        if (this.defenceLevel < defenceLevel) {
+            this.defenceLevel = defenceLevel;
+        }
+    }
+
+    public void setMinimumDuration(long extension) {
+        this.minimumDurationRemaining = extension;
     }
 }
