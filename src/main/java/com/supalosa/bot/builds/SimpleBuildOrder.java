@@ -63,7 +63,8 @@ public class SimpleBuildOrder implements BuildOrder {
     }
 
     @Override
-    public void onStep(ObservationInterface observationInterface, GameData data) {
+    public void onStep(AgentWithData agentWithData) {
+        ObservationInterface observationInterface = agentWithData.observation();
         if (!expectedCountInitialised) {
             expectedCountInitialised = true;
             // Put initial expected counts in from observation to account for things we started with,
@@ -80,6 +81,11 @@ public class SimpleBuildOrder implements BuildOrder {
     @Override
     public int getMaximumGasMiners() {
         return targetGasMiners;
+    }
+
+    @Override
+    public String getDebugText() {
+        return getCurrentStageNumber() + "/" + getTotalStages();
     }
 
     @Override

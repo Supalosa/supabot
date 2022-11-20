@@ -253,7 +253,9 @@ public class TaskManagerImpl implements TaskManager {
         for (Map.Entry<String, Task> entry : taskSet.entrySet()) {
             Task task = entry.getValue();
             task.debug(agent);
-            agent.debug().debugTextOut(task.getDebugText(), Point2d.of(0.01f, yPosition), Color.WHITE, 8);
+            if (yPosition < 1.0f) {
+                agent.debug().debugTextOut(task.getDebugText(), Point2d.of(0.01f, yPosition), Color.WHITE, 8);
+            }
             yPosition += (spacing);
         }
         for (Map.Entry<Tag, Task> entry : unitToTaskMap.entrySet()) {

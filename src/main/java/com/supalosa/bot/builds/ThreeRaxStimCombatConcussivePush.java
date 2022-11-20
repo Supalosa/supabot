@@ -13,7 +13,6 @@ public class ThreeRaxStimCombatConcussivePush extends SimpleBuildOrder {
 
     private static final Units CC = Units.TERRAN_COMMAND_CENTER;
     private static final Units ORBITAL = Units.TERRAN_ORBITAL_COMMAND;
-    private static final Units SCV = Units.TERRAN_SCV;
     private static final Units BARRACKS = Units.TERRAN_BARRACKS;
     private static final Units BARRACKS_TECHLAB = Units.TERRAN_BARRACKS_TECHLAB;
     private static final Units STARPORT = Units.TERRAN_STARPORT;

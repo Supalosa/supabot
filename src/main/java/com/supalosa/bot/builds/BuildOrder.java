@@ -32,7 +32,9 @@ public interface BuildOrder {
     
     boolean isTimedOut();
 
-    void onStep(ObservationInterface observationInterface, GameData data);
+    void onStep(AgentWithData agentWithData);
 
     int getMaximumGasMiners();
+
+    String getDebugText();
 }

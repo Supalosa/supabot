@@ -14,6 +14,7 @@ import com.google.common.collect.Multimap;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.*;
+import com.supalosa.bot.builds.BaseTerranTask;
 import com.supalosa.bot.builds.ThreeRaxStimCombatConcussivePush;
 import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
@@ -21,7 +22,6 @@ import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.instrumentation.InstrumentedActionInterface;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
-import com.supalosa.bot.task.terran.BaseTerranTask;
 import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.task.SimpleBuildOrderTask;
 import com.supalosa.bot.task.terran.TerranStrategyTask;
@@ -55,7 +55,6 @@ public class SupaBot extends AgentWithData {
     private Multimap<Integer, Supplier<Task>> singletonTasksToDispatch = ArrayListMultimap.create();
 
     private final DebugTarget debugTarget;
-    private BehaviourTask behaviourTask;
     private StrategyTask strategyTask = new TerranStrategyTask();
 
     public SupaBot(boolean isDebug, DebugTarget debugTarget) {
@@ -103,10 +102,10 @@ public class SupaBot extends AgentWithData {
 
         dispatchTaskOnce(18, () -> new ScoutTask(mapAwareness.getNextScoutTarget(), true, 1));
         dispatchTaskOnce(15, () -> new OrbitalCommandManagerTask(100));
-        this.behaviourTask = new SimpleBuildOrderTask(
-                new ThreeRaxStimCombatConcussivePush(),
-                () -> new BaseTerranTask());
-        dispatchTaskOnce(1, () -> behaviourTask);
+        dispatchTaskOnce(1, () -> new SimpleBuildOrderTask(
+                //new ThreeRaxStimCombatConcussivePush(),
+                new BaseTerranTask(),
+                () -> new BaseTerranTask()));
         dispatchTaskOnce(1, () -> strategyTask);
         //debug().debugShowMap();
     }
@@ -143,14 +142,6 @@ public class SupaBot extends AgentWithData {
                 taskManager.addTask(new ScoutTask(mapAwareness.getNextScoutTarget(), false, 1), 1);
                 lastScoutTask = observation().getGameLoop();
             }
-        }
-
-        if (behaviourTask.isComplete()) {
-            BehaviourTask nextBehaviourTask = behaviourTask.getNextBehaviourTask().get();
-            if (!taskManager.addTask(nextBehaviourTask, 1)) {
-                throw new IllegalStateException("Could not dispatch the next behaviour task.");
-            }
-            behaviourTask = nextBehaviourTask;
         }
 
         List<ChatReceived> chat = observation().getChatMessages();

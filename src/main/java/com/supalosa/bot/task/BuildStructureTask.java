@@ -17,6 +17,7 @@ import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.placement.PlacementRegion;
 import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
@@ -271,8 +272,8 @@ public class BuildStructureTask extends BaseTask {
     private Optional<Tag> findWorker(TaskManager taskManager, S2Agent agent, AgentData data, Optional<PlacementRules> placementRules) {
         // This should probably be a predicate associated to the PlacementRules it itself.
         boolean nearBaseOnly = placementRules
-                .map(rule -> rule.regionType().isPlayerBase())
-                .orElse(false);
+                .filter(rule -> rule.regionType().filter(PlacementRegion::isPlayerBase).isPresent())
+                .isPresent();
         if (location.isPresent()) {
             // If location is known, find closest unit to that location.
             // Avoid using gas workers.

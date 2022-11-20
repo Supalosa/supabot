@@ -42,6 +42,7 @@ public class BuildUtils {
                                 .alliance(Alliance.SELF)
                                 .unitType(Units.TERRAN_REFINERY)
                                 .filter(geyserFilter)
+                                .includeIncomplete(true)
                                 .build())
                 .stream()
                 .map(UnitInPool::unit)

@@ -19,6 +19,8 @@ public interface BuildOrderOutput {
 
     /**
      * The originating hash code of the output. Used to deduplicate tasks that are identical.
+     * If an identical BuildOrderOutput is produced by a BuildOrder, the engine will only run it once, so
+     * this field provides a way to differentiate it.
      */
     int originatingHashCode();
 
@@ -33,7 +35,12 @@ public interface BuildOrderOutput {
 
     Optional<Supplier<Task>> dispatchTask();
 
-    boolean repeat();
+    // TODO: this is more like 'is non-critical step' - repeat output is handled by continuing to show this BuildOrderOutput
+    // even after it's been started.
+    @Value.Default
+    default boolean repeat() {
+        return false;
+    }
 
     default String asHumanReadableString() {
         if (abilityToUse().isPresent()) {

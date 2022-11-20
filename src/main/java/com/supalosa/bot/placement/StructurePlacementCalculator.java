@@ -26,7 +26,6 @@ import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
 import com.supalosa.bot.utils.UnitFilter;
-import io.netty.util.AsyncMapping;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -485,46 +484,34 @@ public class StructurePlacementCalculator {
                                                              int structureWidth,
                                                              int structureHeight,
                                                              Optional<PlacementRules> placementRules) {
-        PlacementRules.Region region = placementRules
-                .map(PlacementRules::regionType)
-                .orElse(PlacementRules.Region.PLAYER_BASE_ANY);
-        Optional<UnitType> unitTypeNearFilter = placementRules.flatMap(PlacementRules::near);
-        final Point2d searchOrigin = unitTypeNearFilter.flatMap(type -> findMyStructureOfType(type)).orElse(origin);
+        Optional<PlacementRegion> region = placementRules.flatMap(PlacementRules::regionType);
+
+        Optional<Point2d> atPosition = placementRules.flatMap(PlacementRules::at);
+        Optional<Point2d> nearPosition = placementRules.flatMap(PlacementRules::near).flatMap(type -> findMyStructureOfType(type));
+        Optional<Point2d> onPosition = placementRules.flatMap(PlacementRules::on).map(Unit::getPosition).map(Point::toPoint2d);
+
+        // At > Near > On > Origin (which is where the worker is).
+        final Point2d searchOrigin = atPosition
+                .or(() -> nearPosition)
+                .or(() -> onPosition)
+                .orElse(origin);
+
         // Reserve the location after we suggest it. It will be wiped clear in the next structure grid update if
         // it doesn't actually get used.
         Optional<Point2d> suggestedLocation = Optional.empty();
-        switch (region) {
-            case PLAYER_BASE_ANY:
-            case PLAYER_BASE_BORDER:
-            case PLAYER_BASE_CENTRE:
-                suggestedLocation = findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data);
-                break;
-            case EXPANSION:
-                suggestedLocation = findExpansionPlacement(searchOrigin, structureWidth, structureHeight, data);
-                break;
-            case MAIN_RAMP_SUPPLY_DEPOT_1:
-                suggestedLocation = getFirstSupplyDepotLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
-                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
-                break;
-            case MAIN_RAMP_SUPPLY_DEPOT_2:
-                suggestedLocation = getSecondSupplyDepotLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
-                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
-                break;
-            case MAIN_RAMP_BARRACKS_WITH_ADDON:
-                suggestedLocation = getFirstBarracksWithAddonLocation()
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
-                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
-                break;
-            case NATURAL_CHOKE_POINT:
-                suggestedLocation = getNaturalChokePointLocation(data.mapAwareness())
-                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
-                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported placement region logic: " + region);
+
+        if (region.isPresent()) {
+            suggestedLocation = suggestLocationByRegion(region.get(), data, searchOrigin, structureWidth, structureHeight, placementRules);
+        } else if (atPosition.isPresent()) {
+            suggestedLocation = checkSpecificPlacement(atPosition.get(), structureWidth, structureHeight, placementRules, data);
+        } else if (nearPosition.isPresent()) {
+            throw new IllegalArgumentException("NearPosition not implemented");
+        } else if (onPosition.isPresent()) {
+            suggestedLocation = checkSpecificPlacement(onPosition.get(), structureWidth, structureHeight, placementRules, data);
+        } else {
+            throw new IllegalArgumentException("Invalid placement rule: " + placementRules);
         }
+
         if (suggestedLocation.isPresent()) {
             updatePlacementGridWithFootprint(mutableFreePlacementGrid,
                     (int)suggestedLocation.get().getX(),
@@ -535,6 +522,41 @@ public class StructurePlacementCalculator {
                     );
         }
         return suggestedLocation;
+    }
+
+    private Optional<Point2d> suggestLocationByRegion(
+            PlacementRegion placementRegion,
+            AgentWithData data,
+            Point2d searchOrigin,
+            int structureWidth,
+            int structureHeight,
+            Optional<PlacementRules> placementRules) {
+        switch (placementRegion) {
+            case PLAYER_BASE_ANY:
+            case PLAYER_BASE_BORDER:
+            case PLAYER_BASE_CENTRE:
+                return findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data);
+            case EXPANSION:
+                return findExpansionPlacement(searchOrigin, structureWidth, structureHeight, data);
+            case MAIN_RAMP_SUPPLY_DEPOT_1:
+                return getFirstSupplyDepotLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
+            case MAIN_RAMP_SUPPLY_DEPOT_2:
+                return getSecondSupplyDepotLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
+            case MAIN_RAMP_BARRACKS_WITH_ADDON:
+                return getFirstBarracksWithAddonLocation()
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
+            case NATURAL_CHOKE_POINT:
+                return getNaturalChokePointLocation(data.mapAwareness())
+                        .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
+                        .orElseGet(() -> findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data));
+            default:
+                throw new IllegalArgumentException("Unsupported placement region logic: " + placementRegion);
+        }
     }
 
     private Optional<Point2d> findMyStructureOfType(UnitType type) {
@@ -559,8 +581,8 @@ public class StructurePlacementCalculator {
                 .filter(myStructurePoint2d -> {
             return myStructurePoint2d.distance(origin) < actualSearchRadius;
         }).collect(Collectors.toList());
-        PlacementRules.Region placementRegion = placementRules.map(PlacementRules::regionType).orElse(PlacementRules.Region.PLAYER_BASE_ANY);
-        if (placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER || placementRegion == PlacementRules.Region.PLAYER_BASE_CENTRE) {
+        PlacementRegion placementRegion = placementRules.flatMap(PlacementRules::regionType).orElse(PlacementRegion.PLAYER_BASE_ANY);
+        if (placementRegion == PlacementRegion.PLAYER_BASE_BORDER || placementRegion == PlacementRegion.PLAYER_BASE_CENTRE) {
             // Repeatedly test until we find a position at the minimum distance from the border of the region.
             Optional<Region> maybeRegion = data.mapAwareness().getRegionDataForPoint(origin).map(RegionData::region);
             if (maybeRegion.isEmpty()) {
@@ -575,7 +597,7 @@ public class StructurePlacementCalculator {
         }
     }
 
-    private Optional<Point2d> findPlacementRelativeToBorder(int structureWidth, int structureHeight, AgentWithData data, Optional<Region> maybeRegion, PlacementRules.Region placementRegion) {
+    private Optional<Point2d> findPlacementRelativeToBorder(int structureWidth, int structureHeight, AgentWithData data, Optional<Region> maybeRegion, PlacementRegion placementRegion) {
         Region region = maybeRegion.get();
         Pair<Point2d, Point2d> bounds = region.regionBounds();
         Point2d bottomLeftBound = bounds.getLeft();
@@ -593,7 +615,7 @@ public class StructurePlacementCalculator {
                 continue;
             }
             if (canPlaceAt(testPoint, structureWidth, structureHeight)) {
-                int score = placementRegion == PlacementRules.Region.PLAYER_BASE_BORDER ?
+                int score = placementRegion == PlacementRegion.PLAYER_BASE_BORDER ?
                         -thisTile.get().distanceToBorder :
                         thisTile.get().distanceToBorder;
                 if (score > bestCandidateScore) {
