@@ -33,7 +33,7 @@ public class SimpleBuildOrder implements BuildOrder {
     private boolean isAttackPermitted = false;
 
 
-    SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
+    protected SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
         this.stages = stages;
         this.repeatingStages = new HashSet<>();
         this.asynchronousStages = new ArrayList<>();

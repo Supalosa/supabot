@@ -57,7 +57,7 @@ public class Build {
             return new UnitCountCondition(this, count);
         }
 
-        class UnitCountCondition {
+        public class UnitCountCondition {
             private final int count;
             private final Builder builder;
             private UnitCountCondition(Builder builder, int count) {

@@ -1,7 +1,9 @@
-package com.supalosa.bot.builds;
+package com.supalosa.bot.builds.terran;
 
 import com.github.ocraft.s2client.protocol.data.Abilities;
 import com.github.ocraft.s2client.protocol.data.Units;
+import com.supalosa.bot.builds.Build;
+import com.supalosa.bot.builds.SimpleBuildOrder;
 import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.strategy.WorkerRushStrategicObservation;
 import com.supalosa.bot.strategy.Zerg12PoolStrategicObservation;

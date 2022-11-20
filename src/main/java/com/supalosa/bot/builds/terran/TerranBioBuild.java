@@ -1,4 +1,4 @@
-package com.supalosa.bot.builds;
+package com.supalosa.bot.builds.terran;
 
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
@@ -19,6 +19,9 @@ import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
 import com.supalosa.bot.Expansion;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.builds.BuildOrder;
+import com.supalosa.bot.builds.BuildOrderOutput;
+import com.supalosa.bot.builds.ImmutableBuildOrderOutput;
 import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.PlacementRules;
@@ -39,7 +42,7 @@ import java.util.function.Predicate;
  * Although this build works to start a game from scratch, it's probably better to start from
  * a specialised build order task.
  */
-public class BaseTerranTask implements BuildOrder {
+public class TerranBioBuild implements BuildOrder {
 
     // expected amount before we start pulling workers from gas back to minerals.
     public static final int MINIMUM_MINERAL_WORKERS_PER_CC = 14;

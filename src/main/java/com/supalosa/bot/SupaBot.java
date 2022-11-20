@@ -14,8 +14,7 @@ import com.google.common.collect.Multimap;
 import com.supalosa.bot.analysis.AnalyseMap;
 import com.supalosa.bot.analysis.AnalysisResults;
 import com.supalosa.bot.awareness.*;
-import com.supalosa.bot.builds.BaseTerranTask;
-import com.supalosa.bot.builds.ThreeRaxStimCombatConcussivePush;
+import com.supalosa.bot.builds.terran.TerranBioBuild;
 import com.supalosa.bot.debug.DebugTarget;
 import com.supalosa.bot.engagement.TerranBioThreatCalculator;
 import com.supalosa.bot.engagement.ThreatCalculator;
@@ -104,8 +103,8 @@ public class SupaBot extends AgentWithData {
         dispatchTaskOnce(15, () -> new OrbitalCommandManagerTask(100));
         dispatchTaskOnce(1, () -> new SimpleBuildOrderTask(
                 //new ThreeRaxStimCombatConcussivePush(),
-                new BaseTerranTask(),
-                () -> new BaseTerranTask()));
+                new TerranBioBuild(),
+                () -> new TerranBioBuild()));
         dispatchTaskOnce(1, () -> strategyTask);
         //debug().debugShowMap();
     }
