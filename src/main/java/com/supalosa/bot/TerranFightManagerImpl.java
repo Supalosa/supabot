@@ -450,6 +450,7 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         Map<UnitType, Optional<UnitType>> alternateForm = new HashMap<>();
         Map<UnitType, UnitType> producingUnitType = new HashMap<>();
         Map<UnitType, Ability> productionAbility = new HashMap<>();
+        Map<UnitType, Boolean> needsTechLab = new HashMap<>();
         List<TaskWithUnits> tasksWithUnits = new ArrayList<>(armyTasks);
         tasksWithUnits.addAll(defenceTasks.values());
         tasksWithUnits.forEach(armyTask -> {
@@ -459,6 +460,7 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
                 producingUnitType.put(unitTypeRequest.unitType(), unitTypeRequest.producingUnitType());
                 productionAbility.put(unitTypeRequest.unitType(), unitTypeRequest.productionAbility());
                 alternateForm.put(unitTypeRequest.unitType(), unitTypeRequest.alternateForm());
+                needsTechLab.put(unitTypeRequest.unitType(), unitTypeRequest.needsTechLab());
             });
         });
         return requestedAmount.entrySet().stream()
@@ -468,6 +470,7 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
                         .producingUnitType(producingUnitType.get(entry.getKey()))
                         .productionAbility(productionAbility.get(entry.getKey()))
                         .alternateForm(alternateForm.get(entry.getKey()))
+                        .needsTechLab(needsTechLab.get(entry.getKey()))
                         .build())
                 .collect(Collectors.toList());
     }

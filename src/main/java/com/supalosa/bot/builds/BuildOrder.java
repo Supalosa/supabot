@@ -24,6 +24,10 @@ public interface BuildOrder {
 
     void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage);
 
+    void onStageFailed(BuildOrderOutput stage, AgentWithData agentWithData);
+
+    void onStageCompleted(BuildOrderOutput stage, AgentWithData agentWithData);
+
     /**
      * Returns whether the build is (successfully) complete and the build should be handed over to the default
      * build handler.

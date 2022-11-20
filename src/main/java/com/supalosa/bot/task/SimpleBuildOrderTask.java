@@ -83,6 +83,7 @@ public class SimpleBuildOrderTask extends BaseTask {
                 taskManager.addTask(output.dispatchTask().get().get(), 1);
             }
             if (output.abilityToUse().isEmpty()) {
+                // If there is no ability, the stage automatically succeeds.
                 currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                 return;
             }
@@ -105,19 +106,7 @@ public class SimpleBuildOrderTask extends BaseTask {
                 return;
             }
             if (orderedUnit.isPresent()) {
-                // TODO not use query here...
-                AvailableAbilities abilities = agentWithData.query().getAbilitiesForUnit(orderedUnit.get(), false);
-                boolean isAvailable = false;
-                Optional<AbilityData> abilityData = agentWithData.gameData().getAbility(output.abilityToUse().get());
-                for (AvailableAbility availableAbility : abilities.getAbilities()) {
-                    if (availableAbility.getAbility().equals(output.abilityToUse().get())) {
-                        isAvailable = true;
-                    } else if (abilityData.isPresent() &&
-                            abilityData.get().getRemapsToAbility().equals(Optional.of(availableAbility.getAbility()))) {
-                        // Check if the requested ability remaps to the available ability (eg reactor_barracks to reactor).
-                        isAvailable = true;
-                    }
-                }
+                boolean isAvailable = agentWithData.gameData().unitHasAbility(orderedUnit.get().getTag(), output.abilityToUse().get());
                 if (isAvailable) {
                     agentWithData.actions().unitCommand(orderedUnit.get(), output.abilityToUse().get(), false);
                     // Signal to the build order that the ability was used.
@@ -164,12 +153,14 @@ public class SimpleBuildOrderTask extends BaseTask {
                                     System.out.println("Build task " + output.abilityToUse().get() + " failed, aborting build order.");
                                     expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
                                     announceFailure(agentWithData.observation(), agentWithData.actions());
+                                    currentBuildOrder.onStageFailed(thisStage, agentWithData);
                                 }
                             })
                             .onComplete(result -> {
                                 if (!isComplete() && !output.repeat()) {
                                     // If not repeating, reduce parallel building of this structure.
                                     expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
+                                    currentBuildOrder.onStageCompleted(thisStage, agentWithData);
                                 }
                             });
                     orderDispatchedAt.put(output, gameLoop);
@@ -323,6 +314,13 @@ public class SimpleBuildOrderTask extends BaseTask {
                                         unit.getOrders().size() <= 1))
                         .findAny();
             }
+        } else if (buildOrderOutput.specificUnit().isPresent()) {
+            UnitInPool unitInPool = agentWithData.observation().getUnit(buildOrderOutput.specificUnit().get());
+            if (unitInPool != null) {
+                return unitInPool.getUnit();
+            } else {
+                return Optional.empty();
+            }
         } else {
             return Optional.empty();
         }
@@ -357,9 +355,24 @@ public class SimpleBuildOrderTask extends BaseTask {
         final float spacing = 0.0125f;
         float yPosition = 0.51f;
         List<BuildOrderOutput> nextStages = lastOutput;
+        Optional<String> previousValue = Optional.empty();
+        int foldedCount = 1;
         for (BuildOrderOutput next : nextStages) {
-            agentWithData.debug().debugTextOut(next.asHumanReadableString(), Point2d.of(xPosition, yPosition), Color.WHITE, 8);
-            yPosition += (spacing);
+            if (previousValue.isPresent()) {
+                if (previousValue.get().equals(next.asHumanReadableString())) {
+                    ++foldedCount;
+                } else if (yPosition < 1f) {
+                    agentWithData.debug().debugTextOut(previousValue.get() + " x " + foldedCount,
+                            Point2d.of(xPosition, yPosition), Color.WHITE, 8);
+                    foldedCount = 1;
+                    yPosition += (spacing);
+                }
+            }
+            previousValue = Optional.of(next.asHumanReadableString());
+        }
+        if (yPosition < 1f && previousValue.isPresent()) {
+            agentWithData.debug().debugTextOut(previousValue.get() + " x " + foldedCount,
+                    Point2d.of(xPosition, yPosition), Color.WHITE, 8);
         }
     }
 

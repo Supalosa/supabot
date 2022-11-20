@@ -177,6 +177,16 @@ public class SimpleBuildOrder implements BuildOrder {
         }
     }
 
+    @Override
+    public void onStageFailed(BuildOrderOutput stage, AgentWithData agentWithData) {
+
+    }
+
+    @Override
+    public void onStageCompleted(BuildOrderOutput stage, AgentWithData agentWithData) {
+
+    }
+
     private BuildOrderOutput convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
         return simpleBuildOrderStage.toBuildOrderOutput();
     }

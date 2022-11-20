@@ -5,7 +5,6 @@ import com.github.ocraft.s2client.bot.gateway.ObservationInterface;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.action.ActionChat;
 import com.github.ocraft.s2client.protocol.data.*;
-import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
@@ -22,7 +21,6 @@ import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.builds.BuildOrder;
 import com.supalosa.bot.builds.BuildOrderOutput;
 import com.supalosa.bot.builds.ImmutableBuildOrderOutput;
-import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.*;
@@ -32,10 +30,10 @@ import org.apache.commons.lang3.Validate;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * The default Terran bio build order.
@@ -44,11 +42,11 @@ import java.util.function.Predicate;
  */
 public class TerranBioBuild implements BuildOrder {
 
-    // expected amount before we start pulling workers from gas back to minerals.
-    public static final int MINIMUM_MINERAL_WORKERS_PER_CC = 14;
+    private static final long OUTPUT_UPDATE_INTERVAL = 15L;
+    private long lastOutputUpdateAt = Long.MIN_VALUE;
 
     private Long lastExpansionTime = 0L;
-    private int maxGasMiners = 0;
+    private int maxGasMiners = Integer.MAX_VALUE;
 
     private Set<BuildOrderOutput> outputs = new LinkedHashSet<>();
     private HashMap<Ability, Integer> queuedAbilities = new HashMap<>();
@@ -64,6 +62,9 @@ public class TerranBioBuild implements BuildOrder {
                 }
             });
 
+    public TerranBioBuild() {
+    }
+
     @Override
     public void onStep(AgentWithData agentWithData) {
         countOfUnits = CacheBuilder.newBuilder()
@@ -77,49 +78,74 @@ public class TerranBioBuild implements BuildOrder {
                     }
                 });
         countOfUnits.invalidateAll();
-        tryBuildSupplyDepot(agentWithData);
-        tryBuildBarracks(agentWithData);
-        tryBuildCommandCentre(agentWithData);
-        tryBuildRefinery(agentWithData);
-        int supply = agentWithData.observation().getFoodUsed();
-        int workerSupply = agentWithData.observation().getFoodWorkers();
-        int armySupply = agentWithData.observation().getFoodArmy();
-        boolean floatingLots = (agentWithData.observation().getMinerals() > 1250 && agentWithData.observation().getVespene() > 500);
-        Set<Upgrade> upgrades = new HashSet<>(agentWithData.observation().getUpgrades());
+        long gameLoop = agentWithData.observation().getGameLoop();
+        if (gameLoop > lastOutputUpdateAt + OUTPUT_UPDATE_INTERVAL) {
+            lastOutputUpdateAt = gameLoop;
+            outputs.clear();
 
-        maxGasMiners = Integer.MAX_VALUE;
+            Set<Upgrade> upgrades = new HashSet<>(agentWithData.observation().getUpgrades());
 
-        if (workerSupply > 28 && armySupply > 1) {
-            int targetFactories = supply > 160 ? 2 : 1;
-            if (supply == 200) {
-                targetFactories = 4;
-            }
-            tryBuildMaxStructure(agentWithData, Abilities.BUILD_FACTORY,
-                    Units.TERRAN_FACTORY,
-                    targetFactories,
-                    PlacementRules.centreOfBase());
-            agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                    unitInPool.unit().getAddOnTag().isEmpty() &&
-                    UnitInPool.isUnit(Units.TERRAN_FACTORY).test(unitInPool)).forEach(unit -> {
-                if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
-                    agentWithData.actions().unitCommand(unit.unit(),
-                            countUnitType(Units.TERRAN_FACTORY_TECHLAB) == 0 ?
-                                    Abilities.BUILD_TECHLAB_FACTORY :
-                                    Abilities.BUILD_REACTOR_FACTORY, unit.unit().getPosition().toPoint2d(),
-                            false);
-                } else {
-                    agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);
+            tryBuildSupplyDepot(agentWithData);
+            morphCommandCentres(agentWithData);
+            tryBuildScvs(agentWithData);
+            tryBuildBarracks(agentWithData);
+            tryBuildCommandCentre(agentWithData);
+            tryBuildRefinery(agentWithData);
+            buildAddons(agentWithData);
+            tryBuildEngineeringBayAndUpgrades(agentWithData, upgrades);
+            tryBuildFactoryAndUpgrades(agentWithData, upgrades);
+            tryBuildStarportAndUpgrades(agentWithData, upgrades);
+            tryBuildGhostAcademyAndUpgrades(agentWithData, upgrades);
+
+            // Translate UnitTypeRequests to BuildOrderOutput.
+            agentWithData.fightManager().getRequestedUnitTypes().forEach(unitTypeRequest -> {
+                int count = unitTypeRequest.alternateForm()
+                        .map(alternateUnitType -> countUnitType(unitTypeRequest.unitType(), alternateUnitType))
+                        .orElseGet(() -> countUnitType(unitTypeRequest.unitType()));
+                if (count < unitTypeRequest.amount()) {
+                    int maxParallel = Math.max(0, unitTypeRequest.amount() - count);
+                    maxParallel = Math.min(maxParallel, countUnitType(unitTypeRequest.producingUnitType()));
+                    if (!unitTypeRequest.needsTechLab()) {
+                        maxParallel *= 2; // can use reactor.
+                    }
+                    for (int i = 0; i < maxParallel; ++i) {
+                        outputs.add(ImmutableBuildOrderOutput.builder()
+                                .abilityToUse(unitTypeRequest.productionAbility())
+                                .eligibleUnitTypes(UnitFilter.mine(unitTypeRequest.producingUnitType()))
+                                .placementRules(unitTypeRequest.placementRules())
+                                .addonRequired(unitTypeRequest.needsTechLab() ? Optional.of(Units.TERRAN_TECHLAB) : Optional.empty())
+                                .outputId((int)gameLoop * 1000 + i)
+                                .build());
+                    }
                 }
             });
-            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_FACTORY_TECHLAB, Map.of(
-                    Upgrades.DRILL_CLAWS, Abilities.RESEARCH_DRILLING_CLAWS
+        }
+
+        // Allow attacks.
+        agentWithData.fightManager().setCanAttack(true);
+
+        BuildUtils.defaultTerranRamp(agentWithData);
+    }
+
+    private void tryBuildGhostAcademyAndUpgrades(AgentWithData agentWithData, Set<Upgrade> upgrades) {
+        int supply = agentWithData.observation().getFoodUsed();
+        boolean floatingLots = (agentWithData.observation().getMinerals() > 1250 && agentWithData.observation().getVespene() > 500);
+        if (supply > 180 || floatingLots) {
+            tryBuildMaxStructure(agentWithData,
+                    Abilities.BUILD_GHOST_ACADEMY,
+                    Units.TERRAN_GHOST_ACADEMY,
+                    1,
+                    PlacementRules.borderOfBase());
+            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_GHOST_ACADEMY, Map.of(
+                    Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
             ));
         }
-        if (workerSupply > 40) {
-            tryBuildMaxStructure(agentWithData,
-                    Abilities.BUILD_ENGINEERING_BAY,
-                    Units.TERRAN_ENGINEERING_BAY,2, PlacementRules.borderOfBase());
-        }
+    }
+
+    private void tryBuildStarportAndUpgrades(AgentWithData agentWithData, Set<Upgrade> upgrades) {
+        int armySupply = agentWithData.observation().getFoodArmy();
+        boolean floatingLots = (agentWithData.observation().getMinerals() > 1250 && agentWithData.observation().getVespene() > 500);
+
         if (armySupply > 40) {
             boolean hasAir = countUnitType(Units.TERRAN_VIKING_FIGHTER, Units.TERRAN_LIBERATOR, Units.TERRAN_LIBERATOR_AG) > 0;
             int numArmories = (floatingLots || hasAir) ? 2 : 1;
@@ -156,128 +182,134 @@ public class TerranBioBuild implements BuildOrder {
                 }
             }
         }
-        if (supply > 180 || floatingLots) {
-            tryBuildMaxStructure(agentWithData,
-                    Abilities.BUILD_GHOST_ACADEMY,
-                    Units.TERRAN_GHOST_ACADEMY,
-                    1,
-                    PlacementRules.borderOfBase());
-            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_GHOST_ACADEMY, Map.of(
-                    Upgrades.ENHANCED_SHOCKWAVES, Abilities.RESEARCH_TERRAN_GHOST_ENHANCED_SHOCKWAVES
-            ));
-        }
+    }
+
+    private void tryBuildFactoryAndUpgrades(AgentWithData agentWithData, Set<Upgrade> upgrades) {
+        int supply = agentWithData.observation().getFoodUsed();
+        int workerSupply = agentWithData.observation().getFoodWorkers();
+        int armySupply = agentWithData.observation().getFoodArmy();
+
         if (workerSupply > 28 && armySupply > 1) {
-            int targetStarports = supply > 160 ? 2 : 1;
+            int targetFactories = supply > 160 ? 2 : 1;
             if (supply == 200) {
-                targetStarports = 3;
+                targetFactories = 4;
             }
-            tryBuildMaxStructure(agentWithData, Abilities.BUILD_STARPORT, Units.TERRAN_STARPORT,
-                    targetStarports,
-                    PlacementRules.borderOfBase());
-            int numReactors = countUnitType(Units.TERRAN_STARPORT_REACTOR);
-            int numTechLabs = countUnitType(Units.TERRAN_STARPORT_TECHLAB);
-            agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                    unitInPool.unit().getAddOnTag().isEmpty() &&
-                    UnitInPool.isUnit(Units.TERRAN_STARPORT).test(unitInPool)).forEach(unit -> {
-                if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
-                    // Reactor, Techlab, Reactor
-                    agentWithData.actions().unitCommand(unit.unit(), numReactors == 0 ?
-                                    Abilities.BUILD_REACTOR_STARPORT :
-                                    numTechLabs == 0 ? Abilities.BUILD_TECHLAB_STARPORT : Abilities.BUILD_REACTOR_STARPORT,
-                            unit.unit().getPosition().toPoint2d(),
-                            false);
-                } else {
-                    agentWithData.debug().debugTextOut("Addon Blocked", unit.unit().getPosition(), Color.RED, 10);
-                }
-            });
-        }
-        if (workerSupply > 24 && armySupply > 10) {
-            agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                    unitInPool.unit().getAddOnTag().isEmpty() &&
-                    UnitInPool.isUnit(Units.TERRAN_BARRACKS).test(unitInPool)).forEach(unit -> {
-                if (unit.unit().getOrders().isEmpty() && canFitAddon(agentWithData, unit.unit())) {
-                    Ability ability = Abilities.BUILD_REACTOR;
-                    if (countUnitType(Units.TERRAN_BARRACKS_TECHLAB) == 0 || ThreadLocalRandom.current().nextBoolean()) {
-                        ability = Abilities.BUILD_TECHLAB;
-                    }
-                    agentWithData.actions().unitCommand(unit.unit(), ability, unit.unit().getPosition().toPoint2d(), false);
-                } else {
-                    agentWithData.debug().debugTextOut("No Addon", unit.unit().getPosition(), Color.RED, 10);
-                }
-            });
-            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
-                    Upgrades.SHIELD_WALL, Abilities.RESEARCH_COMBAT_SHIELD,
-                    Upgrades.STIMPACK, Abilities.RESEARCH_STIMPACK,
-                    Upgrades.PUNISHER_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
-            ));
-            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
-                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
-                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
-                    Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
-                    Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR
+            tryBuildMaxStructure(agentWithData, Abilities.BUILD_FACTORY,
+                    Units.TERRAN_FACTORY,
+                    targetFactories,
+                    PlacementRules.centreOfBase());
+            tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_FACTORY_TECHLAB, Map.of(
+                    Upgrades.DRILL_CLAWS, Abilities.RESEARCH_DRILLING_CLAWS
             ));
         }
+    }
+
+    private void tryBuildEngineeringBayAndUpgrades(AgentWithData agentWithData, Set<Upgrade> upgrades) {
+        int workerSupply = agentWithData.observation().getFoodWorkers();
+        if (workerSupply > 40) {
+            tryBuildMaxStructure(agentWithData,
+                    Abilities.BUILD_ENGINEERING_BAY,
+                    Units.TERRAN_ENGINEERING_BAY,2, PlacementRules.borderOfBase());
+        }
+        tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_BARRACKS_TECHLAB, Map.of(
+                Upgrades.SHIELD_WALL, Abilities.RESEARCH_COMBAT_SHIELD,
+                Upgrades.STIMPACK, Abilities.RESEARCH_STIMPACK,
+                Upgrades.PUNISHER_GRENADES, Abilities.RESEARCH_CONCUSSIVE_SHELLS
+        ));
+        tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
+                Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
+                Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
+                Upgrades.TERRAN_INFANTRY_WEAPONS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_WEAPONS,
+                Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
+                Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL2, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR,
+                Upgrades.TERRAN_INFANTRY_ARMORS_LEVEL3, Abilities.RESEARCH_TERRAN_INFANTRY_ARMOR
+        ));
         if (workerSupply > 60) {
             tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ENGINEERING_BAY, Map.of(
                     Upgrades.TERRAN_BUILDING_ARMOR, Abilities.RESEARCH_TERRAN_STRUCTURE_ARMOR_UPGRADE
             ));
         }
-        // upgrade orbital/planetaries
-        int numCcs = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
-        agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                UnitInPool.isUnit(Units.TERRAN_COMMAND_CENTER).test(unitInPool)).forEach(unit -> {
-            Ability ability = Abilities.MORPH_ORBITAL_COMMAND;
-            if (numCcs > 4) {
-                ability = Abilities.MORPH_PLANETARY_FORTRESS;
-            }
-            agentWithData.actions().unitCommand(unit.unit(), ability, false);
-        });
-        tryBuildScvs(agentWithData);
-        if (agentWithData.fightManager().hasSeenCloakedOrBurrowedUnits() ||
-                agentWithData.mapAwareness().getObservedCreepCoverage().map(coverage -> coverage > 0.1f).orElse(false)) {
-            tryBuildUnit(agentWithData, Abilities.TRAIN_RAVEN, Units.TERRAN_RAVEN, Units.TERRAN_STARPORT, true, Optional.of(1));
-        }
-        List<UnitTypeRequest> requestedUnitTypes = agentWithData.fightManager().getRequestedUnitTypes();
-        if (requestedUnitTypes.size() > 0) {
-            // TODO better logic to prevent starvation.
-            // Here we just wait until we have the highest mineral cost.
-            // However that will lead to lower costs being starved.
-            int maxMineralCost = requestedUnitTypes.stream()
-                    .filter(request -> request.amount() > 0)
-                    .mapToInt(request ->
-                            agentWithData.gameData().getUnitMineralCost(request.unitType()).orElse(50))
-                    .max()
-                    .orElse(50);
-            //System.out.println("Waiting for " + maxMineralCost + " minerals");
-            if (agentWithData.observation().getMinerals() >= maxMineralCost) {
-                Collections.shuffle(requestedUnitTypes);
-                requestedUnitTypes.forEach(requestedUnitType -> {
-                    //System.out.println("Making " + requestedUnitType.unitType() + " (max " + requestedUnitType.amount() + ")");
-                    UnitType[] type;
-                    if (requestedUnitType.alternateForm().isPresent()) {
-                        type = new UnitType[]{requestedUnitType.unitType(), requestedUnitType.alternateForm().get()};
-                    } else {
-                        type = new UnitType[]{requestedUnitType.unitType()};
-                    }
-                    tryBuildUnit(agentWithData,
-                            requestedUnitType.productionAbility(),
-                            type,
-                            requestedUnitType.producingUnitType(),
-                            requestedUnitType.needsTechLab(),
-                            Optional.of(requestedUnitType.amount()));
-                });
-            }
-        }
-
-        BuildUtils.defaultTerranRamp(agentWithData);
-
-        agentWithData.fightManager().setCanAttack(true);
     }
 
-    private boolean canFitAddon(AgentWithData agentWithData, Unit unit) {
-        return agentWithData.structurePlacementCalculator().map(spc -> spc.canFitAddon(unit)).orElse(false);
+    private void buildAddons(AgentWithData agentWithData) {
+        buildAddonsForType(agentWithData,
+                Units.TERRAN_BARRACKS,
+                Units.TERRAN_BARRACKS_TECHLAB,
+                1,
+                0.5);
+        buildAddonsForType(agentWithData,
+                Units.TERRAN_FACTORY,
+                Units.TERRAN_FACTORY_TECHLAB,
+                1,
+                0.0);
+        buildAddonsForType(agentWithData,
+                Units.TERRAN_STARPORT,
+                Units.TERRAN_STARPORT_TECHLAB,
+                1,
+                0.0);
+    }
+
+    private void buildAddonsForType(AgentWithData agentWithData, UnitType type,
+                                    UnitType techlabType, int minTechLabs, double techLabRatio) {
+        int numOfType = countUnitType(type);
+        int numTechLabs = countUnitType(techlabType);
+        int targetTechLabs = Math.max(minTechLabs, (int)Math.ceil((double)numOfType * techLabRatio));
+        if (numTechLabs < targetTechLabs) {
+            outputs.add(ImmutableBuildOrderOutput
+                    .builder()
+                    .abilityToUse(Abilities.BUILD_TECHLAB)
+                    .eligibleUnitTypes(UnitFilter.mine(type))
+                    .outputId((int)agentWithData.observation().getGameLoop())
+                    .build());
+        } else {
+            outputs.add(ImmutableBuildOrderOutput
+                    .builder()
+                    .abilityToUse(Abilities.BUILD_REACTOR)
+                    .eligibleUnitTypes(UnitFilter.mine(type))
+                    .outputId((int)agentWithData.observation().getGameLoop())
+                    .build());
+        }
+    }
+
+    private void morphCommandCentres(AgentWithData agentWithData) {
+        int numCcs = countUnitType(Units.TERRAN_COMMAND_CENTER);
+        if (countUnitType(Units.TERRAN_BARRACKS) > 0 && numCcs > 0) {
+            List<Unit> currentCcs = agentWithData.observation().getUnits(UnitFilter.mine(Units.TERRAN_COMMAND_CENTER))
+                    .stream()
+                    .map(UnitInPool::unit)
+                    .collect(Collectors.toList());
+            int numOrbitals = countUnitType(Units.TERRAN_ORBITAL_COMMAND);
+            currentCcs.forEach(cc -> {
+                if (numOrbitals < 3) {
+                    outputs.add(ImmutableBuildOrderOutput
+                            .builder()
+                            .abilityToUse(Abilities.MORPH_ORBITAL_COMMAND)
+                            .specificUnit(cc.getTag())
+                            .build());
+                } else {
+                    outputs.add(ImmutableBuildOrderOutput
+                            .builder()
+                            .abilityToUse(Abilities.MORPH_PLANETARY_FORTRESS)
+                            .specificUnit(cc.getTag())
+                            .build());
+                }
+            });
+        }
+    }
+
+    private void tryBuildScvs(AgentWithData agentWithData) {
+        List<Unit> idleCcs = agentWithData.observation().getUnits(UnitFilter.mine(Constants.TERRAN_CC_TYPES))
+                .stream()
+                .map(UnitInPool::unit)
+                .filter(unit -> unit.getOrders().isEmpty())
+                .collect(Collectors.toList());
+        idleCcs.forEach(cc -> {
+            outputs.add(ImmutableBuildOrderOutput
+                    .builder()
+                    .abilityToUse(Abilities.TRAIN_SCV)
+                    .specificUnit(cc.getTag())
+                    .build());
+        });
     }
 
     @Override
@@ -304,8 +336,21 @@ public class TerranBioBuild implements BuildOrder {
         }
         outputs.remove(stage);
         if (stage.abilityToUse().isPresent()) {
-            queuedAbilities.compute(stage.abilityToUse().get(), (k, v) -> v == null ? 1 : v - 1);
+            queuedAbilities.merge(stage.abilityToUse().get(), 0, (a, b) -> a - 1);
         }
+    }
+
+    @Override
+    public void onStageFailed(BuildOrderOutput stage, AgentWithData agentWithData) {
+        onStageFinished(stage, agentWithData, false);
+    }
+
+    @Override
+    public void onStageCompleted(BuildOrderOutput stage, AgentWithData agentWithData) {
+        onStageFinished(stage, agentWithData, true);
+    }
+
+    public void onStageFinished(BuildOrderOutput stage, AgentWithData agentWithData, boolean success) {
     }
 
     @Override
@@ -328,11 +373,6 @@ public class TerranBioBuild implements BuildOrder {
         return "Terran Bio";
     }
 
-    private int getNumAbilitiesInUse(ObservationInterface observationInterface, Ability abilityTypeForStructure) {
-        // If a unit already is building a supply structure of this type, do nothing.
-        return observationInterface.getUnits(Alliance.SELF, doesBuildWith(abilityTypeForStructure)).size();
-    }
-
     private boolean tryBuildMaxStructure(AgentWithData agentWithData,
                                          Ability abilityTypeForStructure,
                                          UnitType unitTypeForStructure,
@@ -343,36 +383,30 @@ public class TerranBioBuild implements BuildOrder {
             long taskCount = agentWithData.taskManager().countTasks(task ->
                     task instanceof BuildStructureTask && ((BuildStructureTask)task).getTargetUnitType().equals(unitTypeForStructure));
             if (completeCount + taskCount < max) {
-                tryBuildStructure(abilityTypeForStructure, rules);
+                tryBuildStructure(agentWithData.observation().getGameLoop(), abilityTypeForStructure, rules);
             }
         }
         return false;
     }
 
-    private void tryBuildStructureOnTarget(Ability abilityTypeForStructure,
+    private void tryBuildStructureOnTarget(AgentWithData agentWithData,
+                                           Ability abilityTypeForStructure,
                                            Unit specificTarget) {
-        tryBuildStructure(abilityTypeForStructure, PlacementRules.on(specificTarget));
+        tryBuildStructure(agentWithData.observation().getGameLoop(), abilityTypeForStructure, PlacementRules.on(specificTarget));
     }
 
-    private void tryBuildStructure(Ability abilityTypeForStructure,
-                                    PlacementRules rules) {
+    private void tryBuildStructure(long gameLoop, Ability abilityTypeForStructure,
+                                   PlacementRules rules) {
         // Temporary blocker
         if (getQueuedCount(abilityTypeForStructure) == 0) {
             outputs.add(ImmutableBuildOrderOutput.builder()
                     .abilityToUse(abilityTypeForStructure)
                     .eligibleUnitTypes(UnitFilter.mine(Units.TERRAN_SCV))
                     .placementRules(rules)
-                    .originatingHashCode(ThreadLocalRandom.current().nextInt())
+                    .outputId((int)gameLoop)
                     .build());
-            queuedAbilities.compute(abilityTypeForStructure, (k, v) -> v == null ? 1 : v + 1);
+            queuedAbilities.merge(abilityTypeForStructure, 1, (a, b) -> a + b);
         }
-    }
-
-    private Predicate<UnitInPool> doesBuildWith(Ability abilityTypeForStructure) {
-        return unitInPool -> unitInPool.unit()
-                .getOrders()
-                .stream()
-                .anyMatch(unitOrder -> abilityTypeForStructure.equals(unitOrder.getAbility()));
     }
 
     private void tryBuildBarracks(AgentWithData agentWithData) {
@@ -407,9 +441,9 @@ public class TerranBioBuild implements BuildOrder {
             return;
         }
         if (numBarracks == 0 && agentWithData.structurePlacementCalculator().isPresent()) {
-            tryBuildStructure(Abilities.BUILD_BARRACKS, PlacementRules.mainRampBarracksWithAddon());
+            tryBuildStructure(agentWithData.observation().getGameLoop(), Abilities.BUILD_BARRACKS, PlacementRules.mainRampBarracksWithAddon());
         } else {
-            tryBuildStructure(Abilities.BUILD_BARRACKS, PlacementRules.centreOfBase());
+            tryBuildStructure(agentWithData.observation().getGameLoop(), Abilities.BUILD_BARRACKS, PlacementRules.centreOfBase());
         }
     }
 
@@ -457,9 +491,6 @@ public class TerranBioBuild implements BuildOrder {
         if (observationInterface.getGameLoop() < lastExpansionTime + 22L) {
             return false;
         }
-        if (getNumAbilitiesInUse(observationInterface, Abilities.BUILD_COMMAND_CENTER) > 0) {
-            return false;
-        }
         if (mapAwareness.getValidExpansionLocations().isEmpty()) {
             return false;
         }
@@ -488,7 +519,7 @@ public class TerranBioBuild implements BuildOrder {
                 .flatMap(expansions -> expansions.stream().findFirst());
         firstExpansion.ifPresent(expansion -> {
             tryBuildStructure(
-                    Abilities.BUILD_COMMAND_CENTER,
+                    agentWithData.observation().getGameLoop(), Abilities.BUILD_COMMAND_CENTER,
                     PlacementRules.at(expansion.position(), 0));
         });
     }
@@ -508,113 +539,23 @@ public class TerranBioBuild implements BuildOrder {
             return;
         }
         long numCc = countUnitType(Constants.TERRAN_CC_TYPES_ARRAY);
-        long numSupplyDepot = countUnitType(Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT_LOWERED);
-        boolean controlsBase = agentWithData.mapAwareness().getMainBaseRegion().map(RegionData::isPlayerControlled).orElse(false);
-        if (numSupplyDepot == 0 && controlsBase) {
-            tryBuildStructure(
-                    Abilities.BUILD_SUPPLY_DEPOT,
-                    PlacementRules.mainRampSupplyDepot1());
-        } else if (numSupplyDepot == 1 && controlsBase) {
-            tryBuildStructure(
-                Abilities.BUILD_SUPPLY_DEPOT,
-                PlacementRules.mainRampSupplyDepot2());
-        } else {
-            tryBuildStructure(
-                    Abilities.BUILD_SUPPLY_DEPOT,
-                    PlacementRules.borderOfBase());
-        }
-    }
-
-    private boolean tryBuildScvs(AgentWithData agentWithData) {
-        int numBases = countMiningBases(agentWithData);
-        int numScvs = countUnitType(Units.TERRAN_SCV);
-        if (agentWithData.observation().getFoodUsed() == agentWithData.observation().getFoodCap()) {
-            return false;
-        }
-        int neededScvs = Math.min(75, numBases * 28);
-        AtomicInteger deltaScvs = new AtomicInteger(Math.max(0, neededScvs - numScvs));
-        agentWithData.observation().getUnits(Alliance.SELF,
-                unitInPool -> Constants.TERRAN_CC_TYPES.contains(unitInPool.unit().getType())).forEach(commandCentre -> {
-            if (commandCentre.unit().getBuildProgress() < 1.0f) {
-                return;
-            }
-            if (commandCentre.unit().getOrders().isEmpty()) {
-                if (deltaScvs.get() > 0) {
-                    agentWithData.actions().unitCommand(commandCentre.unit(), Abilities.TRAIN_SCV, false);
-                    deltaScvs.decrementAndGet();
-                }
-            }
-        });
-        return true;
-    }
-    private boolean tryBuildUnit(AgentWithData agentWithData,
-                                 Ability abilityToCast, UnitType unitType, UnitType buildFrom,
-                                 boolean needTechLab, Optional<Integer> maximum) {
-        return tryBuildUnit(agentWithData, abilityToCast, new UnitType[]{unitType}, buildFrom, needTechLab, maximum);
-    }
-
-    private boolean tryBuildUnit(AgentWithData agentWithData,
-                                 Ability abilityToCast, UnitType[] unitTypes, UnitType buildFrom,
-                                 boolean needTechLab, Optional<Integer> maximum) {
-        int count = countUnitType(unitTypes);
-        if (maximum.isPresent()) {
-            if (count >= maximum.get()) {
-                return false;
+        if (getQueuedCount(Abilities.BUILD_SUPPLY_DEPOT) < numCc) {
+            long numSupplyDepot = countUnitType(Units.TERRAN_SUPPLY_DEPOT, Units.TERRAN_SUPPLY_DEPOT_LOWERED);
+            boolean controlsBase = agentWithData.mapAwareness().getMainBaseRegion().map(RegionData::isPlayerControlled).orElse(false);
+            if (numSupplyDepot == 0 && controlsBase) {
+                tryBuildStructure(agentWithData.observation().getGameLoop(),
+                        Abilities.BUILD_SUPPLY_DEPOT,
+                        PlacementRules.mainRampSupplyDepot1());
+            } else if (numSupplyDepot == 1 && controlsBase) {
+                tryBuildStructure(agentWithData.observation().getGameLoop(),
+                        Abilities.BUILD_SUPPLY_DEPOT,
+                        PlacementRules.mainRampSupplyDepot2());
+            } else {
+                tryBuildStructure(agentWithData.observation().getGameLoop(),
+                        Abilities.BUILD_SUPPLY_DEPOT,
+                        PlacementRules.borderOfBase());
             }
         }
-        if (agentWithData.observation().getFoodUsed() == agentWithData.observation().getFoodCap()) {
-            return false;
-        }
-        AtomicInteger amountNeeded = new AtomicInteger(maximum.orElse(1000) - count);
-        agentWithData.observation()
-                .getUnits(UnitFilter.builder().alliance(Alliance.SELF).unitType(buildFrom).build())
-                .forEach(structure -> {
-                    boolean reactor = false;
-                    boolean techLab = false;
-                    if (structure.unit().getBuildProgress() < 1.0f) {
-                        return;
-                    }
-                    if (amountNeeded.get() <= 0) {
-                        return;
-                    }
-                    if (structure.unit().getAddOnTag().isPresent()) {
-                        Tag addOn = structure.unit().getAddOnTag().get();
-                        UnitInPool addOnUnit = agentWithData.observation().getUnit(addOn);
-                        if (addOnUnit != null) {
-                            if (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_REACTOR ||
-                                    addOnUnit.unit().getType() == Units.TERRAN_STARPORT_REACTOR ||
-                                    addOnUnit.unit().getType() == Units.TERRAN_FACTORY_REACTOR) {
-                                reactor = true;
-                            }
-                            if (addOnUnit.unit().getType() == Units.TERRAN_BARRACKS_TECHLAB ||
-                                    addOnUnit.unit().getType() == Units.TERRAN_STARPORT_TECHLAB ||
-                                    addOnUnit.unit().getType() == Units.TERRAN_FACTORY_TECHLAB) {
-                                techLab = true;
-                            }
-                        }
-                    }
-                    if (needTechLab && !techLab) {
-                        return;
-                    }
-                    List<UnitOrder> orders = structure.unit().getOrders();
-                    boolean structureInHighThreat = agentWithData.mapAwareness().getRegionDataForPoint
-                                    (structure.unit().getPosition().toPoint2d())
-                            .map(regionData -> {
-                                //System.out.println("Nearby threat " + regionData.nearbyEnemyThreat() + " vs " + regionData.playerThreat());
-                                return regionData.nearbyEnemyThreat() > regionData.playerThreat();
-                            })
-                            .orElse(false);
-                    if (orders.isEmpty() || (reactor && orders.size() < 2)) {
-                        // Hack here - need prioritsation.
-                        if (structureInHighThreat ||
-                                (agentWithData.observation().getMinerals() > agentWithData.taskManager().totalReservedMinerals() &&
-                                        agentWithData.observation().getVespene() > agentWithData.taskManager().totalReservedVespene())) {
-                            agentWithData.actions().unitCommand(structure.unit(), abilityToCast, false);
-                            amountNeeded.decrementAndGet();
-                        }
-                    }
-                });
-        return true;
     }
 
     private boolean needsRefinery(AgentWithData agentWithData) {
@@ -627,30 +568,28 @@ public class TerranBioBuild implements BuildOrder {
             return false;
         }
         Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agentWithData.observation());
-        freeGeyserNearCc.ifPresent(geyser -> tryBuildStructureOnTarget(
+        freeGeyserNearCc.ifPresent(geyser -> tryBuildStructureOnTarget(agentWithData,
                 Abilities.BUILD_REFINERY, geyser));
         return true;
     }
 
     private void tryGetUpgrades(AgentWithData agentWithData,
-                                Set<Upgrade> upgrades, Units structure, Map<Upgrades, Abilities> upgradesToGet) {
+                                Set<Upgrade> upgrades, UnitType structure, Map<Upgrades, Abilities> upgradesToGet) {
         Set<Upgrades> upgradesMissing = new HashSet<>(upgradesToGet.keySet());
         upgradesMissing.removeAll(upgrades);
         if (upgradesMissing.size() == 0) {
             return;
         }
 
-        agentWithData.observation().getUnits(unitInPool -> unitInPool.unit().getAlliance() == Alliance.SELF &&
-                UnitInPool.isUnit(structure).test(unitInPool)).forEach(unit -> {
-            if (unit.unit().getOrders().isEmpty()) {
-                for (Map.Entry<Upgrades, Abilities> upgrade: upgradesToGet.entrySet()) {
-                    if (agentWithData.gameData().unitHasAbility(unit.getTag(), upgrade.getValue()) && !upgrades.contains(upgrade.getKey())) {
-                        agentWithData.actions().unitCommand(unit.unit(), upgrade.getValue(), false);
-                        break;
-                    }
-                }
+        for (Map.Entry<Upgrades, Abilities> upgrade: upgradesToGet.entrySet()) {
+            if (!upgrades.contains(upgrade.getKey())) {
+                outputs.add(ImmutableBuildOrderOutput.builder()
+                        .eligibleUnitTypes(UnitFilter.mine(structure))
+                        .abilityToUse(upgrade.getValue())
+                        .outputId((int)agentWithData.observation().getGameLoop())
+                        .build());
             }
-        });
+        }
     }
 
     private int getQueuedCount(Ability ability) {

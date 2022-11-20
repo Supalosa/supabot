@@ -77,7 +77,7 @@ public abstract class SimpleBuildOrderStage {
     public BuildOrderOutput toBuildOrderOutput() {
         // one might think that SimpleBuildOrderStage should just implement BuildOrderOutput...
         return ImmutableBuildOrderOutput.builder()
-                .originatingHashCode(hashCode())
+                .outputId(hashCode())
                 .abilityToUse(ability())
                 .eligibleUnitTypes(unitFilter())
                 .addonRequired(addonType())

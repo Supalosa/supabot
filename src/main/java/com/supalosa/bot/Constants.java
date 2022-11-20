@@ -36,12 +36,14 @@ public class Constants {
     );
 
     public static final Set<UnitType> TERRAN_TECHLAB_TYPES = Set.of(
+            Units.TERRAN_TECHLAB,
             Units.TERRAN_BARRACKS_TECHLAB,
             Units.TERRAN_FACTORY_TECHLAB,
             Units.TERRAN_STARPORT_TECHLAB
     );
 
     public static final Set<UnitType> TERRAN_REACTOR_TYPES = Set.of(
+            Units.TERRAN_REACTOR,
             Units.TERRAN_BARRACKS_REACTOR,
             Units.TERRAN_FACTORY_REACTOR,
             Units.TERRAN_STARPORT_REACTOR
