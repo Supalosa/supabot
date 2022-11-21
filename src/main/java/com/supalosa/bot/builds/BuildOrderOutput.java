@@ -38,7 +38,6 @@ public interface BuildOrderOutput {
     Optional<UnitType> addonRequired();
 
     Optional<PlacementRules> placementRules();
-
     Optional<Boolean> performAttack();
 
     Optional<Supplier<Task>> dispatchTask();
@@ -58,11 +57,14 @@ public interface BuildOrderOutput {
 
     default String asHumanReadableString() {
         if (abilityToUse().isPresent()) {
-            return (repeat() ? "*" : "") + StringUtils.capitalize(abilityToUse().get().toString()
+            return (repeat() ? "*" : "") +
+                    StringUtils.capitalize(abilityToUse().get().toString()
                             .replace("BUILD_", "")
                             .replace("TRAIN_", "")
                             .replace("_", " ")
-                            .toLowerCase());
+                            .toLowerCase()) +
+                    " - " +
+                    eligibleUnitTypes().map(UnitFilter::unitType).map(Optional::toString).or(() -> specificUnit().map(Tag::toString));
         }
         if (performAttack().isPresent()) {
             return performAttack().get() ? "Start Attack" : "Cancel Attack";

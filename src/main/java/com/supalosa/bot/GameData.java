@@ -185,12 +185,15 @@ public class GameData {
     }
 
     /**
-     * Return all abilities available to this unit.
+     * Return all abilities available to this unit, including resource requirements.
      */
     public Set<Ability> getAvailableAbilities(Tag tag) {
         return availableAbilities.getOrDefault(tag, Collections.emptySet());
     }
 
+    /**
+     * Returns true if the unit has a specific ability ready.
+     */
     public boolean unitHasAbility(Tag tag, Ability ability) {
         return getAvailableAbilities(tag).contains(ability);
     }

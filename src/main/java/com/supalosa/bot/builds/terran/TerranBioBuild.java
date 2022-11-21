@@ -98,6 +98,9 @@ public class TerranBioBuild implements BuildOrder {
             tryBuildGhostAcademyAndUpgrades(agentWithData, upgrades);
 
             // Translate UnitTypeRequests to BuildOrderOutput.
+            AtomicInteger remainingMoney = new AtomicInteger(Math.max(0,
+                    agentWithData.observation().getMinerals() - agentWithData.taskManager().totalReservedMinerals()));
+
             agentWithData.fightManager().getRequestedUnitTypes().forEach(unitTypeRequest -> {
                 int count = unitTypeRequest.alternateForm()
                         .map(alternateUnitType -> countUnitType(unitTypeRequest.unitType(), alternateUnitType))
@@ -108,14 +111,20 @@ public class TerranBioBuild implements BuildOrder {
                     if (!unitTypeRequest.needsTechLab()) {
                         maxParallel *= 2; // can use reactor.
                     }
+                    int mineralCost = agentWithData.gameData().getUnitMineralCost(unitTypeRequest.unitType()).orElse(0);
+                    // Hack for scvs to be queued even if there's not enough money for it.
+                    boolean force = Constants.WORKER_TYPES.contains(unitTypeRequest.unitType());
                     for (int i = 0; i < maxParallel; ++i) {
-                        outputs.add(ImmutableBuildOrderOutput.builder()
-                                .abilityToUse(unitTypeRequest.productionAbility())
-                                .eligibleUnitTypes(UnitFilter.mine(unitTypeRequest.producingUnitType()))
-                                .placementRules(unitTypeRequest.placementRules())
-                                .addonRequired(unitTypeRequest.needsTechLab() ? Optional.of(Units.TERRAN_TECHLAB) : Optional.empty())
-                                .outputId((int)gameLoop * 1000 + i)
-                                .build());
+                        if (force || remainingMoney.get() >= mineralCost) {
+                            remainingMoney.set(remainingMoney.get() - mineralCost);
+                            outputs.add(ImmutableBuildOrderOutput.builder()
+                                    .abilityToUse(unitTypeRequest.productionAbility())
+                                    .eligibleUnitTypes(UnitFilter.mine(unitTypeRequest.producingUnitType()))
+                                    .placementRules(unitTypeRequest.placementRules())
+                                    .addonRequired(unitTypeRequest.needsTechLab() ? Optional.of(Units.TERRAN_TECHLAB) : Optional.empty())
+                                    .outputId((int)gameLoop * 1000 + i)
+                                    .build());
+                        }
                     }
                 }
             });
@@ -303,12 +312,17 @@ public class TerranBioBuild implements BuildOrder {
                 .map(UnitInPool::unit)
                 .filter(unit -> unit.getOrders().isEmpty())
                 .collect(Collectors.toList());
+        int maxWorkers = 28 * Math.min(3, countUnitType(Constants.TERRAN_CC_TYPES_ARRAY));
+        int numWorkers = countUnitType(Units.TERRAN_SCV);
+        AtomicInteger workerQuota = new AtomicInteger(Math.max(0, maxWorkers - numWorkers));
         idleCcs.forEach(cc -> {
-            outputs.add(ImmutableBuildOrderOutput
-                    .builder()
-                    .abilityToUse(Abilities.TRAIN_SCV)
-                    .specificUnit(cc.getTag())
-                    .build());
+            if (workerQuota.getAndDecrement() > 0) {
+                outputs.add(ImmutableBuildOrderOutput
+                        .builder()
+                        .abilityToUse(Abilities.TRAIN_SCV)
+                        .specificUnit(cc.getTag())
+                        .build());
+            }
         });
     }
 
@@ -477,9 +491,9 @@ public class TerranBioBuild implements BuildOrder {
         final ObservationInterface observationInterface = agentWithData.observation();
         final MapAwareness mapAwareness = agentWithData.mapAwareness();
         // Expand every 16 workers.
-        final int[] expansionNumWorkers = new int[]{0, 18, 32, 48, 64, 72, 80};
+        final int[] expansionNumWorkers = new int[]{0, 18, 36, 54, 72, 999};
         int currentWorkers = observationInterface.getFoodWorkers();
-        int numCcs = countMiningBases(agentWithData);
+        int numCcs = countMiningBases(agentWithData) + getQueuedCount(Abilities.BUILD_COMMAND_CENTER);
         if (observationInterface.getMinerals() > 1000) {
             numCcs ++;
         }
@@ -582,7 +596,10 @@ public class TerranBioBuild implements BuildOrder {
         }
 
         for (Map.Entry<Upgrades, Abilities> upgrade: upgradesToGet.entrySet()) {
-            if (!upgrades.contains(upgrade.getKey())) {
+            boolean isAvailable = agentWithData.observation().getUnits(UnitFilter.mine(structure)).stream()
+                    .filter(unitInPool -> agentWithData.gameData().unitHasAbility(unitInPool.getTag(), upgrade.getValue()))
+                    .count() > 0;
+            if (isAvailable && !upgrades.contains(upgrade.getKey())) {
                 outputs.add(ImmutableBuildOrderOutput.builder()
                         .eligibleUnitTypes(UnitFilter.mine(structure))
                         .abilityToUse(upgrade.getValue())
