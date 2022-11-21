@@ -332,4 +332,10 @@ public class TaskManagerImpl implements TaskManager {
     public long countTasks(Predicate<Task> filter) {
         return taskSet.values().stream().filter(filter).count();
     }
+
+    @Override
+    public <T> T visitTasks(TaskVisitor<T> visitor) {
+        taskSet.values().forEach(task -> visitor.visit(task));
+        return visitor.getResult();
+    }
 }

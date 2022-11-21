@@ -11,7 +11,7 @@ import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.army.ArmyTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
-import com.supalosa.bot.utils.TaskWithUnitsVisitor;
+import com.supalosa.bot.task.TaskVisitor;
 
 import java.util.*;
 
@@ -94,7 +94,7 @@ public class DummyAttackTask extends DefaultTaskWithUnits implements MissionTask
     }
 
     @Override
-    public void accept(TaskWithUnitsVisitor visitor) {
+    public void accept(TaskVisitor visitor) {
 
     }
 

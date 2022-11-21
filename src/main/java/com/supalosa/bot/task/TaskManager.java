@@ -152,4 +152,6 @@ public interface TaskManager {
     boolean hasTask(Task task);
 
     long countTasks(Predicate<Task> filter);
+
+    <T> T visitTasks(TaskVisitor<T> visitor);
 }

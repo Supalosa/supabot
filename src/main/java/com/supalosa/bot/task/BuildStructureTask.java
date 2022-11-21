@@ -447,4 +447,8 @@ public class BuildStructureTask extends BaseTask {
     public UnitType getTargetUnitType() {
         return this.targetUnitType;
     }
+
+    public Ability getAbility() {
+        return this.ability;
+    }
 }

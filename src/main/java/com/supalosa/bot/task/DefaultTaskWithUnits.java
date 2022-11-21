@@ -7,7 +7,6 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
-import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 
 import java.util.*;
 
@@ -103,7 +102,7 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
     }
 
     @Override
-    public void accept(TaskWithUnitsVisitor visitor) {
+    public void accept(TaskVisitor visitor) {
         visitor.visit(this);
     }
 

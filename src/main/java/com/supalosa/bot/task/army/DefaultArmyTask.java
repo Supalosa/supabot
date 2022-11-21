@@ -8,7 +8,6 @@ import com.github.ocraft.s2client.protocol.data.Upgrade;
 import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.spatial.Point;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
-import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
@@ -21,7 +20,7 @@ import com.supalosa.bot.pathfinding.RegionGraphPath;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
-import com.supalosa.bot.utils.TaskWithUnitsVisitor;
+import com.supalosa.bot.task.TaskVisitor;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
@@ -679,7 +678,7 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     }
 
     @Override
-    public void accept(TaskWithUnitsVisitor visitor) {
+    public void accept(TaskVisitor visitor) {
         visitor.visit(this);
         this.childArmies.forEach(visitor::visit);
     }

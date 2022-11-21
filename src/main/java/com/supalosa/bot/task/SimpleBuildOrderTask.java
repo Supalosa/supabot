@@ -10,6 +10,7 @@ import com.github.ocraft.s2client.protocol.debug.Color;
 import com.github.ocraft.s2client.protocol.observation.AvailableAbility;
 import com.github.ocraft.s2client.protocol.query.AvailableAbilities;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
@@ -22,6 +23,7 @@ import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 import com.supalosa.bot.task.terran.BuildUtils;
+import com.supalosa.bot.utils.CalculateCurrentConstructionTasksVisitor;
 import com.supalosa.bot.utils.UnitFilter;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 
@@ -43,8 +45,6 @@ public class SimpleBuildOrderTask extends BaseTask {
     private Map<Tag, Long> orderDispatchedTo = new HashMap<>();
     private static final long ORDER_RESERVATION_TIME = 22L * 1;
     private Optional<Supplier<BuildOrder>> nextBuildOrder;
-    private Map<Ability, Integer> expectedMaxParallelOrdersForAbility = new HashMap<>();
-    private Set<BuildOrderOutput> seenOrders = new HashSet<>();
 
     private long lastGasCheck = 0L;
     private long lastRebalanceAt = 0L;
@@ -70,7 +70,12 @@ public class SimpleBuildOrderTask extends BaseTask {
         Set<Tag> reactors = agentWithData.observation()
                 .getUnits(UnitFilter.mine(Constants.TERRAN_REACTOR_TYPES)).stream()
                 .map(UnitInPool::getTag).collect(Collectors.toSet());
-        // Determine how many parallel tasks of a certain type should be running.
+
+        // Determine how many parallel tasks of a certain type are currently running.
+        Map<Ability, Integer> currentParallelAbilities = computeCurrentParallelAbilities(agentWithData);
+        Map<Ability, Integer> expectedParallelAbilities = computeExpectedParallelAbilities(outputs);
+
+        // Dispatch any outputs that aren't currently running.
         outputs.forEach(output -> {
             if (output.performAttack().isPresent()) {
                 agentWithData.fightManager().setCanAttack(output.performAttack().get());
@@ -87,6 +92,7 @@ public class SimpleBuildOrderTask extends BaseTask {
                 currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                 return;
             }
+            Ability ability = output.abilityToUse().get();
             Optional<Unit> orderedUnit = resolveUnitToUse(agentWithData, output);
             if (orderDispatchedAt.containsKey(output)) {
                 if (gameLoop < orderDispatchedAt.get(output) + TIME_BETWEEN_DISPATCHES) {
@@ -95,20 +101,18 @@ public class SimpleBuildOrderTask extends BaseTask {
                     orderDispatchedAt.remove(output);
                 }
             }
-            if (!seenOrders.contains(output)) {
-                // First time seeing this order: allow one more parallel construction of it.
-                expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 1 : v + 1);
-                seenOrders.add(output);
-            }
-            int maxParallel = expectedMaxParallelOrdersForAbility.getOrDefault(output.abilityToUse().get(), 0);
+            int maxParallel = expectedParallelAbilities.getOrDefault(ability, 0);
             if (maxParallel <= 0) {
-                //throw new IllegalStateException("Did not expect to see this ability used.");
+                return;
+            }
+            int currentParallel = currentParallelAbilities.getOrDefault(ability, 0);
+            if (currentParallel >= maxParallel) {
                 return;
             }
             if (orderedUnit.isPresent()) {
-                boolean isAvailable = agentWithData.gameData().unitHasAbility(orderedUnit.get().getTag(), output.abilityToUse().get());
+                boolean isAvailable = agentWithData.gameData().unitHasAbility(orderedUnit.get().getTag(), ability);
                 if (isAvailable) {
-                    agentWithData.actions().unitCommand(orderedUnit.get(), output.abilityToUse().get(), false);
+                    agentWithData.actions().unitCommand(orderedUnit.get(), ability, false);
                     // Signal to the build order that the ability was used.
                     currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                     boolean reserveUnit = true;
@@ -132,11 +136,11 @@ public class SimpleBuildOrderTask extends BaseTask {
                 Task buildTask;
                 if (output.placementRules().get().on().isPresent()) {
                     buildTask = createBuildTask(agentWithData.gameData(),
-                            output.abilityToUse().get(),
+                            ability,
                             output.placementRules().get().on().get(),
                             output.placementRules());
                 } else {
-                    buildTask = createBuildTask(agentWithData.gameData(), output.abilityToUse().get(), output.placementRules());
+                    buildTask = createBuildTask(agentWithData.gameData(), ability, output.placementRules());
                 }
                 if (taskManager.addTask(buildTask, maxParallel)) {
                     final BuildOrderOutput thisStage = output;
@@ -150,26 +154,23 @@ public class SimpleBuildOrderTask extends BaseTask {
                                 if (!isComplete() && !output.repeat()) {
                                     changeBuild();
                                     this.onFailure();
-                                    System.out.println("Build task " + output.abilityToUse().get() + " failed, aborting build order.");
-                                    expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
+                                    System.out.println("Build task " + ability + " failed, aborting build order.");
                                     announceFailure(agentWithData.observation(), agentWithData.actions());
                                     currentBuildOrder.onStageFailed(thisStage, agentWithData);
                                 }
                             })
                             .onComplete(result -> {
                                 if (!isComplete() && !output.repeat()) {
-                                    // If not repeating, reduce parallel building of this structure.
-                                    expectedMaxParallelOrdersForAbility.compute(output.abilityToUse().get(), (k, v) -> v == null ? 0 : v - 1);
                                     currentBuildOrder.onStageCompleted(thisStage, agentWithData);
                                 }
                             });
                     orderDispatchedAt.put(output, gameLoop);
                 }
-            } else if (output.abilityToUse().get().getTargets().contains(Target.UNIT)) {
-                 if (Constants.BUILD_GAS_STRUCTURE_ABILITIES.contains(output.abilityToUse().get())) {
+            } else if (ability.getTargets().contains(Target.UNIT)) {
+                 if (Constants.BUILD_GAS_STRUCTURE_ABILITIES.contains(ability)) {
                     Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agentWithData.observation());
                     freeGeyserNearCc.ifPresent(geyser -> {
-                        if (taskManager.addTask(createBuildTask(agentWithData.gameData(), output.abilityToUse().get(), geyser, output.placementRules()), maxParallel)) {
+                        if (taskManager.addTask(createBuildTask(agentWithData.gameData(), ability, geyser, output.placementRules()), maxParallel)) {
                             orderDispatchedAt.put(output, gameLoop);
                             currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
                         }
@@ -187,6 +188,41 @@ public class SimpleBuildOrderTask extends BaseTask {
 
         // TODO move this to a task.
         BuildUtils.defaultTerranRamp(agentWithData);
+    }
+
+    private Map<Ability, Integer> computeExpectedParallelAbilities(List<BuildOrderOutput> outputs) {
+        Map<Ability, Integer> result = new HashMap<>();
+        outputs.forEach(output -> {
+            output.abilityToUse().ifPresent(ability -> {
+                result.merge(ability, 1, Integer::sum);
+            });
+        });
+        return result;
+    }
+
+    /**
+     * Compute how many abilities are currently queued (not just considering abilities actually in use,
+     * but also soon to be in use, e.g. via Build Tasks that have been dispatched.
+     */
+    private Map<Ability, Integer> computeCurrentParallelAbilities(AgentWithData agentWithData) {
+        Map<Ability, Integer> result = new HashMap<>();
+        Set<Tag> consideredUnits = new HashSet<>();
+
+        // Get abilities in each structures' queue.
+        agentWithData.observation().getUnits(Alliance.SELF).forEach(unitInPool -> {
+            unitInPool.unit().getOrders().stream().forEach(abilityQueued -> {
+                result.merge(abilityQueued.getAbility(), 1, Integer::sum);
+            });
+            consideredUnits.add(unitInPool.getTag());
+        });
+
+        // Get abilities in Build Tasks that haven't been assigned yet.
+        Map<Ability, Integer> constructionTasks = agentWithData.taskManager().visitTasks(new CalculateCurrentConstructionTasksVisitor());
+        constructionTasks.forEach((ability, count) -> {
+            result.merge(ability, count, Integer::sum);
+        });
+
+        return result;
     }
 
     // Renders a list of outputs to a friendly string that can go in a chat message.
@@ -272,7 +308,6 @@ public class SimpleBuildOrderTask extends BaseTask {
     private Optional<Unit> resolveUnitToUse(S2Agent agentWithData, BuildOrderOutput buildOrderOutput) {
         ObservationInterface observationInterface = agentWithData.observation();
         if (buildOrderOutput.abilityToUse().isPresent() && buildOrderOutput.eligibleUnitTypes().isPresent()) {
-            Ability ability = buildOrderOutput.abilityToUse().get();
             UnitFilter eligibleUnitTypes = buildOrderOutput.eligibleUnitTypes().get();
             // HACK: if scv then we don't assign a worker as BuildOrderTask does its own assigning
             // What is the best way around this? Probably by also assigning tasks for unit production.

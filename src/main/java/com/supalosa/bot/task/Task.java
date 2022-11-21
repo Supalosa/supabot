@@ -88,4 +88,8 @@ public interface Task {
     default Task onFailure(Consumer<Optional<TaskResult>> callback) {
         throw new NotImplementedException("This task does not support onFailure callbacks.");
     }
+
+    default void accept(TaskVisitor visitor) {
+        visitor.visit(this);
+    }
 }

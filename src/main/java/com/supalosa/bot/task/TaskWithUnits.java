@@ -4,7 +4,6 @@ import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.production.UnitTypeRequest;
-import com.supalosa.bot.utils.TaskWithUnitsVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -55,8 +54,6 @@ public interface TaskWithUnits extends Task {
      * Returns the number of units in this army.
      */
     int getSize();
-
-    void accept(TaskWithUnitsVisitor visitor);
 
     /**
      * Orders the unit to remove a unit of a certain type if possible, on the next update.
