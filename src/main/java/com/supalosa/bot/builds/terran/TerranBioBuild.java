@@ -339,7 +339,7 @@ public class TerranBioBuild implements BuildOrder {
     }
 
     @Override
-    public List<BuildOrderOutput> getOutput(AgentWithData data) {
+    public List<BuildOrderOutput> getOutput(AgentWithData data, Map<Ability, Integer> currentParallelAbilities) {
         return new ArrayList<>(outputs);
     }
 
@@ -397,6 +397,11 @@ public class TerranBioBuild implements BuildOrder {
     @Override
     public String getDebugText() {
         return "Terran Bio";
+    }
+
+    @Override
+    public List<String> getVerboseDebugText() {
+        return Collections.emptyList();
     }
 
     private boolean tryBuildMaxStructure(AgentWithData agentWithData,

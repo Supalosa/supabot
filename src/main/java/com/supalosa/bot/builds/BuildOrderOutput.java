@@ -51,7 +51,10 @@ public interface BuildOrderOutput {
 
     @Value.Check
     default void check() {
-        Preconditions.checkState(eligibleUnitTypes().isPresent() ^ specificUnit().isPresent(),
+        Preconditions.checkState(eligibleUnitTypes().isPresent() ^
+                        specificUnit().isPresent() ^
+                        dispatchTask().isPresent() ^
+                        performAttack().isPresent(),
                 "Eligible unit type or specific unit is required for BuildOrderOutput");
     }
 

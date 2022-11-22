@@ -8,7 +8,6 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
-import com.supalosa.bot.GameData;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;
@@ -20,25 +19,32 @@ public class SimpleBuildOrder implements BuildOrder {
     // Max time to spend on a stage before we decide the build order is not worth continuing.
     private static final long MAX_STAGE_TIME = 22L * 60;
 
-    private final List<SimpleBuildOrderStage> stages;
+    private final List<SimpleBuildOrderStage> initialStages;
+    private final LinkedHashSet<SimpleBuildOrderStage> remainingStages;
+
+    // Any stages that we've triggered that are supposed to repeat.
     private final Set<SimpleBuildOrderStage> repeatingStages;
+    // Any stages that we've hit but are asynchronous, and the trigger hasn't been hit yet.
     private final List<SimpleBuildOrderStage> asynchronousStages;
+
     private int targetGasMiners;
-    private int currentStageNumber;
+
+    // Used for tracking of the current state.
     private final Map<UnitType, Integer> expectedCountOfUnitType;
     private final Map<Ability, Integer> abilitiesUsedCount;
     private boolean expectedCountInitialised = false;
     private long stageStartedAt = 0L;
     private boolean isTimedOut = false;
-    private boolean isAttackPermitted = false;
 
+    // List of debug output that explains why the build failed.
+    private List<String> buildFailureDebug = Collections.emptyList();
 
     protected SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
-        this.stages = stages;
+        this.initialStages = stages;
+        this.remainingStages = new LinkedHashSet<>(stages);
         this.repeatingStages = new HashSet<>();
         this.asynchronousStages = new ArrayList<>();
-        this.targetGasMiners = 0; //Integer.MAX_VALUE;
-        this.currentStageNumber = 0;
+        this.targetGasMiners = 0;
         this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised initially onStep.
         this.abilitiesUsedCount = new HashMap<>();
         validateStages();
@@ -46,7 +52,7 @@ public class SimpleBuildOrder implements BuildOrder {
 
     private void validateStages() {
         boolean hasAttack = false;
-        for (SimpleBuildOrderStage stage : stages) {
+        for (SimpleBuildOrderStage stage : initialStages) {
             if (stage.attack().isPresent() && stage.attack().get() == true) {
                 hasAttack = true;
             }
@@ -54,16 +60,11 @@ public class SimpleBuildOrder implements BuildOrder {
         Validate.isTrue(hasAttack, "A build order needs an attack(true) step.");
     }
 
-    public int getCurrentStageNumber()  {
-        return this.currentStageNumber;
-    }
-
-    public int getTotalStages() {
-        return this.stages.size();
-    }
-
     @Override
     public void onStep(AgentWithData agentWithData) {
+        if (isTimedOut) {
+            return;
+        }
         ObservationInterface observationInterface = agentWithData.observation();
         if (!expectedCountInitialised) {
             expectedCountInitialised = true;
@@ -75,6 +76,10 @@ public class SimpleBuildOrder implements BuildOrder {
         long gameLoop = observationInterface.getGameLoop();
         if (gameLoop > stageStartedAt + MAX_STAGE_TIME || observationInterface.getMinerals() > 800) {
             isTimedOut = true;
+            buildFailureDebug = List.of(
+                    "Tag:buildTerminated " + remainingStages.size(),
+                    "Tag:buildMinerals " + observationInterface.getMinerals(),
+                    "Tag:buildSupply " + observationInterface.getFoodUsed() + " " + observationInterface.getFoodCap());
         }
     }
 
@@ -85,28 +90,38 @@ public class SimpleBuildOrder implements BuildOrder {
 
     @Override
     public String getDebugText() {
-        return getCurrentStageNumber() + "/" + getTotalStages();
+        return getClass().getSimpleName() + ": " + remainingStages.size() + "/" + initialStages.size() + " remaining";
     }
 
     @Override
-    public List<BuildOrderOutput> getOutput(AgentWithData agentWithData) {
-        if (currentStageNumber >= stages.size()) {
+    public List<String> getVerboseDebugText() {
+        return buildFailureDebug;
+    }
+
+    @Override
+    public List<BuildOrderOutput> getOutput(AgentWithData agentWithData,
+                                            Map<Ability, Integer> currentParallelAbilities) {
+        if (remainingStages.isEmpty()) {
             return new ArrayList<>();
         } else {
+            // List of stages that have triggered this step.
+            List<SimpleBuildOrderStage> passedStagesInStep = new ArrayList<>();
+
             // Check if any asynchronous stages have triggered.
             List<SimpleBuildOrderStage> asynchronousTriggered = asynchronousStages.stream().filter(stage ->
                             stage.trigger().accept(this, agentWithData.observation(), agentWithData))
                     .collect(Collectors.toList());
             asynchronousStages.removeAll(asynchronousTriggered);
+
             if (asynchronousTriggered.size() > 0) {
                 System.out.println("Inserted " + asynchronousTriggered.size() + " stages as their async trigger returned true");
-                stages.addAll(currentStageNumber, asynchronousTriggered);
+                passedStagesInStep.addAll(asynchronousTriggered);
             }
 
-            SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
+            SimpleBuildOrderStage currentStage = remainingStages.get(0);
             List<BuildOrderOutput> output = new ArrayList<>();
             if (currentStage.trigger().accept(this, agentWithData.observation(), agentWithData)) {
-                output.add(convertStageToOutput(currentStage));
+                convertStageToOutput(currentStage).ifPresent(output::add);
             }
             // Send repeating stages, but only if we can afford it.
             AtomicInteger remainingMoney = new AtomicInteger(Math.max(0,
@@ -117,25 +132,12 @@ public class SimpleBuildOrder implements BuildOrder {
                 // Hack for scvs to be queued even if there's not enough money for it.
                 boolean force = buildUnitType.filter(type -> Constants.WORKER_TYPES.contains(type)).isPresent();
                 if (force || remainingMoney.get() >= mineralCost) {
-                    output.add(convertStageToOutput(action));
+                    convertStageToOutput(action).ifPresent(output::add);
                     remainingMoney.set(remainingMoney.get() - mineralCost);
                 }
             });
             return output;
         }
-    }
-
-    /**
-     * Returns the stage that we're waiting for (if applicable).
-     */
-    public Optional<SimpleBuildOrderStage> getWaitingStage(ObservationInterface observationInterface, AgentWithData agentWithData) {
-        if (currentStageNumber < stages.size()) {
-            SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
-            if (!currentStage.trigger().accept(this, observationInterface, agentWithData)) {
-                return Optional.of(currentStage);
-            }
-        }
-        return Optional.empty();
     }
 
     @Override
@@ -179,21 +181,31 @@ public class SimpleBuildOrder implements BuildOrder {
 
     @Override
     public void onStageFailed(BuildOrderOutput stage, AgentWithData agentWithData) {
-
+        isTimedOut = true;
+        ObservationInterface observationInterface = agentWithData.observation();
+        buildFailureDebug = List.of(
+                "Tag:buildTerminated " + remainingStages.size(),
+                "Tag:buildTerminatedAt " + stage.asHumanReadableString(),
+                "Tag:buildMinerals " + observationInterface.getMinerals(),
+                "Tag:buildSupply " + observationInterface.getFoodUsed() + " " + observationInterface.getFoodCap());
     }
 
     @Override
     public void onStageCompleted(BuildOrderOutput stage, AgentWithData agentWithData) {
-
+        remainingStages.remove(stage);
     }
 
-    private BuildOrderOutput convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
-        return simpleBuildOrderStage.toBuildOrderOutput();
+    private Optional<BuildOrderOutput> convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
+        if (simpleBuildOrderStage.gasMiners().isEmpty()) {
+            return Optional.of(simpleBuildOrderStage.toBuildOrderOutput());
+        } else {
+            return Optional.empty();
+        }
     }
 
     @Override
     public boolean isComplete() {
-        if (currentStageNumber >= stages.size()) {
+        if (remainingStages.isEmpty()) {
             return true;
         } else {
             return false;

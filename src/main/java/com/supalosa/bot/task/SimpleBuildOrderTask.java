@@ -61,8 +61,6 @@ public class SimpleBuildOrderTask extends BaseTask {
     @Override
     public void onStep(TaskManager taskManager, AgentWithData agentWithData) {
         this.currentBuildOrder.onStep(agentWithData);
-        List<BuildOrderOutput> outputs = this.currentBuildOrder.getOutput(agentWithData);
-        this.lastOutput = outputs;
         mineGas(agentWithData);
         rebalanceWorkers(agentWithData);
         long gameLoop = agentWithData.observation().getGameLoop();
@@ -73,7 +71,11 @@ public class SimpleBuildOrderTask extends BaseTask {
 
         // Determine how many parallel tasks of a certain type are currently running.
         Map<Ability, Integer> currentParallelAbilities = computeCurrentParallelAbilities(agentWithData);
+
+        List<BuildOrderOutput> outputs = this.currentBuildOrder.getOutput(agentWithData, currentParallelAbilities);
+
         Map<Ability, Integer> expectedParallelAbilities = computeExpectedParallelAbilities(outputs);
+        this.lastOutput = outputs;
 
         // Dispatch any outputs that aren't currently running.
         outputs.forEach(output -> {
@@ -252,14 +254,11 @@ public class SimpleBuildOrderTask extends BaseTask {
         }
         hasAnnouncedFailure = true;
         String outputsAsString = renderOutputsToString(lastOutput);
-        actionInterface.sendChat("Tag:build terminated " +
-                        currentSimpleBuildOrder.getCurrentStageNumber() + " " + currentSimpleBuildOrder.getTotalStages() + " " + observationInterface.getGameLoop(),
-                ActionChat.Channel.BROADCAST);
-        actionInterface.sendChat("Tag:build current " + outputsAsString, ActionChat.Channel.BROADCAST);
-        actionInterface.sendChat("Tag:build minerals " + observationInterface.getMinerals(), ActionChat.Channel.BROADCAST);
-        actionInterface.sendChat("Tag:build supply " + observationInterface.getFoodUsed() + " " + observationInterface.getFoodCap(), ActionChat.Channel.BROADCAST);
-
-        System.out.println("Build order terminated at stage " + currentSimpleBuildOrder.getCurrentStageNumber() + ": " + outputsAsString);
+        actionInterface.sendChat("Tag: BuildFail " + outputsAsString, ActionChat.Channel.BROADCAST);
+        currentBuildOrder.getVerboseDebugText().forEach(verboseDebugText -> {
+            actionInterface.sendChat(verboseDebugText, ActionChat.Channel.BROADCAST);
+            System.out.println("[Build] " + verboseDebugText);
+        });
     }
 
     private void mineGas(AgentWithData agentWithData) {
