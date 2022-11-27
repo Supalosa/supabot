@@ -24,6 +24,7 @@ public class SimpleBuildOrder implements BuildOrder {
     private static final long MAX_STAGE_TIME = 22L * 60;
 
     private final List<SimpleBuildOrderStage> initialStages;
+    private final List<SimpleBuildOrderStage> asyncStages;
     private final LinkedHashSet<SimpleBuildOrderStage> inProgressStages;
     private final LinkedHashSet<SimpleBuildOrderStage> remainingStages;
 
@@ -43,7 +44,8 @@ public class SimpleBuildOrder implements BuildOrder {
     protected SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
         this.initialStages = stages;
         this.inProgressStages = new LinkedHashSet<>();
-        this.remainingStages = new LinkedHashSet<>(stages);
+        this.asyncStages = stages.stream().filter(stage -> stage.trigger().isBlocking() == false).collect(Collectors.toList());
+        this.remainingStages = new LinkedHashSet<>(stages.stream().filter(stage -> stage.trigger().isBlocking() == true).collect(Collectors.toList()));
         this.repeatingStages = new HashSet<>();
         this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised initially onStep.
         this.abilitiesUsedCount = new HashMap<>();
@@ -85,12 +87,17 @@ public class SimpleBuildOrder implements BuildOrder {
         // Check which stages should be output.
         List<SimpleBuildOrderStage> newStages = remainingStages.stream().filter(potentialStage ->
                 potentialStage.trigger().accept(this, observationInterface, agentWithData)).collect(Collectors.toList());
-
+        List<SimpleBuildOrderStage> newAsyncStages = asyncStages.stream().filter(potentialStage ->
+                potentialStage.trigger().accept(this, observationInterface, agentWithData)).collect(Collectors.toList());
         newStages.forEach(newStage -> {
             stageStartedAt = gameLoop;
             remainingStages.remove(newStage);
             inProgressStages.add(newStage);
             handleStageStarted(newStage, agentWithData.gameData());
+        });
+        newAsyncStages.forEach(newAsyncStage -> {
+            asyncStages.remove(newAsyncStage);
+            inProgressStages.add(newAsyncStage);
         });
     }
 

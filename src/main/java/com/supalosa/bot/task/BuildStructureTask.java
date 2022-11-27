@@ -173,6 +173,7 @@ public class BuildStructureTask extends BaseTask {
                 worker = Optional.empty();
                 assignedWorker = Optional.empty();
                 ++numWorkersUsed;
+                ++buildAttempts;
             }
         }
         if (matchingUnitAtLocation.isEmpty()) {
