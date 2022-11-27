@@ -119,7 +119,7 @@ public class TerranBioArmyTask extends DefaultArmyTask {
                 enemyArmy.composition().getOrDefault(Units.TERRAN_LIBERATOR, 0) * 1 +
                 enemyArmy.composition().getOrDefault(Units.TERRAN_VIKING_FIGHTER, 0) * 1 +
                 enemyArmy.composition().getOrDefault(Units.PROTOSS_CARRIER, 0) * 2 +
-                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 3 +
+                enemyArmy.composition().getOrDefault(Units.PROTOSS_COLOSSUS, 0) * 4 +
                 enemyArmy.composition().getOrDefault(Units.PROTOSS_TEMPEST, 0) * 2;
         if (targetVikings > 0) {
             result.add(ImmutableUnitTypeRequest.builder()

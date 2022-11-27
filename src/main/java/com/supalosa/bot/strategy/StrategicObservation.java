@@ -27,7 +27,8 @@ public interface StrategicObservation extends TaskMessage {
         return List.of(
                 new Zerg12PoolStrategicObservation(),
                 new WorkerRushStrategicObservation(),
-                new Protoss2BaseGatewayRush()
+                new Protoss2BaseGatewayRush(),
+                new ProtossRoboticBayObservation()
         );
     }
 

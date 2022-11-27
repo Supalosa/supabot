@@ -22,6 +22,8 @@ import com.supalosa.bot.builds.ImmutableBuildOrderOutput;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.placement.PlacementRules;
 import com.supalosa.bot.production.UnitTypeRequest;
+import com.supalosa.bot.strategy.ProtossRoboticBayObservation;
+import com.supalosa.bot.strategy.StrategicObservation;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.terran.BuildUtils;
 import com.supalosa.bot.utils.UnitFilter;
@@ -155,6 +157,11 @@ public class TerranBioBuild implements BuildOrder {
     private void tryBuildStarportAndUpgrades(AgentWithData agentWithData, Set<Upgrade> upgrades) {
         int armySupply = agentWithData.observation().getFoodArmy();
         boolean floatingLots = (agentWithData.observation().getMinerals() > 1250 && agentWithData.observation().getVespene() > 500);
+        boolean needsLiberators = false;
+
+        if (agentWithData.strategyTask().hasSeenObservation(ProtossRoboticBayObservation.class)) {
+            needsLiberators = true;
+        }
 
         if (armySupply > 20) {
             int numStarports = (floatingLots) ? 2 : 1;
@@ -167,8 +174,7 @@ public class TerranBioBuild implements BuildOrder {
         }
 
         if (armySupply > 40) {
-            boolean hasAir = countUnitType(Units.TERRAN_VIKING_FIGHTER, Units.TERRAN_LIBERATOR, Units.TERRAN_LIBERATOR_AG) > 0;
-            int numArmories = (floatingLots || hasAir) ? 2 : 1;
+            int numArmories = (floatingLots) ? 2 : 1;
             tryBuildMaxStructure(agentWithData,
                     Abilities.BUILD_ARMORY,
                     Units.TERRAN_ARMORY,
@@ -177,7 +183,7 @@ public class TerranBioBuild implements BuildOrder {
                     PlacementRules.borderOfBase());
 
             if (agentWithData.observation().getVespene() > 300) {
-                if (hasAir || floatingLots) {
+                if (needsLiberators || floatingLots) {
                     tryGetUpgrades(agentWithData, upgrades, Units.TERRAN_ARMORY, Map.of(
                             Upgrades.TERRAN_VEHICLE_AND_SHIP_ARMORS_LEVEL1, Abilities.RESEARCH_TERRAN_VEHICLE_AND_SHIP_PLATING,
                             Upgrades.TERRAN_SHIP_WEAPONS_LEVEL1, Abilities.RESEARCH_TERRAN_SHIP_WEAPONS,
@@ -268,7 +274,7 @@ public class TerranBioBuild implements BuildOrder {
         buildAddonsForType(agentWithData,
                 Units.TERRAN_STARPORT,
                 Units.TERRAN_STARPORT_TECHLAB,
-                1,
+                0,
                 0.0);
     }
 

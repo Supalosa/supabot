@@ -104,10 +104,8 @@ public class SupaBot extends AgentWithData {
         dispatchTaskOnce(15, () -> new OrbitalCommandManagerTask(100));
         dispatchTaskOnce(1, () -> new SimpleBuildOrderTask(
                 new ThreeRaxStimCombatConcussivePush(),
-                //new TerranBioBuild(),
                 () -> new TerranBioBuild()));
         dispatchTaskOnce(1, () -> strategyTask);
-        //debug().debugShowMap();
     }
 
     @Override

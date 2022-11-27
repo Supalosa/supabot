@@ -13,8 +13,8 @@ public class LadderMain {
 
     public static void main(String[] args) {
         // Change this back to NoOp for ladder.
-        SupaBot supaBot = new SupaBot(false, new JFrameDebugTarget());
-        //SupaBot supaBot = new SupaBot(false, new NoOpDebugTarget());
+        //SupaBot supaBot = new SupaBot(false, new JFrameDebugTarget());
+        SupaBot supaBot = new SupaBot(false, new NoOpDebugTarget());
         LauncherUtils.startLadder(args, supaBot);
     }
 }
