@@ -262,24 +262,32 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
             // Also expand our territory if there's nothing to attack.
             FightPerformance predictedFightPerformance = attackingArmy.predictFightAgainst(agentWithData.enemyAwareness().getOverallEnemyArmy());
             boolean shouldCancelAttack = false;
+            boolean shouldExploreMap = false;
             if (agentWithData.enemyAwareness().isMyEconomyStronger()) {
                 // If we have a stronger economy, we're more willing to take stable fights.
                 shouldCancelAttack = predictedFightPerformance != FightPerformance.WINNING && predictedFightPerformance != FightPerformance.STABLE;
+                shouldExploreMap = predictedFightPerformance != FightPerformance.BADLY_LOSING;
             } else {
                 shouldCancelAttack = predictedFightPerformance != FightPerformance.WINNING;
+                shouldExploreMap = false;
             }
             if (shouldCancelAttack ||
                     attackPosition.isEmpty()) {
-                // In this case, try to find a non-controlled region next to ours.
-                Optional<RegionData> uncontrolledBorderRegion = findNeutralBorderRegion(agentWithData.mapAwareness());
-                attackPosition = uncontrolledBorderRegion
-                        .map(RegionData::region)
-                        .map(Region::centrePoint);
+                if (shouldExploreMap) {
+                    // In this case, try to find a non-controlled region next to ours.
+                    Optional<RegionData> uncontrolledBorderRegion = findNeutralBorderRegion(agentWithData.mapAwareness());
+                    attackPosition = uncontrolledBorderRegion
+                            .map(RegionData::region)
+                            .map(Region::centrePoint);
+                } else {
+                    // We shouldn't even explore, just camp at home.
+                    attackPosition = Optional.empty();
+                }
             }
         }
         // Harass the base with the least diffuse threat, as long as the diffuse threat is less half our attacking
         // army's power.
-        double minDiffuseThreat = attackingArmy.getPower() / 2.0;
+        double minDiffuseThreat = attackingArmy.getPower() / 4.0;
         RegionData minRegion = null;
         for (RegionData regionData : agentWithData.mapAwareness().getAllRegionData()) {
             if (attackPosition.isPresent()) {
@@ -293,11 +301,19 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         }
         if (minRegion != null) {
             harassPosition = Optional.of(minRegion.region().centrePoint());
+            // If no attack position, send the attacking army there.
+            if (attackPosition.isEmpty()) {
+                if (harassPosition.isPresent()) {
+                    attackPosition = harassPosition;
+                } else {
+                    attackPosition = defenceRetreatPosition;
+                }
+            }
         } else {
             harassPosition = agentWithData.mapAwareness().getNextScoutTarget();
-        }
-        if (attackPosition.isEmpty()) {
-            attackPosition = harassPosition;
+            if (attackPosition.isEmpty()) {
+                attackPosition = defenceRetreatPosition;
+            }
         }
 
         if (defenceRetreatPosition.isPresent()) {

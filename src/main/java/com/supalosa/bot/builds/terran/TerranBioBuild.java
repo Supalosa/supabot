@@ -431,7 +431,7 @@ public class TerranBioBuild implements BuildOrder {
                     .abilityToUse(abilityTypeForStructure)
                     .eligibleUnitTypes(UnitFilter.mine(Units.TERRAN_SCV))
                     .placementRules(rules)
-                    .outputId((int) gameLoop)
+                    .outputId((int) gameLoop * 1000 + i)
                     .build());
         }
     }
