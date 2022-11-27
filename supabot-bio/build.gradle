@@ -1,0 +1,41 @@
+plugins {
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'com.supalosa.LadderMain'
+    }
+
+    from {
+        configurations.compileClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+        duplicatesStrategy DuplicatesStrategy.INHERIT
+    }
+}
+
+shadowJar {
+    archiveBaseName.set('supabot')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer) {
+        resource = 'reference.conf'
+    }
+}
+
+apply from: 'deployDestinations.gradle'
+
+dependencies {
+    implementation project(":supabot-core")
+}
+
+test {
+    useJUnitPlatform()
+}

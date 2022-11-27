@@ -1,0 +1,32 @@
+plugins {
+    id 'java-library'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
+    testImplementation("org.assertj:assertj-core:3.23.1")
+    testImplementation 'org.mockito:mockito-core:4.8.1'
+
+    implementation("com.google.guava:guava:31.1-jre")
+    api 'com.github.ocraft:ocraft-s2client-bot:0.4.11'
+    compileOnlyApi 'com.github.ocraft:ocraft-s2client-api:0.4.11'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+
+    implementation 'org.jgrapht:jgrapht-core:1.5.1'
+    implementation 'org.danilopianini:java-quadtree:0.2.0'
+    implementation 'org.jfree:jfreechart:1.5.3'
+
+    annotationProcessor 'org.immutables:value:2.9.2'
+    annotationProcessor 'org.immutables:builder:2.9.2'
+    compileOnly 'org.immutables:value:2.9.2'
+}
+
+test {
+    useJUnitPlatform()
+}
