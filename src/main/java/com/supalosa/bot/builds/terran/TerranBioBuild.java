@@ -96,8 +96,6 @@ public class TerranBioBuild implements BuildOrder {
             tryBuildGhostAcademyAndUpgrades(agentWithData, upgrades);
 
             // Translate UnitTypeRequests to BuildOrderOutput.
-            AtomicInteger remainingMoney = new AtomicInteger(Math.max(0,
-                    agentWithData.observation().getMinerals() - agentWithData.taskManager().totalReservedMinerals()));
             List<UnitTypeRequest> orderedUnitTypeRequests = sortUnitTypeRequests(agentWithData.fightManager().getRequestedUnitTypes());
             orderedUnitTypeRequests.forEach(unitTypeRequest -> {
                 int count = unitTypeRequest.alternateForm()
@@ -109,20 +107,14 @@ public class TerranBioBuild implements BuildOrder {
                     if (!unitTypeRequest.needsTechLab()) {
                         maxParallel *= 2; // can use reactor.
                     }
-                    int mineralCost = agentWithData.gameData().getUnitMineralCost(unitTypeRequest.unitType()).orElse(0);
-                    // Hack for scvs to be queued even if there's not enough money for it.
-                    boolean force = Constants.WORKER_TYPES.contains(unitTypeRequest.unitType());
                     for (int i = 0; i < maxParallel; ++i) {
-                        if (force || remainingMoney.get() >= mineralCost) {
-                            remainingMoney.set(remainingMoney.get() - mineralCost);
-                            outputs.add(ImmutableBuildOrderOutput.builder()
-                                    .abilityToUse(unitTypeRequest.productionAbility())
-                                    .eligibleUnitTypes(UnitFilter.mine(unitTypeRequest.producingUnitType()))
-                                    .placementRules(unitTypeRequest.placementRules())
-                                    .addonRequired(unitTypeRequest.needsTechLab() ? Optional.of(Units.TERRAN_TECHLAB) : Optional.empty())
-                                    .outputId((int)gameLoop * 1000 + i)
-                                    .build());
-                        }
+                        outputs.add(ImmutableBuildOrderOutput.builder()
+                                .abilityToUse(unitTypeRequest.productionAbility())
+                                .eligibleUnitTypes(UnitFilter.mine(unitTypeRequest.producingUnitType()))
+                                .placementRules(unitTypeRequest.placementRules())
+                                .addonRequired(unitTypeRequest.needsTechLab() ? Optional.of(Units.TERRAN_TECHLAB) : Optional.empty())
+                                .outputId((int)gameLoop * 1000 + i)
+                                .build());
                     }
                 }
             });

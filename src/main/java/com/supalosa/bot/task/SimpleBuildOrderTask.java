@@ -160,10 +160,10 @@ public class SimpleBuildOrderTask extends BaseTask {
                             })
                             .onFailure(result -> {
                                 if (!isComplete() && !output.repeat()) {
+                                    announceFailure(agentWithData.actions());
                                     changeBuild();
                                     this.onFailure();
                                     System.out.println("Build task " + ability + " failed, aborting build order.");
-                                    announceFailure(agentWithData.observation(), agentWithData.actions());
                                     currentBuildOrder.onStageFailed(thisStage, agentWithData);
                                 }
                             })
@@ -174,24 +174,14 @@ public class SimpleBuildOrderTask extends BaseTask {
                             });
                     orderDispatchedAt.put(output, gameLoop);
                 }
-            } else if (ability.getTargets().contains(Target.UNIT)) {
-                 if (Constants.BUILD_GAS_STRUCTURE_ABILITIES.contains(ability)) {
-                     // This is a dead codepath, should not trigger anymore.
-                     Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agentWithData.observation());
-                     freeGeyserNearCc.ifPresent(geyser -> {
-                         if (taskManager.addTask(createBuildTask(agentWithData.gameData(), ability, geyser, output.placementRules()), maxParallel)) {
-                             orderDispatchedAt.put(output, gameLoop);
-                             currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
-                         }
-                     });
-                }
             }
         });
 
         if (this.currentBuildOrder.isComplete()) {
+            announceSuccess(agentWithData.actions());
             changeBuild();
         } else if (this.currentBuildOrder.isTimedOut()) {
-            announceFailure(agentWithData.observation(), agentWithData.actions());
+            announceFailure(agentWithData.actions());
             changeBuild();
         }
 
@@ -253,7 +243,14 @@ public class SimpleBuildOrderTask extends BaseTask {
         }
     }
 
-    private void announceFailure(ObservationInterface observationInterface, ActionInterface actionInterface) {
+    private void announceSuccess(ActionInterface actionInterface) {
+        if (hasAnnouncedFailure) {
+            return;
+        }
+        hasAnnouncedFailure = true;
+        actionInterface.sendChat("Tag: BuildSuccess", ActionChat.Channel.BROADCAST);
+    }
+    private void announceFailure(ActionInterface actionInterface) {
         if (hasAnnouncedFailure) {
             return;
         }
