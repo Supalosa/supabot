@@ -55,7 +55,7 @@ public class ScoutTask implements Task {
     private int sleepCount = 0;
     private static final int MAX_SLEEP_COUNT = 10;
 
-    private boolean canLinger = false;
+    private final boolean canLinger;
 
     private ScoutState state = ScoutState.MOVING;
 
@@ -88,9 +88,9 @@ public class ScoutTask implements Task {
             return;
         }
         if (usedScouters > maxScouters) {
-            // Too many scouters used, request a scan within 30 seconds and abort.
+            // Too many scouters used, request a scan within 5 seconds and abort.
             scoutTarget.ifPresent(target -> {
-                this.requestScannerSweep(agentWithData, target, gameLoop + 22L * 30);
+                this.requestScannerSweep(agentWithData, target, gameLoop + 22L * 5);
             });
             isComplete = true;
             return;
