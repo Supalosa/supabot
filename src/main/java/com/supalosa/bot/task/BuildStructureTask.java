@@ -25,7 +25,12 @@ import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 public class BuildStructureTask extends BaseTask {
 
@@ -470,5 +475,12 @@ public class BuildStructureTask extends BaseTask {
 
     public Ability getAbility() {
         return this.ability;
+    }
+
+    /**
+     * Returns true if the task has 'started', which is defined as the structure exists.
+     */
+    public boolean isStarted() {
+        return this.matchingUnitAtLocation.isPresent();
     }
 }

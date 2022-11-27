@@ -164,6 +164,16 @@ public class TerranBioBuild implements BuildOrder {
         int armySupply = agentWithData.observation().getFoodArmy();
         boolean floatingLots = (agentWithData.observation().getMinerals() > 1250 && agentWithData.observation().getVespene() > 500);
 
+        if (armySupply > 20) {
+            int numStarports = (floatingLots) ? 2 : 1;
+            tryBuildMaxStructure(agentWithData,
+                    Abilities.BUILD_STARPORT,
+                    Units.TERRAN_STARPORT,
+                    numStarports,
+                    numStarports,
+                    PlacementRules.centreOfBase());
+        }
+
         if (armySupply > 40) {
             boolean hasAir = countUnitType(Units.TERRAN_VIKING_FIGHTER, Units.TERRAN_LIBERATOR, Units.TERRAN_LIBERATOR_AG) > 0;
             int numArmories = (floatingLots || hasAir) ? 2 : 1;

@@ -96,6 +96,7 @@ public class SimpleBuildOrderTask extends BaseTask {
             if (output.abilityToUse().isEmpty()) {
                 // If there is no ability, the stage automatically succeeds.
                 currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
+                currentBuildOrder.onStageCompleted(output, agentWithData);
                 return;
             }
             Ability ability = output.abilityToUse().get();
@@ -121,6 +122,7 @@ public class SimpleBuildOrderTask extends BaseTask {
                     agentWithData.actions().unitCommand(orderedUnit.get(), ability, false);
                     // Signal to the build order that the ability was used.
                     currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
+                    currentBuildOrder.onStageCompleted(output, agentWithData);
                     boolean reserveUnit = true;
                     // Units with reactors can receive multiple orders.
                     if (orderedUnit.get().getAddOnTag().isPresent()) {
@@ -174,13 +176,14 @@ public class SimpleBuildOrderTask extends BaseTask {
                 }
             } else if (ability.getTargets().contains(Target.UNIT)) {
                  if (Constants.BUILD_GAS_STRUCTURE_ABILITIES.contains(ability)) {
-                    Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agentWithData.observation());
-                    freeGeyserNearCc.ifPresent(geyser -> {
-                        if (taskManager.addTask(createBuildTask(agentWithData.gameData(), ability, geyser, output.placementRules()), maxParallel)) {
-                            orderDispatchedAt.put(output, gameLoop);
-                            currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
-                        }
-                    });
+                     // This is a dead codepath, should not trigger anymore.
+                     Optional<Unit> freeGeyserNearCc = BuildUtils.getBuildableGeyser(agentWithData.observation());
+                     freeGeyserNearCc.ifPresent(geyser -> {
+                         if (taskManager.addTask(createBuildTask(agentWithData.gameData(), ability, geyser, output.placementRules()), maxParallel)) {
+                             orderDispatchedAt.put(output, gameLoop);
+                             currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
+                         }
+                     });
                 }
             }
         });
@@ -222,9 +225,12 @@ public class SimpleBuildOrderTask extends BaseTask {
             consideredUnits.add(unitInPool.getTag());
         });
 
-        // Get abilities in Build Tasks that haven't been assigned yet.
-        Map<Ability, Integer> constructionTasks = agentWithData.taskManager().visitTasks(new CalculateCurrentConstructionTasksVisitor());
-        constructionTasks.forEach((ability, count) -> {
+        // Get abilities in Build Tasks that haven't started yet.
+        // This prevents lots of tasks being created for one build request.
+        Map<Ability, Integer> pendingConstructionTasks = agentWithData.taskManager().visitTasks(
+                new CalculateCurrentConstructionTasksVisitor(task -> !task.isStarted())
+        );
+        pendingConstructionTasks.forEach((ability, count) -> {
             result.merge(ability, count, Integer::sum);
         });
 

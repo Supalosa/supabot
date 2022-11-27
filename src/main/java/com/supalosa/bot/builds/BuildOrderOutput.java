@@ -68,8 +68,13 @@ public interface BuildOrderOutput {
                             .replace("TRAIN_", "")
                             .replace("_", " ")
                             .toLowerCase()) +
-                    " - " +
-                    eligibleUnitTypes().map(UnitFilter::unitType).map(Optional::toString).or(() -> specificUnit().map(Tag::toString));
+                    " @ " +
+                    eligibleUnitTypes()
+                            .flatMap(unitFilter ->
+                                    unitFilter.unitType().map(UnitType::toString)
+                                            .or(() -> unitFilter.unitTypes().map(unitTypes -> unitTypes.toString())))
+                            .or(() -> specificUnit().map(Tag::toString))
+                            .orElse("Unknown");
         }
         if (performAttack().isPresent()) {
             return performAttack().get() ? "Start Attack" : "Cancel Attack";

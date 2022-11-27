@@ -150,26 +150,28 @@ class StructurePlacementCalculatorTest {
         // Barracks is given a 5x3 footprint.
         // However the placement of the barracks is actually 1 tile to the left.
         Point2d point = Point2d.of(5, 5);
-        Optional<Point2d> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
+        Optional<ResolvedPlacementResult> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
                 Units.TERRAN_BARRACKS, Optional.of(PlacementRules.exact()));
         assertThat(result).isNotEmpty();
-        assertThat(result).isEqualTo(Optional.of(Point2d.of(4, 5)));
+        assertThat(result.get().point2d().isPresent());
+        assertThat(result).isEqualTo(Optional.of(ResolvedPlacementResult.point2d(Point2d.of(4, 5))));
     }
 
     @Test
     void testModifiedFootprint2() {
         Point2d point = Point2d.of(6, 5);
-        Optional<Point2d> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
+        Optional<ResolvedPlacementResult> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
                 Units.TERRAN_BARRACKS, Optional.of(PlacementRules.exact()));
         assertThat(result).isNotEmpty();
-        assertThat(result).isEqualTo(Optional.of(Point2d.of(5, 5)));
+        assertThat(result.get().point2d().isPresent());
+        assertThat(result).isEqualTo(Optional.of(ResolvedPlacementResult.point2d(Point2d.of(5, 5))));
     }
 
 
     @Test
     void testModifiedFootprint3() {
         Point2d point = Point2d.of(GRID_WIDTH - 3, 5);
-        Optional<Point2d> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
+        Optional<ResolvedPlacementResult> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
                 Units.TERRAN_BARRACKS, Optional.of(PlacementRules.exact()));
         assertThat(result).isEmpty();
     }
@@ -178,10 +180,12 @@ class StructurePlacementCalculatorTest {
     void testModifiedFootprintScan() {
         for (float x = 5.0f; x < GRID_WIDTH - 4; x+= 0.01f) {
             Point2d point = Point2d.of(x, 5);
-            Optional<Point2d> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
+            Optional<ResolvedPlacementResult> result = structurePlacementCalculator.suggestLocationForFreePlacement(agentWithData, point, Abilities.BUILD_BARRACKS,
                     Units.TERRAN_BARRACKS, Optional.of(PlacementRules.exact()));
             assertThat(result).withFailMessage("Position " + x).isNotEmpty();
-            assertThat(result).withFailMessage("Position " + x).isEqualTo(Optional.of(Point2d.of(x - 1f, 5)));
+            assertThat(result.get().point2d()).withFailMessage("Position " + x).isNotEmpty();
+            assertThat(result).withFailMessage("Position " + x).isEqualTo(
+                    Optional.of(ResolvedPlacementResult.point2d(Point2d.of(x - 1f, 5))));
             structurePlacementCalculator.clearMutableGrid();
         }
     }

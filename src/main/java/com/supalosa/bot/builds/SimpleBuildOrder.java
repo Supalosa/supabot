@@ -87,6 +87,7 @@ public class SimpleBuildOrder implements BuildOrder {
                 potentialStage.trigger().accept(this, observationInterface, agentWithData)).collect(Collectors.toList());
 
         newStages.forEach(newStage -> {
+            stageStartedAt = gameLoop;
             remainingStages.remove(newStage);
             inProgressStages.add(newStage);
             handleStageStarted(newStage, agentWithData.gameData());
@@ -135,10 +136,10 @@ public class SimpleBuildOrder implements BuildOrder {
 
     @Override
     public void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage) {
-        inProgressStages.removeIf(simpleBuildOrderStage -> {
+        inProgressStages.forEach(simpleBuildOrderStage -> {
             BuildOrderOutput stageAsOutput = simpleBuildOrderStage.toBuildOrderOutput();
             if (stageAsOutput.equals(stage)) {
-                System.out.println("Stage " + simpleBuildOrderStage + " executed by engine, removed from list.");
+                System.out.println("Stage " + simpleBuildOrderStage + " started by engine, updating tracking.");
                 simpleBuildOrderStage.ability().ifPresent(ability -> {
                     abilitiesUsedCount.merge(ability, 1, Integer::sum);
                     System.out.println("Stage " + simpleBuildOrderStage + " used ability " + ability + ", expected count is now " + abilitiesUsedCount.getOrDefault(ability, 0) + ".");
@@ -147,9 +148,6 @@ public class SimpleBuildOrder implements BuildOrder {
                     repeatingStages.add(simpleBuildOrderStage);
                     System.out.println("Stage " + simpleBuildOrderStage + " is repeating, added to repeat list.");
                 }
-                return true;
-            } else {
-                return false;
             }
         });
     }
@@ -167,7 +165,16 @@ public class SimpleBuildOrder implements BuildOrder {
 
     @Override
     public void onStageCompleted(BuildOrderOutput stage, AgentWithData agentWithData) {
-        remainingStages.remove(stage);
+        // Remove stages once complete.
+        inProgressStages.removeIf(simpleBuildOrderStage -> {
+            BuildOrderOutput stageAsOutput = simpleBuildOrderStage.toBuildOrderOutput();
+            if (stageAsOutput.equals(stage)) {
+                System.out.println("Stage " + simpleBuildOrderStage + " finished by engine, removed from list.");
+                return true;
+            } else {
+                return false;
+            }
+        });
     }
 
     @Override
