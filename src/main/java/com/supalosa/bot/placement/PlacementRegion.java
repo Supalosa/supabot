@@ -18,6 +18,10 @@ public enum PlacementRegion {
      */
     EXPANSION(true),
     /**
+     * Place it on a free gas structure only.
+     */
+    FREE_VESPENE_GEYSER(true),
+    /**
      * Place it on the terran ramp.
      */
     MAIN_RAMP_SUPPLY_DEPOT_1(true),

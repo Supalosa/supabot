@@ -8,11 +8,15 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
+import com.supalosa.bot.FightManager;
+import com.supalosa.bot.GameData;
+import io.vertx.codegen.doc.Tag;
 import org.apache.commons.lang3.Validate;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SimpleBuildOrder implements BuildOrder {
 
@@ -20,14 +24,11 @@ public class SimpleBuildOrder implements BuildOrder {
     private static final long MAX_STAGE_TIME = 22L * 60;
 
     private final List<SimpleBuildOrderStage> initialStages;
+    private final LinkedHashSet<SimpleBuildOrderStage> inProgressStages;
     private final LinkedHashSet<SimpleBuildOrderStage> remainingStages;
 
     // Any stages that we've triggered that are supposed to repeat.
     private final Set<SimpleBuildOrderStage> repeatingStages;
-    // Any stages that we've hit but are asynchronous, and the trigger hasn't been hit yet.
-    private final List<SimpleBuildOrderStage> asynchronousStages;
-
-    private int targetGasMiners;
 
     // Used for tracking of the current state.
     private final Map<UnitType, Integer> expectedCountOfUnitType;
@@ -41,10 +42,9 @@ public class SimpleBuildOrder implements BuildOrder {
 
     protected SimpleBuildOrder(List<SimpleBuildOrderStage> stages) {
         this.initialStages = stages;
+        this.inProgressStages = new LinkedHashSet<>();
         this.remainingStages = new LinkedHashSet<>(stages);
         this.repeatingStages = new HashSet<>();
-        this.asynchronousStages = new ArrayList<>();
-        this.targetGasMiners = 0;
         this.expectedCountOfUnitType = new HashMap<>(); // Will be initialised initially onStep.
         this.abilitiesUsedCount = new HashMap<>();
         validateStages();
@@ -80,12 +80,25 @@ public class SimpleBuildOrder implements BuildOrder {
                     "Tag:buildTerminated " + remainingStages.size(),
                     "Tag:buildMinerals " + observationInterface.getMinerals(),
                     "Tag:buildSupply " + observationInterface.getFoodUsed() + " " + observationInterface.getFoodCap());
+            return;
         }
+        // Check which stages should be output.
+        List<SimpleBuildOrderStage> newStages = remainingStages.stream().filter(potentialStage ->
+                potentialStage.trigger().accept(this, observationInterface, agentWithData)).collect(Collectors.toList());
+
+        newStages.forEach(newStage -> {
+            remainingStages.remove(newStage);
+            inProgressStages.add(newStage);
+            handleStageStarted(newStage, agentWithData.gameData());
+        });
     }
 
-    @Override
-    public int getMaximumGasMiners() {
-        return targetGasMiners;
+    private void handleStageStarted(SimpleBuildOrderStage newStage, GameData gameData) {
+        Optional<UnitType> expectedUnitType = newStage.ability().flatMap(ability ->
+                gameData.getUnitBuiltByAbility(ability));
+        if (expectedUnitType.isPresent()) {
+            expectedCountOfUnitType.compute(expectedUnitType.get(), (k, v) -> v == null ? 1 : v + 1);
+        }
     }
 
     @Override
@@ -101,82 +114,44 @@ public class SimpleBuildOrder implements BuildOrder {
     @Override
     public List<BuildOrderOutput> getOutput(AgentWithData agentWithData,
                                             Map<Ability, Integer> currentParallelAbilities) {
-        if (remainingStages.isEmpty()) {
-            return new ArrayList<>();
-        } else {
-            // List of stages that have triggered this step.
-            List<SimpleBuildOrderStage> passedStagesInStep = new ArrayList<>();
-
-            // Check if any asynchronous stages have triggered.
-            List<SimpleBuildOrderStage> asynchronousTriggered = asynchronousStages.stream().filter(stage ->
-                            stage.trigger().accept(this, agentWithData.observation(), agentWithData))
-                    .collect(Collectors.toList());
-            asynchronousStages.removeAll(asynchronousTriggered);
-
-            if (asynchronousTriggered.size() > 0) {
-                System.out.println("Inserted " + asynchronousTriggered.size() + " stages as their async trigger returned true");
-                passedStagesInStep.addAll(asynchronousTriggered);
+        List<BuildOrderOutput> output = new ArrayList<>();
+        // Add repeating stages, if we can afford it.
+        AtomicInteger remainingMoney = new AtomicInteger(Math.max(0,
+                agentWithData.observation().getMinerals() - agentWithData.taskManager().totalReservedMinerals()));
+        repeatingStages.stream().forEach(action -> {
+            Optional<UnitType> buildUnitType = action.ability().flatMap(ability -> agentWithData.gameData().getUnitBuiltByAbility(ability));
+            int mineralCost = buildUnitType.flatMap(unitType -> agentWithData.gameData().getUnitMineralCost(unitType)).orElse(0);
+            // Hack for scvs to be queued even if there's not enough money for it.
+            boolean force = buildUnitType.filter(type -> Constants.WORKER_TYPES.contains(type)).isPresent();
+            if (force || remainingMoney.get() >= mineralCost) {
+                output.add(action.toBuildOrderOutput());
+                remainingMoney.set(remainingMoney.get() - mineralCost);
             }
+        });
 
-            SimpleBuildOrderStage currentStage = remainingStages.get(0);
-            List<BuildOrderOutput> output = new ArrayList<>();
-            if (currentStage.trigger().accept(this, agentWithData.observation(), agentWithData)) {
-                convertStageToOutput(currentStage).ifPresent(output::add);
-            }
-            // Send repeating stages, but only if we can afford it.
-            AtomicInteger remainingMoney = new AtomicInteger(Math.max(0,
-                    agentWithData.observation().getMinerals() - agentWithData.taskManager().totalReservedMinerals()));
-            repeatingStages.stream().forEach(action -> {
-                Optional<UnitType> buildUnitType = action.ability().flatMap(ability -> agentWithData.gameData().getUnitBuiltByAbility(ability));
-                int mineralCost = buildUnitType.flatMap(unitType -> agentWithData.gameData().getUnitMineralCost(unitType)).orElse(0);
-                // Hack for scvs to be queued even if there's not enough money for it.
-                boolean force = buildUnitType.filter(type -> Constants.WORKER_TYPES.contains(type)).isPresent();
-                if (force || remainingMoney.get() >= mineralCost) {
-                    convertStageToOutput(action).ifPresent(output::add);
-                    remainingMoney.set(remainingMoney.get() - mineralCost);
-                }
-            });
-            return output;
-        }
+        return Stream.concat(inProgressStages.stream().map(SimpleBuildOrderStage::toBuildOrderOutput), output.stream())
+                .collect(Collectors.toUnmodifiableList());
     }
 
     @Override
     public void onStageStarted(S2Agent agent, AgentData data, BuildOrderOutput stage) {
-        if (currentStageNumber >= stages.size()) {
-            return;
-        }
-        SimpleBuildOrderStage currentStage = stages.get(currentStageNumber);
-        if (stage.equals(convertStageToOutput(currentStage))) {
-            System.out.println("Stage " + currentStage + " started at " + agent.observation().getGameLoop());
-            currentStageNumber += 1;
-            stageStartedAt = agent.observation().getGameLoop();
-            if (currentStageNumber < stages.size()) {
-                SimpleBuildOrderStage nextStage = stages.get(currentStageNumber);
-                Optional<UnitType> expectedUnitType = nextStage.ability().flatMap(ability ->
-                        data.gameData().getUnitBuiltByAbility(ability));
-                if (expectedUnitType.isPresent()) {
-                    expectedCountOfUnitType.compute(expectedUnitType.get(), (k, v) -> v == null ? 1 : v + 1);
+        inProgressStages.removeIf(simpleBuildOrderStage -> {
+            BuildOrderOutput stageAsOutput = simpleBuildOrderStage.toBuildOrderOutput();
+            if (stageAsOutput.equals(stage)) {
+                System.out.println("Stage " + simpleBuildOrderStage + " executed by engine, removed from list.");
+                simpleBuildOrderStage.ability().ifPresent(ability -> {
+                    abilitiesUsedCount.merge(ability, 1, Integer::sum);
+                    System.out.println("Stage " + simpleBuildOrderStage + " used ability " + ability + ", expected count is now " + abilitiesUsedCount.getOrDefault(ability, 0) + ".");
+                });
+                if (simpleBuildOrderStage.repeat()) {
+                    repeatingStages.add(simpleBuildOrderStage);
+                    System.out.println("Stage " + simpleBuildOrderStage + " is repeating, added to repeat list.");
                 }
-                if (currentStage.ability().isPresent()) {
-                    abilitiesUsedCount.compute(currentStage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
-                }
-                if (currentStage.repeat()) {
-                    repeatingStages.add(currentStage);
-                }
-                // These actions aren't actually emitted to the consumer, but rather just update the internal state.
-                if (currentStage.gasMiners().isPresent()) {
-                    targetGasMiners = currentStage.gasMiners().get();
-                }
-                if (currentStage.attack().isPresent()) {
-                    isAttackPermitted = currentStage.attack().get();
-                }
-                while (nextStage.trigger().isBlocking() == false) {
-                    asynchronousStages.add(nextStage);
-                    currentStageNumber += 1;
-                    nextStage = stages.get(currentStageNumber);
-                }
+                return true;
+            } else {
+                return false;
             }
-        }
+        });
     }
 
     @Override
@@ -193,14 +168,6 @@ public class SimpleBuildOrder implements BuildOrder {
     @Override
     public void onStageCompleted(BuildOrderOutput stage, AgentWithData agentWithData) {
         remainingStages.remove(stage);
-    }
-
-    private Optional<BuildOrderOutput> convertStageToOutput(SimpleBuildOrderStage simpleBuildOrderStage) {
-        if (simpleBuildOrderStage.gasMiners().isEmpty()) {
-            return Optional.of(simpleBuildOrderStage.toBuildOrderOutput());
-        } else {
-            return Optional.empty();
-        }
     }
 
     @Override

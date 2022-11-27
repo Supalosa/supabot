@@ -42,9 +42,12 @@ public interface PlacementRules {
                 "Only one of regionType, at, on should be present: " + this);
     }
 
-
     static PlacementRules expansion() {
         return ImmutablePlacementRules.builder().regionType(PlacementRegion.EXPANSION).maxVariation(0).build();
+    }
+
+    static PlacementRules freeVespeneGeyser() {
+        return ImmutablePlacementRules.builder().regionType(PlacementRegion.FREE_VESPENE_GEYSER).maxVariation(0).build();
     }
 
     static PlacementRules anyPlayerBase() {

@@ -35,8 +35,6 @@ public interface BuildOrder {
 
     void onStep(AgentWithData agentWithData);
 
-    int getMaximumGasMiners();
-
     String getDebugText();
 
     // Used for sending multi-line output.

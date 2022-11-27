@@ -44,7 +44,6 @@ public class TerranBioBuild implements BuildOrder {
     private long lastOutputUpdateAt = Long.MIN_VALUE;
 
     private Long lastExpansionTime = 0L;
-    private int maxGasMiners = Integer.MAX_VALUE;
 
     private Set<BuildOrderOutput> outputs = new LinkedHashSet<>();
     private HashMap<Ability, Integer> queuedAbilities = new HashMap<>();
@@ -83,6 +82,7 @@ public class TerranBioBuild implements BuildOrder {
 
             Set<Upgrade> upgrades = new HashSet<>(agentWithData.observation().getUpgrades());
 
+            maybeSetGasMiners(agentWithData, Integer.MAX_VALUE);
             tryBuildSupplyDepot(agentWithData);
             morphCommandCentres(agentWithData);
             tryBuildScvs(agentWithData);
@@ -390,11 +390,6 @@ public class TerranBioBuild implements BuildOrder {
     }
 
     @Override
-    public int getMaximumGasMiners() {
-        return maxGasMiners;
-    }
-
-    @Override
     public String getDebugText() {
         return "Terran Bio";
     }
@@ -622,6 +617,17 @@ public class TerranBioBuild implements BuildOrder {
                         .outputId((int)agentWithData.observation().getGameLoop())
                         .build());
             }
+        }
+    }
+
+    private void maybeSetGasMiners(AgentWithData agentWithData, int amount) {
+        List<UnitInPool> refineries = agentWithData.observation().getUnits(UnitFilter.mine(Units.TERRAN_REFINERY));
+        int currentGasMiners = refineries.stream().map(UnitInPool::unit)
+                .map(Unit::getAssignedHarvesters)
+                .map(optionalInt -> optionalInt.orElse(0))
+                .reduce(0, Integer::sum);
+        if (currentGasMiners != amount) {
+            outputs.add(ImmutableBuildOrderOutput.builder().setGasMiners(amount).build());
         }
     }
 }

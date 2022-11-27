@@ -25,6 +25,7 @@ import com.supalosa.bot.analysis.utils.InMemoryGrid;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.pathfinding.BreadthFirstSearch;
+import com.supalosa.bot.task.terran.BuildUtils;
 import com.supalosa.bot.utils.UnitFilter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
@@ -478,8 +479,7 @@ public class StructurePlacementCalculator {
         });
     }
 
-    // does NOT query for placement but will never suggest something that overlaps with a reserved tile.
-    public Optional<Point2d> suggestLocationForFreePlacement(AgentWithData data,
+    public Optional<ResolvedPlacementResult> suggestLocationForFreePlacement(AgentWithData data,
                                                              Point2d origin,
                                                              int structureWidth,
                                                              int structureHeight,
@@ -498,33 +498,35 @@ public class StructurePlacementCalculator {
 
         // Reserve the location after we suggest it. It will be wiped clear in the next structure grid update if
         // it doesn't actually get used.
-        Optional<Point2d> suggestedLocation = Optional.empty();
+        Optional<ResolvedPlacementResult> resolvedLocation = Optional.empty();
 
         if (region.isPresent()) {
-            suggestedLocation = suggestLocationByRegion(region.get(), data, searchOrigin, structureWidth, structureHeight, placementRules);
+            resolvedLocation = suggestLocationByRegion(region.get(), data, searchOrigin, structureWidth, structureHeight, placementRules);
         } else if (atPosition.isPresent()) {
-            suggestedLocation = checkSpecificPlacement(atPosition.get(), structureWidth, structureHeight, placementRules, data);
+            resolvedLocation = checkSpecificPlacement(atPosition.get(), structureWidth, structureHeight, placementRules, data);
         } else if (nearPosition.isPresent()) {
             throw new IllegalArgumentException("NearPosition not implemented");
         } else if (onPosition.isPresent()) {
-            suggestedLocation = checkSpecificPlacement(onPosition.get(), structureWidth, structureHeight, placementRules, data);
+            resolvedLocation = checkSpecificPlacement(onPosition.get(), structureWidth, structureHeight, placementRules, data);
         } else {
             throw new IllegalArgumentException("Invalid placement rule: " + placementRules);
         }
 
-        if (suggestedLocation.isPresent()) {
-            updatePlacementGridWithFootprint(mutableFreePlacementGrid,
-                    (int)suggestedLocation.get().getX(),
-                    (int)suggestedLocation.get().getY(),
-                    structureWidth,
-                    structureHeight,
-                    NOT_BUILDABLE
-                    );
+        if (resolvedLocation.isPresent()) {
+            resolvedLocation.get().point2d().ifPresent(resolvedLocationPoint2d -> {
+                updatePlacementGridWithFootprint(mutableFreePlacementGrid,
+                        (int) resolvedLocationPoint2d.getX(),
+                        (int) resolvedLocationPoint2d.getY(),
+                        structureWidth,
+                        structureHeight,
+                        NOT_BUILDABLE
+                );
+            });
         }
-        return suggestedLocation;
+        return resolvedLocation;
     }
 
-    private Optional<Point2d> suggestLocationByRegion(
+    private Optional<ResolvedPlacementResult> suggestLocationByRegion(
             PlacementRegion placementRegion,
             AgentWithData data,
             Point2d searchOrigin,
@@ -538,6 +540,8 @@ public class StructurePlacementCalculator {
                 return findAnyPlacementNearBase(searchOrigin, placementRules, structureWidth, structureHeight, data);
             case EXPANSION:
                 return findExpansionPlacement(searchOrigin, structureWidth, structureHeight, data);
+            case FREE_VESPENE_GEYSER:
+                return findFreeVespeneGeyserPlacement(searchOrigin, data);
             case MAIN_RAMP_SUPPLY_DEPOT_1:
                 return getFirstSupplyDepotLocation()
                         .map(point -> checkSpecificPlacement(point, structureWidth, structureHeight, placementRules, data))
@@ -570,7 +574,7 @@ public class StructurePlacementCalculator {
     private static final int MAX_ADJACENT_PLACEMENT_ITERATIONS = 10;
     private static final int DEFAULT_MAX_PLACEMENT_VARIATION = 20;
 
-    private Optional<Point2d> findAnyPlacementNearBase(Point2d origin,
+    private Optional<ResolvedPlacementResult> findAnyPlacementNearBase(Point2d origin,
                                                        Optional<PlacementRules> placementRules,
                                                        int structureWidth,
                                                        int structureHeight,
@@ -586,14 +590,15 @@ public class StructurePlacementCalculator {
             // Repeatedly test until we find a position at the minimum distance from the border of the region.
             Optional<Region> maybeRegion = data.mapAwareness().getRegionDataForPoint(origin).map(RegionData::region);
             if (maybeRegion.isEmpty()) {
-                return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
-                        nearbyStructures);
+                return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius, nearbyStructures)
+                        .map(ResolvedPlacementResult::point2d);
             } else {
-                return findPlacementRelativeToBorder(structureWidth, structureHeight, data, maybeRegion, placementRegion);
+                return findPlacementRelativeToBorder(structureWidth, structureHeight, data, maybeRegion, placementRegion)
+                        .map(ResolvedPlacementResult::point2d);
             }
         } else {
             return findAnyPlacement(origin, structureWidth, structureHeight, actualSearchRadius,
-                    nearbyStructures);
+                    nearbyStructures).map(ResolvedPlacementResult::point2d);
         }
     }
 
@@ -686,29 +691,34 @@ public class StructurePlacementCalculator {
         return Optional.empty();
     }
 
-    private Optional<Point2d> findExpansionPlacement(Point2d origin, int structureWidth, int structureHeight, AgentData data) {
+    private Optional<ResolvedPlacementResult> findExpansionPlacement(Point2d origin, int structureWidth, int structureHeight, AgentData data) {
         if (data.mapAwareness().getValidExpansionLocations().isEmpty()) {
             return Optional.empty();
         }
         for (Expansion validExpansionLocation : data.mapAwareness().getValidExpansionLocations().get()) {
             Point2d candidate = validExpansionLocation.position();
             if (canPlaceAtIgnoringStaticGrid(candidate, structureWidth, structureHeight)) {
-                return Optional.of(candidate);
+                return Optional.of(ResolvedPlacementResult.point2d(candidate));
             }
         }
         return Optional.empty();
     }
 
+    private Optional<ResolvedPlacementResult> findFreeVespeneGeyserPlacement(Point2d searchOrigin, AgentWithData data) {
+        Optional<Unit> vespeneGeysers = BuildUtils.getBuildableGeyser(data.observation());
+        return vespeneGeysers.map(ResolvedPlacementResult::unit);
+    }
+
     /**
      * Use for when we calculated a position ahead of time.
      */
-    private Optional<Point2d> checkSpecificPlacement(Point2d point,
+    private Optional<ResolvedPlacementResult> checkSpecificPlacement(Point2d point,
                                                      int structureWidth,
                                                      int structureHeight,
                                                      Optional<PlacementRules> placementRules,
                                                      AgentWithData data) {
         if (canPlaceAtIgnoringStaticGrid(point, structureWidth, structureHeight)) {
-            return Optional.of(point);
+            return Optional.of(ResolvedPlacementResult.point2d(point));
         } else if (placementRules.isPresent() && placementRules.get().maxVariation() > 0) {
             // Place near the target point.
             return findAnyPlacementNearBase(point, placementRules, structureWidth, structureHeight, data);
@@ -716,7 +726,7 @@ public class StructurePlacementCalculator {
         return Optional.empty();
     }
 
-    public Optional<Point2d> suggestLocationForFreePlacement(AgentWithData data,
+    public Optional<ResolvedPlacementResult> suggestLocationForFreePlacement(AgentWithData data,
                                                              Point2d position,
                                                              Ability ability,
                                                              UnitType unitType,
@@ -731,11 +741,16 @@ public class StructurePlacementCalculator {
                 unitType);
         Point2d outputOffset = modifiedFootprint.getLeft();
         Point2d newFootprint = modifiedFootprint.getRight();
-        return suggestLocationForFreePlacement(data, position,
-                (int)newFootprint.getX(),
-                (int)newFootprint.getY(),
-                placementRules).map(outputPosition ->
-                outputPosition.sub(outputOffset));
+        return suggestLocationForFreePlacement(data, position, (int)newFootprint.getX(), (int)newFootprint.getY(),
+                placementRules).map(rpr -> offsetPoint2d(rpr, outputOffset));
+    }
+
+    private ResolvedPlacementResult offsetPoint2d(ResolvedPlacementResult input, Point2d offset) {
+        if (input.unit().isPresent()) {
+            return input;
+        } else {
+            return ResolvedPlacementResult.point2d(input.point2d().map(point -> point.sub(offset)).get());
+        }
     }
 
     @VisibleForTesting

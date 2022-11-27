@@ -85,6 +85,7 @@ public abstract class SimpleBuildOrderStage {
                 .performAttack(attack())
                 .dispatchTask(dispatchTask())
                 .repeat(repeat())
+                .setGasMiners(gasMiners())
                 .build();
     }
 }

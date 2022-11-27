@@ -39,6 +39,7 @@ public interface BuildOrderOutput {
 
     Optional<PlacementRules> placementRules();
     Optional<Boolean> performAttack();
+    Optional<Integer> setGasMiners();
 
     Optional<Supplier<Task>> dispatchTask();
 
@@ -54,8 +55,9 @@ public interface BuildOrderOutput {
         Preconditions.checkState(eligibleUnitTypes().isPresent() ^
                         specificUnit().isPresent() ^
                         dispatchTask().isPresent() ^
-                        performAttack().isPresent(),
-                "Eligible unit type or specific unit is required for BuildOrderOutput");
+                        performAttack().isPresent() ^
+                        setGasMiners().isPresent(),
+                "BuildOrderOutput requires an operation (build unit/attack/setGasMiners)");
     }
 
     default String asHumanReadableString() {

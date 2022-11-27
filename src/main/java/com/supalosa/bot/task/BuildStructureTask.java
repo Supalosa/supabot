@@ -12,6 +12,7 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.github.ocraft.s2client.protocol.unit.UnitOrder;
+import com.google.common.base.Preconditions;
 import com.supalosa.bot.AgentData;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.Constants;
@@ -19,12 +20,12 @@ import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.placement.PlacementRegion;
 import com.supalosa.bot.placement.PlacementRules;
+import com.supalosa.bot.placement.ResolvedPlacementResult;
 import com.supalosa.bot.task.army.TerranWorkerRushDefenceTask;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
 
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class BuildStructureTask extends BaseTask {
 
@@ -35,8 +36,7 @@ public class BuildStructureTask extends BaseTask {
     private final Optional<Integer> minimumMinerals;
     private final Optional<Integer> minimumVespene;
     private final UnitType targetUnitType;
-    private Optional<Point2d> location;
-    private final Optional<Unit> specificTarget;
+    private Optional<ResolvedPlacementResult> resolvedPlacementResult;
     private final Optional<PlacementRules> placementRules;
 
     private long nextAssignedWorkerAttempt = 0L;
@@ -72,10 +72,18 @@ public class BuildStructureTask extends BaseTask {
                               Optional<Integer> minimumMinerals,
                               Optional<Integer> minimumVespene,
                               Optional<PlacementRules> placementRules) {
+        Preconditions.checkArgument((location.isPresent() ^ specificTarget.isPresent()) ||
+                        (location.isEmpty() && specificTarget.isEmpty()),
+                "Only location or specificTarget should be set, or neither should be set.");
         this.ability = ability;
         this.targetUnitType = targetUnitType;
-        this.location = location;
-        this.specificTarget = specificTarget;
+        if (location.isPresent()) {
+            this.resolvedPlacementResult = Optional.of(ResolvedPlacementResult.point2d(location.get()));
+        } else if (specificTarget.isPresent()) {
+            this.resolvedPlacementResult = Optional.of(ResolvedPlacementResult.unit(specificTarget.get()));
+        } else {
+            this.resolvedPlacementResult = Optional.empty();
+        }
         this.minimumMinerals = minimumMinerals;
         this.minimumVespene = minimumVespene;
         this.placementRules = placementRules;
@@ -127,11 +135,11 @@ public class BuildStructureTask extends BaseTask {
                     }
                     if (actionError.getActionResult() == ActionResult.CANT_FIND_PLACEMENT_LOCATION ||
                             actionError.getActionResult() == ActionResult.CANT_BUILD_LOCATION_INVALID) {
-                        location = Optional.empty();
+                        resolvedPlacementResult = Optional.empty();
                         return;
                     }
                     if (actionError.getActionResult() == ActionResult.CANT_BUILD_ON_THAT) {
-                        location = Optional.empty();
+                        resolvedPlacementResult = Optional.empty();
                         return;
                     }
                 }
@@ -150,10 +158,10 @@ public class BuildStructureTask extends BaseTask {
                 assignedWorker = Optional.empty();
             }
         }
-        if (worker.isPresent() && location.isEmpty()) {
+        if (worker.isPresent() && resolvedPlacementResult.isEmpty()) {
             // If we have a worker, find a location to place the structure.
-            location = resolveLocation(worker.get(), agentWithData);
-            if (location.isEmpty()) {
+            resolvedPlacementResult = resolveLocation(worker.get(), agentWithData);
+            if (resolvedPlacementResult.isEmpty()) {
                 // Try another worker.
                 bannedWorkers.add(worker.get().getTag());
                 taskManager.releaseUnit(worker.get().getTag(), this);
@@ -166,11 +174,11 @@ public class BuildStructureTask extends BaseTask {
             Optional<UnitInPool> finalWorker = worker;
             // Look in multiple places for a building under construction.
             // 1. The targeted unit (e.g. refinery on a geyser).
-            final Optional<Point2d> locationToSearch = specificTarget.map(unit -> unit.getPosition().toPoint2d())
+            final Optional<Point2d> locationToSearch = resolvedPlacementResult.flatMap(ResolvedPlacementResult::unit).map(Unit::getPosition).map(Point::toPoint2d)
                     // 2. If the worker is building something, where it is building it.
                     .or(() -> finalWorker.flatMap(this::getWorkerOrderTargetedWorldSpace))
                     // 3. If a location was specified for construction, that position.
-                    .or(() -> location)
+                    .or(() -> resolvedPlacementResult.flatMap(ResolvedPlacementResult::point2d))
                     // 4. Finally, the worker's location.
                     .or(() -> finalWorker.map(w -> w.unit().getPosition().toPoint2d()));
             // Find any matching units within 1.5 range of target location
@@ -189,9 +197,12 @@ public class BuildStructureTask extends BaseTask {
         }
 
         // Check if it's safe to build.
-        if (location.isPresent()) {
+        if (resolvedPlacementResult.isPresent()) {
+            Point2d point2d = resolvedPlacementResult.get().asPoint2d();
             // Should build structure only if the enemy doesn't control the region.
-            Optional<RegionData> locationRegionData = agentWithData.mapAwareness().getRegionDataForPoint(location.get());
+            Optional<RegionData> locationRegionData = agentWithData
+                    .mapAwareness()
+                    .getRegionDataForPoint(point2d);
             isSafeToBuildStructure = !locationRegionData.map(RegionData::isEnemyControlled).orElse(false);
             // Add an override for certain production buildings etc.
             if (Constants.CRITICAL_STRUCTURE_TYPES.contains(targetUnitType)) {
@@ -213,38 +224,46 @@ public class BuildStructureTask extends BaseTask {
             return;
         }
         if (worker.isPresent() &&
+                resolvedPlacementResult.isPresent() &&
                 !matchingUnitAtLocation.isPresent() &&
                 minimumMinerals.map(minimum -> agentWithData.observation().getMinerals() >= minimum).orElse(true) &&
                 minimumVespene.map(minimum -> agentWithData.observation().getVespene() >= minimum).orElse(true) &&
-                !isWorkerOrderQueued(worker.get())) {
+                !isWorkerOrderQueued(worker.get()) &&
+                isSafeToBuildStructure) {
             if (gameLoop > lastBuildAttempt + BUILD_ATTEMPT_INTERVAL) {
                 if (agentWithData.gameData().unitHasAbility(assignedWorker.get(), ability)) {
-                    if (specificTarget.isPresent()) {
-                        agentWithData.actions().unitCommand(assignedWorker.get(), ability, specificTarget.get(), false);
-                    } else if (location.isPresent() && isSafeToBuildStructure) {
-                        location.ifPresent(target -> {
-                            agentWithData.actions().unitCommand(assignedWorker.get(), ability, target, false);
-                        });
+                    if (resolvedPlacementResult.get().unit().isPresent()) {
+                        Unit specificTarget = resolvedPlacementResult.get().unit().get();
+                        agentWithData.actions().unitCommand(assignedWorker.get(), ability, specificTarget, false);
+                    } else {
+                        Point2d point2d = resolvedPlacementResult.get().asPoint2d();
+                        agentWithData.actions().unitCommand(assignedWorker.get(), ability, point2d, false);
                     }
                     lastBuildAttempt = gameLoop;
                     ++buildAttempts;
                     if (buildAttempts > MAX_BUILD_ATTEMPTS / 2) {
                         // Reset the location on the second half of attempts.
-                        location = Optional.empty();
+                        resolvedPlacementResult = Optional.empty();
                     }
-                } else if (location.isPresent()) {
-                    agentWithData.actions().unitCommand(assignedWorker.get(), Abilities.MOVE, location.get(), false);
+                } else if (resolvedPlacementResult.isPresent()) {
+                    // Construction is not available, but move to the target location anyway.
+                    Point2d point2d = resolvedPlacementResult.get().asPoint2d();
+                    agentWithData.actions().unitCommand(assignedWorker.get(), Abilities.MOVE, point2d, false);
                 }
             }
         }
         if (matchingUnitAtLocation.isPresent()) {
             if (!dispatchedMatchingUnitAtLocation.equals(matchingUnitAtLocation)) {
+                // Send an event to listeners saying that the structure has started.
                 onStarted();
                 dispatchedMatchingUnitAtLocation = matchingUnitAtLocation;
             }
             UnitInPool actualUnit = agentWithData.observation().getUnit(matchingUnitAtLocation.get());
             if (actualUnit != null) {
-                location = Optional.of(actualUnit.unit().getPosition().toPoint2d());
+                // Move the target location to the location of the unit under construction.
+                if (resolvedPlacementResult.isPresent() && resolvedPlacementResult.get().point2d().isPresent()) {
+                    resolvedPlacementResult = Optional.of(ResolvedPlacementResult.point2d(actualUnit.unit().getPosition().toPoint2d()));
+                }
                 float buildProgress = actualUnit.unit().getBuildProgress();
                 if (buildProgress > 0.99) {
                     isComplete = true;
@@ -274,9 +293,10 @@ public class BuildStructureTask extends BaseTask {
         boolean nearBaseOnly = placementRules
                 .filter(rule -> rule.regionType().filter(PlacementRegion::isPlayerBase).isPresent())
                 .isPresent();
-        if (location.isPresent()) {
+        if (resolvedPlacementResult.isPresent()) {
             // If location is known, find closest unit to that location.
-            // Avoid using gas workers.
+            // Avoid using workers that are carrying minerals.
+            Point2d targetPosition = resolvedPlacementResult.get().asPoint2d();
             return taskManager.findFreeUnitForTask(
                     this,
                     agent.observation(),
@@ -286,7 +306,7 @@ public class BuildStructureTask extends BaseTask {
                             !UnitInPool.isCarryingMinerals().test(unitInPool) &&
                             !UnitInPool.isCarryingVespene().test(unitInPool),
                     Comparator.comparing((UnitInPool unitInPool) ->
-                            unitInPool.unit().getPosition().toPoint2d().distance(location.get()))
+                            unitInPool.unit().getPosition().toPoint2d().distance(targetPosition))
             ).map(unitInPool -> unitInPool.getTag());
         } else if (nearBaseOnly) {
             // If the placement rules require the structure in the base, choose a worker in a player base only.
@@ -333,9 +353,8 @@ public class BuildStructureTask extends BaseTask {
                 .orElse(Optional.empty());
     }
 
-    private Optional<Point2d> resolveLocation(UnitInPool worker, AgentWithData data) {
-        //System.out.println("Worker: " + worker);
-        return location.or(() -> data.structurePlacementCalculator().flatMap(spc -> spc.suggestLocationForFreePlacement(
+    private Optional<ResolvedPlacementResult> resolveLocation(UnitInPool worker, AgentWithData data) {
+        return resolvedPlacementResult.or(() -> data.structurePlacementCalculator().flatMap(spc -> spc.suggestLocationForFreePlacement(
                 data,
                 worker.unit().getPosition().toPoint2d(),
                 ability,
@@ -349,7 +368,7 @@ public class BuildStructureTask extends BaseTask {
             if (isSuccess) {
                 return Optional.of(ImmutableTaskResult.builder()
                         .isSuccessful(true)
-                        .locationResult(location)
+                        .locationResult(resolvedPlacementResult.map(ResolvedPlacementResult::asPoint2d))
                         .build());
             } else {
                 return Optional.of(ImmutableTaskResult.of(false));
@@ -383,10 +402,10 @@ public class BuildStructureTask extends BaseTask {
         if (isComplete) {
             return;
         }
-        if (this.location.isPresent()) {
-            Point2d actualLocation = this.location.get();
+        if (this.resolvedPlacementResult.isPresent()) {
+            Point2d actualLocation = this.resolvedPlacementResult.get().asPoint2d();
             float height = agent.observation().terrainHeight(actualLocation);
-            Point point3d = Point.of(actualLocation.getX(), actualLocation.getY(), height);
+            Point point3d = actualLocation.toPoint2d(height);
             Color color = Color.YELLOW;
             if (this.matchingUnitAtLocation.isPresent()) {
                 color = Color.GREEN;
@@ -410,9 +429,10 @@ public class BuildStructureTask extends BaseTask {
             agent.debug().debugTextOut(
                     "Build " + targetUnitType.toString() + "\n" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS,
                     point3d, Color.WHITE, 10);
-            if (this.location.isPresent()) {
-                float height = agent.observation().terrainHeight(location.get());
-                Point destinationLocation = Point.of(location.get().getX(), location.get().getY(), height);
+            if (this.resolvedPlacementResult.isPresent()) {
+                Point2d point2d = resolvedPlacementResult.get().asPoint2d();
+                float height = agent.observation().terrainHeight(point2d);
+                Point destinationLocation = point2d.toPoint2d(height);
                 agent.debug().debugLineOut(point3d, destinationLocation, Color.TEAL);
             }
         }
@@ -420,7 +440,7 @@ public class BuildStructureTask extends BaseTask {
 
     @Override
     public String getDebugText() {
-        return "[" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS + "] Build " + targetUnitType + " @ " + location.map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere");
+        return "[" + buildAttempts + "/" + MAX_BUILD_ATTEMPTS + "] Build " + targetUnitType + " @ " + resolvedPlacementResult.map(ResolvedPlacementResult::asPoint2d).map(p2d -> p2d.getX() + "," + p2d.getY()).orElse("anywhere");
     }
 
     @Override

@@ -46,6 +46,8 @@ public class SimpleBuildOrderTask extends BaseTask {
     private static final long ORDER_RESERVATION_TIME = 22L * 1;
     private Optional<Supplier<BuildOrder>> nextBuildOrder;
 
+    private int targetGasMiners = 0;
+
     private long lastGasCheck = 0L;
     private long lastRebalanceAt = 0L;
 
@@ -79,16 +81,18 @@ public class SimpleBuildOrderTask extends BaseTask {
 
         // Dispatch any outputs that aren't currently running.
         outputs.forEach(output -> {
-            if (output.performAttack().isPresent()) {
-                agentWithData.fightManager().setCanAttack(output.performAttack().get());
-                // An attack order was given.
-                if (output.performAttack().get() == true) {
+            output.performAttack().ifPresent(doPerformAttack -> {
+                agentWithData.fightManager().setCanAttack(doPerformAttack);
+                if (doPerformAttack) {
                     agentWithData.fightManager().reinforceAttackingArmy();
                 }
-            }
-            if (output.dispatchTask().isPresent()) {
-                taskManager.addTask(output.dispatchTask().get().get(), 1);
-            }
+            });
+            output.dispatchTask().ifPresent(taskToDispatch -> {
+                taskManager.addTask(taskToDispatch.get(), 1);
+            });
+            output.setGasMiners().ifPresent(target -> {
+                this.targetGasMiners = target;
+            });
             if (output.abilityToUse().isEmpty()) {
                 // If there is no ability, the stage automatically succeeds.
                 currentBuildOrder.onStageStarted(agentWithData, agentWithData, output);
@@ -267,7 +271,7 @@ public class SimpleBuildOrderTask extends BaseTask {
             return;
         }
         lastGasCheck = gameLoop;
-        BuildUtils.reassignGasWorkers(agentWithData, 0, currentBuildOrder.getMaximumGasMiners());
+        BuildUtils.reassignGasWorkers(agentWithData, 0, targetGasMiners);
     }
 
     private void rebalanceWorkers(AgentWithData agentWithData) {

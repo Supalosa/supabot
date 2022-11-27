@@ -108,7 +108,7 @@ public class Build {
 
         private Builder addStage(SimpleBuildOrderStage stage) {
             this.stages.add(stage);
-            if (stage.trigger().isBlocking() == false && stage.ability().isPresent()) {
+            if (stage.trigger().isBlocking() == true && stage.ability().isPresent()) {
                 this.expectedCountOfAbility.compute(stage.ability().get(), (k, v) -> v == null ? 1 : v + 1);
             }
             return this;

@@ -54,10 +54,11 @@ public interface SimpleBuildOrderCondition {
 
         @Override
         public boolean accept(SimpleBuildOrder buildOrder, ObservationInterface observationInterface, AgentWithData gameData) {
-            for (Map.Entry<Ability, Integer> entry : buildOrder.getAbilitiesUsedCount().entrySet()) {
+            for (Map.Entry<Ability, Integer> entry : expectedCount.entrySet()) {
                 Ability ability = entry.getKey();
-                int expectedCountOfAbility = expectedCount.getOrDefault(ability, 0);
-                if (entry.getValue() < expectedCountOfAbility) {
+                int expectedCountOfAbility = entry.getValue();
+                int usedAbilityCount = buildOrder.getAbilitiesUsedCount().getOrDefault(ability, 0);
+                if (usedAbilityCount < expectedCountOfAbility) {
                     return false;
                 }
             }
@@ -91,8 +92,9 @@ public interface SimpleBuildOrderCondition {
             });
             for (Map.Entry<UnitType, Integer> entry : expectedCount.entrySet()) {
                 UnitType unit = entry.getKey();
-                int expectedCountOfUnit = expectedCount.getOrDefault(unit, 0);
-                if (entry.getValue() < expectedCountOfUnit) {
+                int actualCount = currentCount.getOrDefault(unit, 0);
+                int expectedCountOfUnit = entry.getValue();
+                if (actualCount < expectedCountOfUnit) {
                     return false;
                 }
             }
