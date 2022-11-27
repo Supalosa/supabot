@@ -359,16 +359,17 @@ public class TerranBioBuild implements BuildOrder {
         if (stage.abilityToUse().equals(Optional.of(Abilities.BUILD_COMMAND_CENTER))) {
             Validate.isTrue(stage.placementRules().isPresent(),
                     "Expected placement rule to be present for expansion.");
-            Validate.isTrue(stage.placementRules().get().at().isPresent(),
-                    "Expected placement rule to be a specific location for an expansion.");
-            Point2d expansionPosition = stage.placementRules().get().at().get();
-            Optional<Expansion> maybeExpansion = data.mapAwareness().getExpansionLocations().flatMap(expansions ->
-                    expansions.stream().filter(exp -> exp.position().equals(expansionPosition)).findFirst());
-            maybeExpansion.ifPresent(expansion -> {
-                data.mapAwareness().onExpansionAttempted(expansion, gameLoop);
-                lastExpansionTime = gameLoop;
-                System.out.println("Attempting to build command centre at " + expansion);
-            });
+            // This statement can be false if the expansion was triggered by another build order.
+            if (stage.placementRules().get().at().isPresent()) {
+                Point2d expansionPosition = stage.placementRules().get().at().get();
+                Optional<Expansion> maybeExpansion = data.mapAwareness().getExpansionLocations().flatMap(expansions ->
+                        expansions.stream().filter(exp -> exp.position().equals(expansionPosition)).findFirst());
+                maybeExpansion.ifPresent(expansion -> {
+                    data.mapAwareness().onExpansionAttempted(expansion, gameLoop);
+                    lastExpansionTime = gameLoop;
+                    System.out.println("Attempting to build command centre at " + expansion);
+                });
+            }
         }
         if (stage.abilityToUse().isPresent()) {
             queuedAbilities.merge(stage.abilityToUse().get(), 0, (a, b) -> a - 1);
@@ -462,22 +463,17 @@ public class TerranBioBuild implements BuildOrder {
             barracksPerCc = 1;
         } else if (minerals < 500) {
             barracksPerCc = 2;
-        } else if (minerals < 1000) {
-            barracksPerCc = 3;
-        } else if (minerals < 2000) {
-            barracksPerCc = 4;
-        } else if (minerals < 5000) {
-            barracksPerCc = 5;
         } else {
-            barracksPerCc = 6;
+            barracksPerCc = 3;
         }
         if (numBarracks > numCc * barracksPerCc) {
             return;
         }
+        int targetNumBarracks = barracksPerCc * numCc;
         if (numBarracks == 0 && agentWithData.structurePlacementCalculator().isPresent()) {
-            tryBuildStructure(agentWithData.observation().getGameLoop(), Abilities.BUILD_BARRACKS, (int) numCc, PlacementRules.mainRampBarracksWithAddon());
+            tryBuildMaxStructure(agentWithData, Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, targetNumBarracks, numCc, PlacementRules.mainRampBarracksWithAddon());
         } else {
-            tryBuildStructure(agentWithData.observation().getGameLoop(), Abilities.BUILD_BARRACKS, (int) numCc, PlacementRules.centreOfBase());
+            tryBuildMaxStructure(agentWithData, Abilities.BUILD_BARRACKS, Units.TERRAN_BARRACKS, targetNumBarracks, numCc, PlacementRules.centreOfBase());
         }
     }
 

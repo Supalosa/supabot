@@ -191,8 +191,8 @@ public class SimpleBuildOrderTask extends BaseTask {
         if (this.currentBuildOrder.isComplete()) {
             changeBuild();
         } else if (this.currentBuildOrder.isTimedOut()) {
-            changeBuild();
             announceFailure(agentWithData.observation(), agentWithData.actions());
+            changeBuild();
         }
 
         // TODO move this to a task.
@@ -254,17 +254,11 @@ public class SimpleBuildOrderTask extends BaseTask {
     }
 
     private void announceFailure(ObservationInterface observationInterface, ActionInterface actionInterface) {
-        // Hack, implement this better.
-        if (!(currentBuildOrder instanceof SimpleBuildOrder)) {
-            return;
-        }
-        SimpleBuildOrder currentSimpleBuildOrder = (SimpleBuildOrder) currentBuildOrder;
         if (hasAnnouncedFailure) {
             return;
         }
         hasAnnouncedFailure = true;
-        String outputsAsString = renderOutputsToString(lastOutput);
-        actionInterface.sendChat("Tag: BuildFail " + outputsAsString, ActionChat.Channel.BROADCAST);
+        actionInterface.sendChat("Tag: BuildFail", ActionChat.Channel.BROADCAST);
         currentBuildOrder.getVerboseDebugText().forEach(verboseDebugText -> {
             actionInterface.sendChat(verboseDebugText, ActionChat.Channel.BROADCAST);
             System.out.println("[Build] " + verboseDebugText);
