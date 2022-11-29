@@ -1,0 +1,18 @@
+
+
+task deployLocal(type: Copy, group: "deploy") {
+    from shadowJar.getOutputs()
+    into "C:\\Users\\Supalosa\\projects\\local-play-bootstrap-main\\bots\\supabot"
+}
+task deployProbots(type: Copy, group: "deploy") {
+    from shadowJar.getOutputs()
+    into "C:\\Users\\Supalosa\\projects\\Sc2AiApp\\Bots\\Ketroc"
+    rename { String fileName ->
+        return "Ketroc.jar"
+    }
+}
+task buildZip(type: Zip, group: "deploy") {
+    from shadowJar.getOutputs()
+    from file("LadderBots.json")
+    archiveFileName = "supabot.zip"
+}
