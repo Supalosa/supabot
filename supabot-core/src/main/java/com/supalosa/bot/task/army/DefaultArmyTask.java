@@ -17,6 +17,8 @@ import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
 import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.pathfinding.RegionGraphPath;
+import com.supalosa.bot.production.UnitRequester;
+import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.task.*;
 import com.supalosa.bot.task.message.TaskMessage;
 import com.supalosa.bot.task.message.TaskPromise;
@@ -34,10 +36,6 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private final String armyKey;
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
     private final ThreatCalculator threatCalculator;
-
-    // Whether the army wants units as they are produced. Typically will be false for the main attacking army (as we
-    // use child armies to reinforce) and child armies (same reason).
-    private boolean acceptingUnits = true;
 
     private Optional<Point2d> targetPosition = Optional.empty();
     private Optional<Point2d> retreatPosition = Optional.empty();
@@ -88,9 +86,6 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private Optional<DefaultArmyTask<A,D,R,I>> parentArmy = Optional.empty();
     // This a list of all (live) child armies that have this army set as its parent.
     private List<DefaultArmyTask> childArmies = new ArrayList<>();
-    // This is an army that this army is delegated to, and will defer production queries to. This is used so that the
-    // 'reserve' army will take the desired composition of the 'main' army.
-    private Optional<DefaultArmyTask<A,D,R,I>> productionDelegateArmy = Optional.empty();
 
     private final DefaultArmyTaskBehaviour<A,D,R,I> behaviour;
 
@@ -105,6 +100,8 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
     private List<UnitInPool> engagementStartUnits = new ArrayList<>();
     private double engagementStartPower = 0.0;
     private long engagementEndingAt = 0L;
+
+    private UnitRequester unitRequester = UnitRequester.empty();
 
     public DefaultArmyTask(String armyName,
                            int basePriority,
@@ -146,10 +143,10 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
      *
      * @return A new army of this type, that has its parent set to this army.
      */
+    @Override
     public final DefaultArmyTask<A,D,R,I> createChildArmy() {
         DefaultArmyTask<A,D,R,I> childArmy = createChildArmyImpl();
         // Inherit some settings from this army.
-        childArmy.setAcceptingUnits(this.acceptingUnits);
         childArmy.setAggressionLevel(this.aggressionLevel);
         childArmies.add(childArmy);
         return childArmy;
@@ -201,11 +198,6 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
                 if (getAssignedUnits().size() == 0) {
                     markComplete();
                 }
-            }
-        }
-        if (productionDelegateArmy.isPresent()) {
-            if (productionDelegateArmy.get().isComplete() || !taskManager.hasTask(productionDelegateArmy.get())) {
-                productionDelegateArmy = Optional.empty();
             }
         }
 
@@ -651,27 +643,6 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
         return threatCalculator.calculatePower(this.getCurrentCompositionCache(), this.upgrades);
     }
 
-    public void setAcceptingUnits(boolean acceptingUnits) {
-        this.acceptingUnits = acceptingUnits;
-    }
-
-    @Override
-    public boolean wantsUnit(Unit unit) {
-        // Check if the production delegate wants it, otherwise check if we want it.
-        // We have to bypass the `acceptingUnits` check for the delegate.
-        return productionDelegateArmy
-                .map(delegate -> delegate.wantsUnitIgnoringOverride(unit) || super.wantsUnit(unit))
-                .orElseGet(() -> acceptingUnits && wantsUnitIgnoringOverride(unit));
-    }
-
-    private boolean wantsUnitIgnoringOverride(Unit unit) {
-        return super.wantsUnit(unit);
-    }
-
-    public void setProductionDelegateArmy(DefaultArmyTask<A, D, R, I> productionDelegateArmy) {
-        this.productionDelegateArmy = Optional.of(productionDelegateArmy);
-    }
-
     @Override
     public Optional<? extends Task> getParentTask() {
         return parentArmy;
@@ -685,6 +656,16 @@ public abstract class DefaultArmyTask<A,D,R,I> extends DefaultTaskWithUnits impl
 
     public void addArmyListener(ArmyTaskListener listener) {
         this.listeners.add(listener);
+    }
+
+    @Override
+    public void setUnitRequester(UnitRequester unitRequester) {
+        this.unitRequester = unitRequester;
+    }
+
+    @Override
+    public final List<UnitTypeRequest> getRequestedUnits() {
+        return this.unitRequester.getRequestedUnits();
     }
 
     /**

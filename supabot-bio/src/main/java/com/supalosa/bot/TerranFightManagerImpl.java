@@ -11,10 +11,12 @@ import com.github.ocraft.s2client.protocol.spatial.Point2d;
 import com.github.ocraft.s2client.protocol.unit.*;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.production.UnitRequester;
 import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskWithUnits;
 import com.supalosa.bot.task.army.*;
 import com.supalosa.bot.task.RepairTask;
@@ -34,20 +36,16 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
 
-    private enum MacroAggressionState {
-        AGGRESSIVE,
-        DEFENSIVE
-    }
-
     private final S2Agent agent;
     private final List<ArmyTask> armyTasks;
 
-    private TerranBioArmyTask attackingArmy = new TerranBioArmyTask("Attack", 1);
-    private TerranBioArmyTask reserveArmy = new TerranBioArmyTask("Reserve", 10);
+    private ArmyTask attackingArmy;
+    private ArmyTask reserveArmy;
 
     private final Map<Tag, Float> rememberedUnitHealth = new HashMap<>();
 
@@ -68,6 +66,8 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
             new TerranBioDefenceArmyTask("Defence." + UUID.randomUUID(), defenceTask);
     private Map<Region, PendingDefenceTask> pendingDefenceTasks = new HashMap<>();
 
+    private CompositionChooser compositionChooser;
+
     @Value.Immutable
     interface PendingDefenceTask {
         Region region();
@@ -77,11 +77,22 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
 
     private boolean addedTasks = false;
 
-    public TerranFightManagerImpl(S2Agent agent) {
+    /**
+     * Constructs the TerranFightManagerImpl.
+     *
+     * @param agent Agent to make queries to (TO BE DEPRECATED).
+     * @param armySupplier Function that, given a name, produces an army identified by that name.
+     */
+    public TerranFightManagerImpl(S2Agent agent,
+                                  Function<String, ArmyTask> armySupplier,
+                                  CompositionChooser compositionChooser) {
         this.agent = agent;
         armyTasks = new ArrayList<>();
-        armyTasks.add(reserveArmy);
+        attackingArmy = armySupplier.apply("Attack");
+        reserveArmy = armySupplier.apply("Reserve");
         armyTasks.add(attackingArmy);
+        armyTasks.add(reserveArmy);
+        this.compositionChooser = compositionChooser;
     }
 
     private void setHarassPosition(Optional<Point2d> harassPosition) {
@@ -121,12 +132,10 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
             taskManager.addTask(reserveArmy, 1);
 
             // Stops the attacking army from taking units.
-            attackingArmy.setAcceptingUnits(false);
-
             attackingArmy.addArmyListener(this);
-            // Make the reserve army delegate production decisions to the attacking army.
-            reserveArmy.setProductionDelegateArmy(attackingArmy);
         }
+        // Make the reserve army delegate production decisions to the attacking army.
+        reserveArmy.setUnitRequester(compositionChooser);
         if (dummyAttackTask == null) {
             Optional<RegionData> startPointRegion = agentWithData.mapAwareness()
                     .getRegionDataForPoint(agentWithData.observation().getStartLocation().toPoint2d());
@@ -139,6 +148,7 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
             }
         }
         onStepTerranBio(taskManager, agentWithData);
+        compositionChooser.onStep(agentWithData);
 
         // Remove complete tasks.
         List<ArmyTask> validArmyTasks = armyTasks.stream().filter(armyTask -> !armyTask.isComplete()).collect(Collectors.toList());
@@ -192,9 +202,9 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         if (pendingReinforcement) {
             pendingReinforcement = false;
             canAttack = false;
-            DefaultArmyTask reinforcingArmy = attackingArmy.createChildArmy();
+            ArmyTask reinforcingArmy = attackingArmy.createChildArmy();
             if (taskManager.addTask(reinforcingArmy, 1)) {
-                reinforcingArmy.takeAllFrom(taskManager, agent.observation(), reserveArmy);
+                taskManager.reassignUnits(reserveArmy, reinforcingArmy, agentWithData.observation(), _unit -> true);
                 armyTasks.add(reinforcingArmy);
             }
         }
@@ -211,9 +221,7 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         Optional<Point2d> defenceRetreatPosition = Optional.empty();
         Optional<Point2d> defenceAttackPosition = Optional.empty();
         Optional<Point2d> attackPosition = Optional.empty();
-        Optional<Point2d> harassPosition = Optional.empty();
-
-        long gameLoop = agentWithData.observation().getGameLoop();
+        Optional<Point2d> harassPosition;
 
         boolean defenceNeedsAssistance = false;
 
@@ -460,7 +468,7 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
     }
 
     @Override
-    public List<UnitTypeRequest> getRequestedUnitTypes() {
+    public List<UnitTypeRequest> getRequestedUnits() {
         // Compute what units the attacking army wants.
         Map<UnitType, Integer> requestedAmount = new HashMap<>();
         Map<UnitType, Optional<UnitType>> alternateForm = new HashMap<>();
@@ -469,15 +477,17 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
         Map<UnitType, Boolean> needsTechLab = new HashMap<>();
         List<TaskWithUnits> tasksWithUnits = new ArrayList<>(armyTasks);
         tasksWithUnits.addAll(defenceTasks.values());
-        tasksWithUnits.forEach(armyTask -> {
-            armyTask.requestingUnitTypes().forEach(unitTypeRequest -> {
-                requestedAmount.put(unitTypeRequest.unitType(),
-                        requestedAmount.getOrDefault(unitTypeRequest.unitType(), 0) + unitTypeRequest.amount());
-                producingUnitType.put(unitTypeRequest.unitType(), unitTypeRequest.producingUnitType());
-                productionAbility.put(unitTypeRequest.unitType(), unitTypeRequest.productionAbility());
-                alternateForm.put(unitTypeRequest.unitType(), unitTypeRequest.alternateForm());
-                needsTechLab.put(unitTypeRequest.unitType(), unitTypeRequest.needsTechLab());
-            });
+        List<UnitTypeRequest> allRequests = tasksWithUnits.stream()
+                .map(UnitRequester::getRequestedUnits)
+                .flatMap(List::stream).collect(Collectors.toList());
+        allRequests.addAll(compositionChooser.getRequestedUnits());
+        allRequests.forEach(unitTypeRequest -> {
+            requestedAmount.put(unitTypeRequest.unitType(),
+                    requestedAmount.getOrDefault(unitTypeRequest.unitType(), 0) + unitTypeRequest.amount());
+            producingUnitType.put(unitTypeRequest.unitType(), unitTypeRequest.producingUnitType());
+            productionAbility.put(unitTypeRequest.unitType(), unitTypeRequest.productionAbility());
+            alternateForm.put(unitTypeRequest.unitType(), unitTypeRequest.alternateForm());
+            needsTechLab.merge(unitTypeRequest.unitType(), unitTypeRequest.needsTechLab(), (a, b) -> a || b);
         });
         return requestedAmount.entrySet().stream()
                 .map(entry -> ImmutableUnitTypeRequest.builder()
@@ -513,6 +523,11 @@ public class TerranFightManagerImpl implements FightManager, ArmyTaskListener {
                 .defenceLevel(defenceLevel)
                 .extension(gameCycles)
                 .build());
+    }
+
+    @Override
+    public ArmyTask getMainArmy() {
+        return attackingArmy;
     }
 
     @Override

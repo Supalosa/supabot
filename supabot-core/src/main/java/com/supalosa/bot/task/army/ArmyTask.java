@@ -2,10 +2,13 @@ package com.supalosa.bot.task.army;
 
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.Army;
 import com.supalosa.bot.awareness.MapAwareness;
+import com.supalosa.bot.production.UnitRequester;
 import com.supalosa.bot.task.TaskWithUnits;
+import org.checkerframework.checker.units.qual.A;
 
 import java.util.List;
 import java.util.Optional;
@@ -71,4 +74,11 @@ public interface ArmyTask extends TaskWithUnits {
     String getArmyName();
 
     void addArmyListener(ArmyTaskListener listener);
+
+    /**
+     * @return A new army of this type, that has its parent set to this army.
+     */
+    ArmyTask createChildArmy();
+
+    void setUnitRequester(UnitRequester unitRequester);
 }

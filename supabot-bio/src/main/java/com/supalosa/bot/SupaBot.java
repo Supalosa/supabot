@@ -22,6 +22,7 @@ import com.supalosa.bot.engagement.ThreatCalculator;
 import com.supalosa.bot.instrumentation.InstrumentedActionInterface;
 import com.supalosa.bot.placement.StructurePlacementCalculator;
 import com.supalosa.bot.task.*;
+import com.supalosa.bot.task.army.TerranBioArmyTask;
 import com.supalosa.bot.task.terran.OrbitalCommandManagerTask;
 import com.supalosa.bot.task.SimpleBuildOrderTask;
 import com.supalosa.bot.task.terran.TerranStrategyTask;
@@ -61,7 +62,9 @@ public class SupaBot extends AgentWithData {
         this.isDebug = isDebug;
         ThreatCalculator threatCalculator = new TerranBioThreatCalculator();
         this.taskManager = new TaskManagerImpl();
-        this.fightManager = new TerranFightManagerImpl(this);
+        this.fightManager = new TerranFightManagerImpl(this,
+                name -> new TerranBioArmyTask(name, 10),
+                new TerranBioCompositionChooser());
         this.mapAwareness = new MapAwarenessImpl(threatCalculator);
         this.enemyAwareness = new EnemyAwarenessImpl(threatCalculator);
         this.gameData = new GameData(observation());

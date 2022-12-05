@@ -127,8 +127,10 @@ public interface TaskManager {
 
     /**
      * Dispatch a unit to the tasks that might want it.
+     *
+     * @return True if the unit was assigned.
      */
-    void dispatchUnit(Unit unit);
+    boolean dispatchUnit(Unit unit);
 
     /**
      * Dispatch a message to all other tasks. Multiple tasks can respond.

@@ -36,6 +36,7 @@ dependencies {
     implementation project(":supabot-core")
     implementation 'org.jfree:jfreechart:1.5.3'
     implementation("com.google.guava:guava:31.1-jre")
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
 
     annotationProcessor 'org.immutables:value:2.9.2'
     annotationProcessor 'org.immutables:builder:2.9.2'

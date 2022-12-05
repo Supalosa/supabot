@@ -268,13 +268,14 @@ public class TaskManagerImpl implements TaskManager {
     }
 
     @Override
-    public void dispatchUnit(Unit unit) {
+    public boolean dispatchUnit(Unit unit) {
         for (TaskWithUnits task : orderedTasksNeedingUnits) {
             if (!task.isComplete() && task.wantsUnit(unit)) {
                 reserveUnit(unit, task);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     @Override

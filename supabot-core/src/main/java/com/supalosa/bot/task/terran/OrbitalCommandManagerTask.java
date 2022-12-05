@@ -237,7 +237,7 @@ public class OrbitalCommandManagerTask extends DefaultTaskWithUnits {
     }
 
     @Override
-    public List<UnitTypeRequest> requestingUnitTypes() {
+    public List<UnitTypeRequest> getRequestedUnits() {
         return new ArrayList<>();
     }
 

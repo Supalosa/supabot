@@ -3,6 +3,7 @@ package com.supalosa.bot.task;
 import com.github.ocraft.s2client.protocol.data.UnitType;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.github.ocraft.s2client.protocol.unit.Unit;
+import com.supalosa.bot.production.UnitRequester;
 import com.supalosa.bot.production.UnitTypeRequest;
 
 import java.util.List;
@@ -12,7 +13,7 @@ import java.util.Map;
  * A Task that requests units from the TaskManager.
  * Note that the TaskManager is the one who actually tracks the ownership of units.
  */
-public interface TaskWithUnits extends Task {
+public interface TaskWithUnits extends Task, UnitRequester {
 
     /**
      * Returns true if this task wants to reserve the given unit. It is called when a unit is trained and passed
@@ -39,11 +40,6 @@ public interface TaskWithUnits extends Task {
      * Returns an arbitrary value of priority, with higher figures getting units first.
      */
     int getPriority();
-
-    /**
-     * Return the desired composition of this army.
-     */
-    List<UnitTypeRequest> requestingUnitTypes();
 
     /**
      * Return the current composition of this army.

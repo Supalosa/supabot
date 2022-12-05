@@ -335,7 +335,7 @@ public class DefenceTask extends DefaultTaskWithUnits implements MissionTask {
     }
 
     @Override
-    public List<UnitTypeRequest> requestingUnitTypes() {
+    public List<UnitTypeRequest> getRequestedUnits() {
         return unitTypeRequests;
     }
 

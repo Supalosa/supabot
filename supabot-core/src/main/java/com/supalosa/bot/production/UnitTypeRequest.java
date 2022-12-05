@@ -16,6 +16,7 @@ public interface UnitTypeRequest {
     /**
      * The unit type to produce.
      */
+    @Value.Parameter
     UnitType unitType();
 
     /**
@@ -26,16 +27,19 @@ public interface UnitTypeRequest {
     /**
      * The ability which produces the unit.
      */
+    @Value.Parameter
     Ability productionAbility();
 
     /**
      * The unit type that produces the unit.
      */
+    @Value.Parameter
     UnitType producingUnitType();
 
     /**
      * The amount that is requested.
      */
+    @Value.Parameter
     int amount();
 
     /**

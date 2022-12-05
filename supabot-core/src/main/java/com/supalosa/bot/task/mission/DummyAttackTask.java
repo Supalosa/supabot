@@ -79,7 +79,7 @@ public class DummyAttackTask extends DefaultTaskWithUnits implements MissionTask
     }
 
     @Override
-    public List<UnitTypeRequest> requestingUnitTypes() {
+    public List<UnitTypeRequest> getRequestedUnits() {
         return List.of();
     }
 

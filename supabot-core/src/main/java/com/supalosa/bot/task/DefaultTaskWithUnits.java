@@ -72,7 +72,7 @@ public abstract class DefaultTaskWithUnits extends BaseTask implements TaskWithU
      */
     @Override
     public boolean wantsUnit(Unit unit) {
-        return requestingUnitTypes().stream().anyMatch(request ->
+        return this.getRequestedUnits().stream().anyMatch(request ->
                 request.unitType().equals(unit.getType()) && getAmountOfUnit(unit.getType()) < request.amount());
     }
 

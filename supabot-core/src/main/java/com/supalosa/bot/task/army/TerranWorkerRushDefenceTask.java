@@ -9,6 +9,8 @@ import com.github.ocraft.s2client.protocol.unit.Alliance;
 import com.github.ocraft.s2client.protocol.unit.Tag;
 import com.supalosa.bot.AgentWithData;
 import com.supalosa.bot.production.ImmutableUnitTypeRequest;
+import com.supalosa.bot.production.StaticUnitRequester;
+import com.supalosa.bot.production.UnitRequester;
 import com.supalosa.bot.production.UnitTypeRequest;
 import com.supalosa.bot.engagement.WorkerDefenceThreatCalculator;
 import com.supalosa.bot.task.Task;
@@ -30,12 +32,19 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
 
     public class WorkerRushDetected implements TaskMessage {}
 
-    private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
-    private long desiredCompositionUpdatedAt = 0L;
     private Set<Tag> autocastedWorkers = new HashSet<>();
+
+    private static UnitRequester SCV_REQUESTER = new StaticUnitRequester(
+            List.of(
+                    ImmutableUnitTypeRequest.of(
+                            Units.TERRAN_SCV,
+                            Abilities.TRAIN_SCV,
+                            Units.TERRAN_COMMAND_CENTER,
+                            100)));
 
     public TerranWorkerRushDefenceTask() {
         super("WorkerRushDefence", 100, new WorkerDefenceThreatCalculator(), new TerranWorkerRushDefenceTaskBehaviour());
+        this.setUnitRequester(SCV_REQUESTER);
     }
 
     @Override
@@ -48,10 +57,6 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
         super.onStepImpl(taskManager, agentWithData);
         long gameLoop = agentWithData.observation().getGameLoop();
 
-        if (gameLoop > desiredCompositionUpdatedAt + 22L) {
-            desiredCompositionUpdatedAt = gameLoop;
-            updateComposition();
-        }
         getAssignedUnits().forEach(armyUnitTag -> {
             if (!autocastedWorkers.contains(armyUnitTag)) {
                 agentWithData.actions().toggleAutocast(armyUnitTag, Abilities.EFFECT_REPAIR);
@@ -75,23 +80,6 @@ public class TerranWorkerRushDefenceTask extends DefaultArmyTask {
 
     private void sendChat(ActionInterface actionInterface, String message) {
         actionInterface.sendChat("[WorkerRush] " + message, ActionChat.Channel.BROADCAST);
-    }
-
-    private void updateComposition() {
-        List<UnitTypeRequest> result = new ArrayList<>();
-        result.add(ImmutableUnitTypeRequest.builder()
-                .unitType(Units.TERRAN_SCV)
-                .productionAbility(Abilities.TRAIN_SCV)
-                .producingUnitType(Units.TERRAN_COMMAND_CENTER)
-                .amount(100)
-                .build()
-        );
-        desiredComposition = result;
-    }
-
-    @Override
-    public List<UnitTypeRequest> requestingUnitTypes() {
-        return desiredComposition;
     }
 
     @Override

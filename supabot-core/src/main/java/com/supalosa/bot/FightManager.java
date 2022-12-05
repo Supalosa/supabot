@@ -3,16 +3,20 @@ package com.supalosa.bot;
 import com.github.ocraft.s2client.bot.S2Agent;
 import com.github.ocraft.s2client.bot.gateway.UnitInPool;
 import com.github.ocraft.s2client.protocol.spatial.Point2d;
+import com.github.ocraft.s2client.protocol.unit.Unit;
 import com.supalosa.bot.analysis.Region;
 import com.supalosa.bot.awareness.RegionData;
+import com.supalosa.bot.production.UnitRequester;
 import com.supalosa.bot.production.UnitTypeRequest;
+import com.supalosa.bot.task.Task;
 import com.supalosa.bot.task.TaskManager;
+import com.supalosa.bot.task.TaskWithUnits;
 import com.supalosa.bot.task.army.ArmyTask;
 
 import java.util.Collection;
 import java.util.List;
 
-public interface FightManager {
+public interface FightManager extends UnitRequester {
 
     void onStep(TaskManager taskManager, AgentWithData agentWithData);
 
@@ -23,8 +27,6 @@ public interface FightManager {
     void onUnitIdle(UnitInPool unit);
 
     void debug(S2Agent agent);
-
-    List<UnitTypeRequest> getRequestedUnitTypes();
 
     Collection<ArmyTask> getAllArmies();
 
@@ -39,4 +41,9 @@ public interface FightManager {
      * @param gameCycles Amount of game loops to defend for (value > 0).
      */
     void defendRegionFor(Region region, int defenceLevel, long gameCycles);
+
+    /**
+     * Returns the main army for the manager.
+     */
+    ArmyTask getMainArmy();
 }

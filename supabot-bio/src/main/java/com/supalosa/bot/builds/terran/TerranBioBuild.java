@@ -98,7 +98,7 @@ public class TerranBioBuild implements BuildOrder {
             tryBuildGhostAcademyAndUpgrades(agentWithData, upgrades);
 
             // Translate UnitTypeRequests to BuildOrderOutput.
-            List<UnitTypeRequest> orderedUnitTypeRequests = sortUnitTypeRequests(agentWithData.fightManager().getRequestedUnitTypes());
+            List<UnitTypeRequest> orderedUnitTypeRequests = sortUnitTypeRequests(agentWithData.fightManager().getRequestedUnits());
             orderedUnitTypeRequests.forEach(unitTypeRequest -> {
                 int count = unitTypeRequest.alternateForm()
                         .map(alternateUnitType -> countUnitType(unitTypeRequest.unitType(), alternateUnitType))

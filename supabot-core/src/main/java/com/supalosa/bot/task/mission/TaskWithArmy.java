@@ -12,9 +12,4 @@ import java.util.List;
 public interface TaskWithArmy extends TaskWithUnits {
 
     List<ArmyTask> getAdditionalArmies();
-
-    /**
-     * Units that this army wants from other armies.
-     */
-    List<UnitTypeRequest> requestingUnitTypes();
 }

@@ -15,9 +15,6 @@ import java.util.List;
  */
 public class TerranBioDefenceArmyTask extends TerranBioArmyTask {
 
-    private List<UnitTypeRequest> desiredComposition = new ArrayList<>();
-    private long desiredCompositionUpdatedAt = 0L;
-
     private final Task parentTask;
 
     public TerranBioDefenceArmyTask(String armyName, Task parentTask) {

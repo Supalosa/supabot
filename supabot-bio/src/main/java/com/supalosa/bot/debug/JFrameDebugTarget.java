@@ -272,7 +272,7 @@ public class JFrameDebugTarget implements DebugTarget {
         // Desired composition panel
         JPanel desiredCompositionPanel = new JPanel();
         StringBuilder requestedUnitTypesString = new StringBuilder("<html>Requested unit types:<br />");
-        data.fightManager().getRequestedUnitTypes().forEach(requestedUnitType -> {
+        data.fightManager().getRequestedUnits().forEach(requestedUnitType -> {
            requestedUnitTypesString.append("<b>" + requestedUnitType.unitType() + "</b>: " + requestedUnitType.amount() + "<br />");
         });
         requestedUnitTypesString.append("</html>");
